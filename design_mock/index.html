@@ -1,0 +1,2216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Awaken — Horizon Core</title>
+  <!-- Google Fonts: Outfit and Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;900&display=swap" rel="stylesheet">
+  
+  <style>
+    /* DESIGN TOKENS - HORIZON CORE THEME */
+    :root {
+      /* Base Colors */
+      --bg-dark: #090A10;
+      --surface-dark: rgba(20, 22, 34, 0.7);
+      --surface-dark-elevated: rgba(28, 30, 48, 0.85);
+      --text-primary-dark: #FFFFFF;
+      --text-secondary-dark: #8F95B3;
+      
+      --bg-light: #F0F2F8;
+      --surface-light: rgba(255, 255, 255, 0.85);
+      --surface-light-elevated: rgba(230, 233, 243, 0.9);
+      --text-primary-light: #12141D;
+      --text-secondary-light: #606578;
+
+      /* Organic Horizon Palette */
+      --color-sage: #A7F3D0;        /* Calm / Balanced routine state */
+      --color-coral: #FF7B4C;       /* System tax / visual tension */
+      --color-glacier: #60A5FA;     /* Active tracking / connection */
+      --color-gold: #FCD34D;        /* Streak accomplishments */
+      
+      /* Active state values (defaults to dark) */
+      --bg: var(--bg-dark);
+      --surface: var(--surface-dark);
+      --surface-elevated: var(--surface-dark-elevated);
+      --text-primary: var(--text-primary-dark);
+      --text-secondary: var(--text-secondary-dark);
+      --border-color: rgba(255, 255, 255, 0.05);
+
+      /* Shape/Border Radius Tokens (Soft Organic Curves) */
+      --radius-xs: 6px;
+      --radius-sm: 12px;
+      --radius-md: 18px;
+      --radius-lg: 24px;
+      --radius-xl: 32px;
+      --radius-xxl: 44px;
+
+      /* Spring-like Bezier Transitions */
+      --spring-fast-spatial: all 0.35s cubic-bezier(0.175, 0.885, 0.42, 1.25);
+      --spring-default-spatial: all 0.55s cubic-bezier(0.175, 0.885, 0.38, 1.15);
+      --spring-fast-effects: all 0.15s cubic-bezier(0.19, 1, 0.22, 1);
+      
+      /* Glowing Organic Shadows */
+      --shadow-sage: 0 15px 45px rgba(167, 243, 208, 0.25);
+      --shadow-coral: 0 15px 45px rgba(255, 123, 76, 0.35);
+      --shadow-glacier: 0 15px 45px rgba(96, 165, 250, 0.25);
+      --shadow-soft: 0 15px 50px rgba(0, 0, 0, 0.4);
+      --shadow-inset: inset 0 2px 4px rgba(255, 255, 255, 0.03);
+    }
+
+    .light-theme {
+      --bg: var(--bg-light);
+      --surface: var(--surface-light);
+      --surface-elevated: var(--surface-light-elevated);
+      --text-primary: var(--text-primary-light);
+      --text-secondary: var(--text-secondary-light);
+      --border-color: rgba(0, 0, 0, 0.06);
+      --shadow-soft: 0 15px 50px rgba(0, 0, 0, 0.05);
+      --shadow-inset: inset 0 2px 4px rgba(0, 0, 0, 0.01);
+    }
+
+    /* GLOBAL RESET */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background: #06070B;
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow-x: hidden;
+      padding: 20px;
+    }
+
+    body.light-body {
+      background: #E6E8F0;
+    }
+
+    /* SIMULATOR BAR CONTROLS */
+    .simulator-controls {
+      background: rgba(14, 16, 27, 0.85);
+      backdrop-filter: blur(25px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 12px 24px;
+      border-radius: var(--radius-lg);
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 24px;
+      z-index: 100;
+      box-shadow: var(--shadow-soft);
+      max-width: 95%;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .light-theme .simulator-controls {
+      background: rgba(255, 255, 255, 0.85);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    .control-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-secondary-dark);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    
+    .light-theme .control-label {
+      color: var(--text-secondary-light);
+    }
+
+    .btn-control {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      color: #fff;
+      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: var(--spring-fast-effects);
+      font-family: 'Outfit', sans-serif;
+      text-transform: capitalize;
+    }
+
+    .light-theme .btn-control {
+      background: rgba(0, 0, 0, 0.03);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      color: #12141D;
+    }
+
+    .btn-control:hover {
+      background: rgba(255, 255, 255, 0.06);
+      transform: translateY(-1px);
+    }
+
+    .btn-control.active {
+      background: #FFFFFF;
+      border-color: #FFFFFF;
+      color: #090A10;
+    }
+
+    .light-theme .btn-control.active {
+      background: #090A10;
+      border-color: #090A10;
+      color: #FFFFFF;
+    }
+
+    /* DEVICE SIMULATOR FRAME */
+    .device-simulator {
+      background: var(--bg);
+      border-radius: var(--radius-xxl);
+      box-shadow: var(--shadow-soft), var(--shadow-inset);
+      border: 10px solid #1A1C29;
+      position: relative;
+      overflow: hidden;
+      transition: var(--spring-default-spatial);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .light-theme .device-simulator {
+      border-color: #D3D5E0;
+    }
+
+    /* Adaptive layouts mapping sizes */
+    .size-phone { width: 385px; height: 830px; }
+    .size-tablet { width: 740px; height: 960px; }
+    .size-desktop { width: 1050px; height: 720px; }
+
+    .device-screen {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* APP HEADER */
+    .app-header {
+      padding: 20px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: transparent;
+      z-index: 90;
+    }
+
+    .app-name {
+      font-family: 'Outfit', sans-serif;
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: -0.8px;
+      color: var(--text-primary);
+    }
+
+    .sync-status-chip {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: var(--radius-xl);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: var(--spring-fast-effects);
+      cursor: pointer;
+    }
+
+    .sync-status-chip.syncing {
+      border-color: var(--color-glacier);
+      color: var(--color-glacier);
+    }
+
+    .sync-status-dot {
+      width: 6px;
+      height: 6px;
+      background-color: currentColor;
+      border-radius: 50%;
+    }
+
+    /* CONTENT WRAPPER */
+    .app-body-container {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+    }
+
+    .app-content {
+      flex: 1;
+      position: relative;
+      overflow-y: auto;
+      background: transparent;
+    }
+
+    /* COMPACT PHONE BOTTOM NAVIGATION */
+    .app-bottom-nav {
+      height: 64px;
+      background: rgba(9, 10, 16, 0.85);
+      backdrop-filter: blur(25px);
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .light-theme .app-bottom-nav {
+      background: rgba(255, 255, 255, 0.85);
+    }
+
+    .size-phone .app-bottom-nav { display: flex; }
+    .size-tablet .app-bottom-nav, .size-desktop .app-bottom-nav { display: none; }
+
+    .bottom-nav-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      gap: 4px;
+      transition: var(--spring-fast-effects);
+      flex: 1;
+    }
+
+    .bottom-nav-btn svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+
+    .bottom-nav-label {
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .bottom-nav-btn.active {
+      color: var(--text-primary);
+    }
+
+    /* PAGE TRANSITIONS */
+    .page {
+      display: none;
+      padding: 0 24px 24px 24px;
+      animation: page-morph-in 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    @keyframes page-morph-in {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* UNIQUE CORE LAYOUT: THE HORIZON SUN (Home Central Object) */
+    .horizon-sun-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      margin: 20px 0 40px 0;
+      height: 240px;
+    }
+
+    /* Dotted spinning ring around the Sun when Alarm is Scheduled */
+    .gravity-orbit {
+      position: absolute;
+      width: 260px;
+      height: 260px;
+      border: 1.5px dashed rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      z-index: 5;
+      opacity: 0;
+      transform: scale(0.9);
+      transition: var(--spring-default-spatial);
+    }
+    
+    .light-theme .gravity-orbit {
+      border-color: rgba(0, 0, 0, 0.1);
+    }
+
+    .gravity-orbit.active {
+      opacity: 1;
+      transform: scale(1);
+      animation: spin-orbit 24s linear infinite;
+    }
+
+    @keyframes spin-orbit {
+      to { transform: rotate(360deg); }
+    }
+
+    .orbit-node {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: var(--text-primary);
+      border-radius: 50%;
+      top: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      box-shadow: 0 0 10px var(--text-primary);
+    }
+
+    /* The Morphing Organic Sun Core */
+    .horizon-sun {
+      width: 170px;
+      height: 170px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #34D399 0%, #059669 100%);
+      box-shadow: var(--shadow-sage);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      z-index: 10;
+      position: relative;
+      transition: var(--spring-default-spatial);
+      animation: morph-breathing 8s ease-in-out infinite alternate;
+      cursor: pointer;
+    }
+
+    /* Morphing breathing animation */
+    @keyframes morph-breathing {
+      0% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+      50% { border-radius: 55% 45% 52% 48% / 48% 52% 45% 55%; }
+      100% { border-radius: 48% 52% 45% 55% / 55% 45% 52% 48%; }
+    }
+
+    /* Sun States triggered via buttons */
+    .horizon-sun.state-calm {
+      background: linear-gradient(135deg, #34D399 0%, #059669 100%);
+      box-shadow: var(--shadow-sage);
+    }
+
+    /* Scheduled state (Glacier Blue) */
+    .horizon-sun.state-scheduled {
+      background: linear-gradient(135deg, #60A5FA 0%, #2563EB 100%);
+      box-shadow: var(--shadow-glacier);
+    }
+
+    /* Breached Tax state (Boiling Coral-Orange shape with high visual tension) */
+    .horizon-sun.state-tax {
+      background: linear-gradient(135deg, #FF7B4C 0%, #EA580C 100%);
+      box-shadow: var(--shadow-coral);
+      animation: morph-boiling 2s ease-in-out infinite alternate;
+    }
+
+    @keyframes morph-boiling {
+      0% { border-radius: 40% 60% 45% 55% / 55% 45% 60% 40%; transform: scale(1.03); }
+      50% { border-radius: 50% 50% 60% 40% / 40% 60% 40% 60%; transform: scale(0.98); }
+      100% { border-radius: 60% 40% 40% 60% / 50% 50% 50% 50%; transform: scale(1.05); }
+    }
+
+    /* Text elements inside Horizon Sun */
+    .sun-meta {
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.7);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .sun-time {
+      font-family: 'Outfit', sans-serif;
+      font-size: 32px;
+      font-weight: 900;
+      color: #FFFFFF;
+      margin: 4px 0;
+      line-height: 1;
+    }
+
+    .sun-status {
+      font-size: 11px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.85);
+      background: rgba(255, 255, 255, 0.12);
+      padding: 3px 8px;
+      border-radius: var(--radius-xs);
+    }
+
+    /* KINETIC SANDBOX WIDGET DOCK (Swiping Widget Slider) */
+    .widget-dock-container {
+      margin-top: 10px;
+    }
+
+    .dock-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .dock-slider {
+      display: flex;
+      gap: 16px;
+      overflow-x: auto;
+      padding-bottom: 16px;
+      /* Smooth inertial scroll mapping */
+      scroll-snap-type: x mandatory;
+      scrollbar-width: none;
+    }
+
+    .dock-slider::-webkit-scrollbar { display: none; }
+
+    /* Tactile glass widget card */
+    .dock-card {
+      min-width: 140px;
+      width: 140px;
+      height: 160px;
+      background: var(--surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      scroll-snap-align: start;
+      transition: var(--spring-fast-spatial);
+      cursor: pointer;
+      box-shadow: var(--shadow-inset);
+    }
+
+    .dock-card:hover {
+      transform: translateY(-4px) scale(1.02);
+      border-color: rgba(255, 255, 255, 0.12);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    }
+    
+    .light-theme .dock-card:hover {
+      box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    }
+
+    .dock-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .dock-card-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-primary);
+    }
+
+    .dock-card-icon.sage { background: rgba(167, 243, 208, 0.1); color: var(--color-sage); }
+    .dock-card-icon.coral { background: rgba(255, 123, 76, 0.1); color: var(--color-coral); }
+    .dock-card-icon.glacier { background: rgba(96, 165, 250, 0.1); color: var(--color-glacier); }
+
+    .dock-card-icon svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+
+    .dock-card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .dock-card-val {
+      font-family: 'Outfit', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .dock-card-lbl {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    /* ACTION INITIATOR pill button */
+    .action-pill-button {
+      margin-top: 12px;
+      width: 100%;
+      background: #FFFFFF;
+      color: #090A10;
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      padding: 16px;
+      border-radius: var(--radius-xxl);
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(255, 255, 255, 0.1);
+      transition: var(--spring-fast-spatial);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .light-theme .action-pill-button {
+      background: #090A10;
+      color: #FFFFFF;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    }
+
+    .action-pill-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(255, 255, 255, 0.18);
+    }
+
+    .action-pill-button svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    /* DETAILED ALARMS SECTION (Slide Up view from Widget trigger) */
+    .details-section-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 80%;
+      background: var(--bg);
+      border-top: 1px solid var(--border-color);
+      border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+      padding: 24px;
+      z-index: 150;
+      transform: translateY(100%);
+      transition: var(--spring-default-spatial);
+      box-shadow: 0 -15px 45px rgba(0,0,0,0.5);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .details-section-overlay.active {
+      transform: translateY(0);
+    }
+
+    .details-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .details-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .btn-close-details {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .alarm-list-scroll {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .alarm-item-card {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .alarm-card-time {
+      font-family: 'Outfit', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .alarm-card-meta {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    /* ACTIVE ALARM HEARTBEAT TAKEOVER SCREEN (Deep Coral Red) */
+    .active-ring-screen {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: radial-gradient(circle, #FF7B4C 0%, #D84B16 100%);
+      z-index: 500;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 40px;
+      text-align: center;
+      animation: heartbeat-pulse 2s infinite alternate;
+    }
+
+    @keyframes heartbeat-pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+      100% { transform: scale(1); }
+    }
+
+    .ring-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 24px;
+      font-weight: 900;
+      color: #FFF;
+      letter-spacing: -0.5px;
+      margin-bottom: 24px;
+    }
+
+    .ring-time-large {
+      font-family: 'Outfit', sans-serif;
+      font-size: 64px;
+      font-weight: 900;
+      color: #FFF;
+      line-height: 1;
+    }
+
+    .ring-reps-needed {
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      padding: 8px 18px;
+      border-radius: var(--radius-xl);
+      font-size: 13px;
+      font-weight: 700;
+      color: #FFFFFF;
+      margin: 40px 0;
+    }
+
+    .btn-workout-initiate {
+      background: #FFFFFF;
+      color: #D84B16;
+      font-family: 'Outfit', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      padding: 16px 36px;
+      border-radius: var(--radius-xxl);
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+      width: 100%;
+      max-width: 260px;
+      transition: var(--spring-fast-spatial);
+    }
+
+    .btn-workout-initiate:hover {
+      transform: scale(1.03);
+    }
+
+    /* POSE TRACKER TARGET VIEWPORT */
+    .verification-screen {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: #090A10;
+      z-index: 600;
+      display: none;
+      flex-direction: column;
+    }
+
+    .camera-viewport {
+      flex: 1;
+      position: relative;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .camera-feed-mock {
+      width: 100%;
+      height: 100%;
+      background: #0E0F16;
+    }
+
+    .skeleton-canvas {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 610;
+    }
+
+    .verif-hud-top {
+      position: absolute;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(9, 10, 16, 0.85);
+      border: 1px solid var(--border-color);
+      padding: 10px 20px;
+      border-radius: var(--radius-md);
+      z-index: 620;
+      text-align: center;
+      width: 85%;
+    }
+
+    .verif-hud-status {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--color-sage);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .verif-hud-desc {
+      font-size: 11px;
+      color: var(--text-secondary-dark);
+      margin-top: 2px;
+    }
+
+    .verif-hud-bottom {
+      position: absolute;
+      bottom: 24px;
+      width: 100%;
+      padding: 0 24px;
+      z-index: 620;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .verif-counter-capsule {
+      background: rgba(9, 10, 16, 0.9);
+      border: 1px solid var(--border-color);
+      padding: 16px;
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 250px;
+    }
+
+    .verif-counter-val {
+      font-family: 'Outfit', sans-serif;
+      font-size: 36px;
+      font-weight: 900;
+      color: #FFF;
+      line-height: 1;
+    }
+
+    .verif-counter-lbl {
+      font-size: 10px;
+      color: var(--text-secondary-dark);
+      text-transform: uppercase;
+      margin-top: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    .escape-hatch-btn {
+      background: transparent;
+      border: none;
+      color: rgba(255,255,255,0.6);
+      font-size: 12px;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .celebration-sheet {
+      position: absolute;
+      bottom: 0; left: 0; width: 100%;
+      background: var(--surface-elevated);
+      border-top: 1px solid var(--border-color);
+      border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+      padding: 32px 24px;
+      text-align: center;
+      z-index: 700;
+      display: none;
+      transform: translateY(100%);
+      transition: var(--spring-default-spatial);
+    }
+
+    .celebration-sheet.active {
+      display: block;
+      transform: translateY(0);
+    }
+
+    .cel-icon-box {
+      width: 48px;
+      height: 48px;
+      background: rgba(167, 243, 208, 0.1);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-sage);
+      margin: 0 auto 16px auto;
+    }
+
+    .cel-icon-box svg {
+      width: 22px;
+      height: 22px;
+      fill: currentColor;
+    }
+
+    .cel-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .cel-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin: 6px 0 20px 0;
+    }
+
+    .btn-close-celebration {
+      background: #FFFFFF;
+      color: #090A10;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 12px 24px;
+      border-radius: var(--radius-xxl);
+      border: none;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    /* MAPS PAGE & METRICS OVERLAY */
+    .map-container {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: #11121C;
+    }
+
+    .map-overlay-widget {
+      position: absolute;
+      bottom: 24px; left: 24px; right: 24px;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      z-index: 20;
+      box-shadow: var(--shadow-soft);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .map-metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      text-align: center;
+    }
+
+    .map-metric-title {
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .map-metric-number {
+      font-family: 'Outfit', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-top: 2px;
+    }
+
+    .btn-track-start {
+      width: 100%;
+      background: #FFFFFF;
+      color: #000;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 12px;
+      border-radius: var(--radius-xl);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    
+    .light-theme .btn-track-start {
+      background: #090A10;
+      color: #FFFFFF;
+    }
+
+    .btn-track-start svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+
+    /* SQUAD HUB LEADERBOARD LIST */
+    .squad-live-tray {
+      display: flex;
+      gap: 14px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      margin-bottom: 20px;
+    }
+
+    .live-friend-avatar {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    .avatar-ring {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px;
+    }
+
+    .live-friend-avatar.active-workout .avatar-ring {
+      border-color: var(--color-glacier);
+      box-shadow: 0 0 10px rgba(96, 165, 250, 0.4);
+    }
+
+    .avatar-img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.03);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .avatar-name {
+      font-size: 10px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .leaderboard-row {
+      background: var(--surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .leaderboard-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .leaderboard-rank {
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-secondary);
+      width: 18px;
+    }
+
+    .leaderboard-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .leaderboard-streak {
+      font-size: 10px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 2px;
+    }
+
+    .streak-fire-icon {
+      color: var(--color-coral);
+      width: 10px;
+      height: 10px;
+      fill: currentColor;
+    }
+
+    .leaderboard-area {
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    /* SCHEDULE ALARM DIALOG MODAL */
+    .modal-backdrop {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(15px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-backdrop.active { display: flex; }
+
+    .modal {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 300px;
+      padding: 20px;
+      box-shadow: var(--shadow-soft);
+      animation: modal-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.15);
+    }
+
+    @keyframes modal-pop {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .modal-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .form-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-select {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 10px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      outline: none;
+    }
+
+    .reps-control-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border-color);
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+    }
+
+    .rep-ctrl-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: none;
+      color: var(--text-primary);
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .rep-ctrl-val {
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .btn-modal {
+      flex: 1;
+      padding: 10px;
+      border-radius: var(--radius-sm);
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .btn-modal-cancel {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+    }
+
+    .btn-modal-save {
+      background: #FFFFFF;
+      color: #000;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SIMULATOR CONTROLS -->
+  <div class="simulator-controls" id="simulator-bar">
+    <div class="control-label">Breakpoint Simulator</div>
+    <button class="btn-control active" onclick="setSize('phone')">Phone</button>
+    <button class="btn-control" onclick="setSize('tablet')">Tablet</button>
+    <button class="btn-control" onclick="setSize('desktop')">Desktop</button>
+    
+    <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.15); margin: 0 8px;"></div>
+    
+    <div class="control-label">Core state</div>
+    <button class="btn-control active" id="btn-state-calm" onclick="setCoreState('calm')">Calm Core</button>
+    <button class="btn-control" id="btn-state-scheduled" onclick="setCoreState('scheduled')">Scheduled</button>
+    <button class="btn-control" id="btn-state-tax" onclick="setCoreState('tax')">Tax active</button>
+
+    <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.15); margin: 0 8px;"></div>
+    
+    <div class="control-label">Theme</div>
+    <button class="btn-control active" id="btn-theme-dark" onclick="toggleTheme(true)">Dark</button>
+    <button class="btn-control" id="btn-theme-light" onclick="toggleTheme(false)">Light</button>
+
+    <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.15); margin: 0 8px;"></div>
+    
+    <button class="btn-control" style="background: rgba(255, 123, 76, 0.2); border-color: var(--color-coral); color: #FFB399" onclick="triggerMockAlarm()">Trigger Alarm</button>
+  </div>
+
+  <!-- DEVICE FRAME -->
+  <div class="device-simulator size-phone" id="simulator-frame">
+    <div class="device-screen">
+      
+      <!-- APP HEADER -->
+      <header class="app-header">
+        <span class="app-name">Awaken</span>
+        <div class="sync-status-chip" id="sync-chip" onclick="triggerOutboxQueueSimulation()">
+          <span class="sync-status-dot"></span>
+          <span id="sync-text">Synced</span>
+        </div>
+      </header>
+
+      <!-- CONTENT WRAPPER -->
+      <div class="app-body-container">
+        
+        <main class="app-content" id="app-content-area">
+          
+          <!-- 1. HOME SCREEN (Unified Core Dashboard) -->
+          <div class="page active" id="tab-dashboard">
+            
+            <!-- Dynamic Central Sun Object -->
+            <div class="horizon-sun-container">
+              <!-- Scheduled alarm count orbit ring -->
+              <div class="gravity-orbit" id="gravity-ring">
+                <div class="orbit-node"></div>
+              </div>
+              
+              <div class="horizon-sun state-calm" id="core-sun" onclick="triggerCoreAction()">
+                <span class="sun-meta" id="sun-meta-text">Routine status</span>
+                <span class="sun-time" id="sun-time-text">Balanced</span>
+                <span class="sun-status" id="sun-status-text">Calm Core</span>
+              </div>
+            </div>
+
+            <!-- Kinetic Widget Dock Slider -->
+            <div class="widget-dock-container">
+              <div class="dock-title">Tactical Docks</div>
+              
+              <div class="dock-slider">
+                
+                <!-- Card 1: Alarm details trigger -->
+                <div class="dock-card" onclick="openDetailsSection('alarms')">
+                  <div class="dock-card-header">
+                    <div class="dock-card-icon sage">
+                      <svg viewBox="0 0 24 24"><path d="M22 5.72l-4.6-3.86-1.29 1.53 4.6 3.86L22 5.72zM7.88 3.39L6.6 1.86 2 5.72l1.29 1.53 4.59-3.86zM12.5 8H11v6l4.75 2.85.75-1.23-4-2.37V8zM12 4c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+                    </div>
+                  </div>
+                  <div class="dock-card-body">
+                    <span class="dock-card-val" id="dock-alarm-time">07:00</span>
+                    <span class="dock-card-lbl">Routine Alarms</span>
+                  </div>
+                </div>
+
+                <!-- Card 2: Territory tracking trigger -->
+                <div class="dock-card" onclick="switchTab('map')">
+                  <div class="dock-card-header">
+                    <div class="dock-card-icon glacier">
+                      <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                    </div>
+                  </div>
+                  <div class="dock-card-body">
+                    <span class="dock-card-val">1.4 km²</span>
+                    <span class="dock-card-lbl">Captured Sectors</span>
+                  </div>
+                </div>
+
+                <!-- Card 3: Squad telemetry trigger -->
+                <div class="dock-card" onclick="switchTab('squad')">
+                  <div class="dock-card-header">
+                    <div class="dock-card-icon coral">
+                      <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                    </div>
+                  </div>
+                  <div class="dock-card-body">
+                    <span class="dock-card-val">Rank #2</span>
+                    <span class="dock-card-lbl">Active Squads</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Primary kinetic tracking trigger -->
+            <button class="action-pill-button" onclick="switchTab('map')">
+              <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+              <span>Begin Territory Capture</span>
+            </button>
+          </div>
+
+          <!-- 2. TERRITORY MAP SCREEN -->
+          <div class="page" id="tab-map" style="padding: 0; width: 100%; height: 100%;">
+            <div class="map-container">
+              <canvas class="map-grid-canvas" id="map-canvas"></canvas>
+              
+              <div class="map-overlay-widget">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span class="gps-quality-chip">
+                    <span class="gps-dot"></span>
+                    <span>EKF trajectory locked</span>
+                  </span>
+                  <div style="font-size: 11px; color: var(--text-secondary)" id="map-mock-status">No spoof signal</div>
+                </div>
+
+                <div class="map-metrics-grid">
+                  <div class="map-metric-box">
+                    <span class="map-metric-number" id="map-dist">0.00 km</span>
+                    <span class="map-metric-title">Distance</span>
+                  </div>
+                  <div class="map-metric-box" style="border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color);">
+                    <span class="map-metric-number" id="map-time">00:00</span>
+                    <span class="map-metric-title">Duration</span>
+                  </div>
+                  <div class="map-metric-box">
+                    <span class="map-metric-number" id="map-speed">0.0 km/h</span>
+                    <span class="map-metric-title">Pace</span>
+                  </div>
+                </div>
+
+                <button class="btn-track-start" id="btn-run-trigger" onclick="toggleRunSimulation()">
+                  <svg viewBox="0 0 24 24" id="run-btn-icon"><path d="M8 5v14l11-7z"/></svg>
+                  <span id="run-btn-text">Start Tracker</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. SQUAD SCREEN -->
+          <div class="page" id="tab-squad">
+            <div class="dock-title">Squad Telemetry Broadcast</div>
+            <div class="squad-live-tray">
+              <div class="live-friend-avatar active-workout" onclick="simulateFriendTelemetry('Alex')">
+                <div class="avatar-ring">
+                  <div class="avatar-img">AL</div>
+                </div>
+                <span class="avatar-name">Alex (Squats)</span>
+              </div>
+              <div class="live-friend-avatar" onclick="simulateFriendTelemetry('Sarah')">
+                <div class="avatar-ring">
+                  <div class="avatar-img">SA</div>
+                </div>
+                <span class="avatar-name">Sarah</span>
+              </div>
+              <div class="live-friend-avatar">
+                <div class="avatar-ring">
+                  <div class="avatar-img">JO</div>
+                </div>
+                <span class="avatar-name">John</span>
+              </div>
+            </div>
+
+            <div class="dock-title" style="margin-top: 24px;">Captured Sectors Leaderboard</div>
+            <div class="leaderboard-list">
+              <div class="leaderboard-row">
+                <div class="leaderboard-left">
+                  <span class="leaderboard-rank">#1</span>
+                  <div class="leaderboard-name-group">
+                    <span class="leaderboard-name">Sarah Jenkins</span>
+                    <span class="leaderboard-streak">
+                      <svg class="streak-fire-icon" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+                      14 days streak
+                    </span>
+                  </div>
+                </div>
+                <span class="leaderboard-area">4.9 km²</span>
+              </div>
+
+              <div class="leaderboard-row" style="border-color: var(--color-glacier); background: rgba(96, 165, 250, 0.04);">
+                <div class="leaderboard-left">
+                  <span class="leaderboard-rank" style="color: var(--color-glacier)">#2</span>
+                  <div class="leaderboard-name-group">
+                    <span class="leaderboard-name">You (Guest Unit)</span>
+                    <span class="leaderboard-streak">
+                      <svg class="streak-fire-icon" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+                      5 days streak
+                    </span>
+                  </div>
+                </div>
+                <span class="leaderboard-area">1.4 km²</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. ONBOARDING & PERMISSION CARDS -->
+          <div class="page" id="tab-onboarding">
+            <div class="onboard-card-container">
+              <div class="onboard-illustration">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+              </div>
+              <h2 class="onboard-title">Establish Horizon Permissions</h2>
+              <p class="onboard-desc">Grant exact alarms, camera access, and background coordinates smooth services to unlock features.</p>
+
+              <div class="perm-list">
+                <div class="perm-item granted" onclick="togglePermission(this)">
+                  <div class="perm-details">
+                    <span class="perm-name">Biometric Camera Stream</span>
+                    <span class="perm-desc">Front-facing pose repetition counting</span>
+                  </div>
+                  <div class="perm-status-indicator">
+                    <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                  </div>
+                </div>
+
+                <div class="perm-item granted" onclick="togglePermission(this)">
+                  <div class="perm-details">
+                    <span class="perm-name">High Priority exact alarms</span>
+                    <span class="perm-desc">Precision Android task scheduler</span>
+                  </div>
+                  <div class="perm-status-indicator">
+                    <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                  </div>
+                </div>
+
+                <div class="perm-item" onclick="togglePermission(this)">
+                  <div class="perm-details">
+                    <span class="perm-name">Continuous Geolocation</span>
+                    <span class="perm-desc">Foreground location isolation (4D Kalman)</span>
+                  </div>
+                  <div class="perm-status-indicator">
+                    <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. SETTINGS / PROFILE -->
+          <div class="page" id="tab-profile">
+            <div class="profile-card">
+              <div class="profile-avatar">G</div>
+              <div class="profile-info">
+                <span class="profile-username">Guest Unit #0412</span>
+                <span class="profile-tier">Silver League Segment</span>
+              </div>
+            </div>
+
+            <div class="cloud-migration-banner">
+              <div class="cloud-banner-title">Sync Unit profile to cloud</div>
+              <div class="cloud-banner-desc">Migrate local Drift session history with server-authoritative Supabase Auth.</div>
+              <button class="btn-cloud-migrate" onclick="simulateAccountMigration()">Migrate to Supabase</button>
+            </div>
+
+            <div class="dock-title">Hardware configurations</div>
+            <div class="settings-list">
+              <div class="settings-row">
+                <div>
+                  <div class="settings-lbl">OEM Background optimization autostart</div>
+                  <div class="settings-sublbl">Deep link configuration exemption manager</div>
+                </div>
+                <button class="btn-control" style="padding: 6px 12px; font-size: 11px;">Configure</button>
+              </div>
+
+              <div class="settings-row">
+                <div>
+                  <div class="settings-lbl">Exact alarm backup fallback</div>
+                  <div class="settings-sublbl">Inexact tasks scheduled if revoked</div>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+        </main>
+      </div>
+
+      <!-- DETAILED ALARMS DRAWER (Tactile Drawer slide-up) -->
+      <div class="details-section-overlay" id="alarms-details-panel">
+        <div class="details-header">
+          <span class="details-title">Scheduled Alarms</span>
+          <button class="btn-close-details" onclick="closeDetailsSection('alarms')">&times;</button>
+        </div>
+        
+        <div class="alarm-list-scroll" id="details-alarms-list">
+          <div class="alarm-item-card">
+            <div>
+              <span class="alarm-card-time">07:00</span>
+              <div class="alarm-card-meta">15 Squats · Mon, Wed, Fri</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" checked onchange="toggleOutboxState()">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="alarm-item-card">
+            <div>
+              <span class="alarm-card-time">08:30</span>
+              <div class="alarm-card-meta">20 Pushups · Sat, Sun</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" onchange="toggleOutboxState()">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div style="margin-top: auto; padding-top: 10px; display: flex; justify-content: flex-end;">
+          <button class="btn-control" style="background: var(--text-primary); color: var(--bg); border: none; padding: 12px 24px;" onclick="showScheduleModal(true)">+ Add Alarm</button>
+        </div>
+      </div>
+
+      <!-- APP BOTTOM NAV (Compact Phone) -->
+      <footer class="app-bottom-nav">
+        <button class="bottom-nav-btn active" onclick="switchTab('dashboard')" data-tab="dashboard">
+          <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+          <span class="bottom-nav-label">Home</span>
+        </button>
+        <button class="bottom-nav-btn" onclick="switchTab('map')" data-tab="map">
+          <svg viewBox="0 0 24 24"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
+          <span class="bottom-nav-label">Map</span>
+        </button>
+        <button class="bottom-nav-btn" onclick="switchTab('squad')" data-tab="squad">
+          <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+          <span class="bottom-nav-label">Squad</span>
+        </button>
+      </footer>
+
+      <!-- ACTIVE ALARM TAKEOVER SCREEN -->
+      <div class="active-ring-screen" id="active-ring-panel">
+        <div class="ring-title">WAKING HORIZON INTERCEPT</div>
+        <div class="ring-time-large" id="ring-large-time-readout">07:00</div>
+        <div class="ring-reps-needed" id="ring-tax-badge">Required: 15 Squats</div>
+        <button class="btn-workout-initiate" onclick="startAlarmWorkoutFlow()">Dismiss with exercise</button>
+      </div>
+
+      <!-- POSE TACTICAL SCREEN VIEWPORT -->
+      <div class="verification-screen" id="verification-panel">
+        <div class="camera-viewport">
+          <div class="camera-feed-mock"></div>
+          <canvas class="skeleton-canvas" id="skeletal-canvas"></canvas>
+          
+          <div class="verif-hud-top">
+            <div class="verif-hud-status" id="verif-banner-title">Calibrating Node Angles...</div>
+            <div class="verif-hud-desc" id="verif-banner-desc">Step back until hips are mapped in green</div>
+          </div>
+
+          <div class="verif-hud-bottom">
+            <div class="verif-counter-capsule">
+              <span class="verif-counter-val" id="verif-count-text">0 / 10</span>
+              <span class="verif-counter-lbl" id="verif-mode-label">Squats Counted</span>
+            </div>
+            <button class="escape-hatch-btn" onclick="terminateVerification(false)">I can't do this exercise today</button>
+          </div>
+        </div>
+
+        <div class="celebration-sheet" id="workout-celebration-panel">
+          <div class="cel-icon-box">
+            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </div>
+          <h3 class="cel-title">Lockout Dismissed</h3>
+          <p class="cel-desc" id="celebration-detail-text">Repetitions successfully logged. Streak safe.</p>
+          <button class="btn-close-celebration" onclick="terminateCelebration()">Return to Horizon</button>
+        </div>
+      </div>
+
+      <!-- SCHEDULE ALARM DIALOG MODAL -->
+      <div class="modal-backdrop" id="schedule-modal-backdrop">
+        <div class="modal">
+          <div class="modal-title">Schedule Alarm</div>
+          
+          <div class="form-group">
+            <label class="form-label">Exercise Mode</label>
+            <select class="form-select" id="input-exercise">
+              <option value="Squat">Squats (ML Verified)</option>
+              <option value="Pushup">Push-ups (ML Verified)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Reps Required</label>
+            <div class="reps-control-row">
+              <button class="rep-ctrl-btn" onclick="adjustReps(-5)">-</button>
+              <span class="rep-ctrl-val" id="reps-val">15</span>
+              <button class="rep-ctrl-btn" onclick="adjustReps(5)">+</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Time</label>
+            <input type="time" class="form-select" id="input-time" value="07:30" style="font-family: inherit;">
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn-modal btn-modal-cancel" onclick="showScheduleModal(false)">Abort</button>
+            <button class="btn-modal btn-modal-save" onclick="saveNewAlarm()">Save</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // GLOBAL STATE
+    let activeTab = 'dashboard';
+    let appState = 'calm'; // calm, scheduled, tax
+    let alarmTaxVal = 1.0;
+    
+    // Set simulator frame widths
+    function setSize(size) {
+      const frame = document.getElementById('simulator-frame');
+      const buttons = document.querySelectorAll('#simulator-bar .btn-control');
+      
+      frame.className = 'device-simulator';
+      if (size === 'phone') frame.classList.add('size-phone');
+      if (size === 'tablet') frame.classList.add('size-tablet');
+      if (size === 'desktop') frame.classList.add('size-desktop');
+
+      buttons.forEach(btn => {
+        if(btn.innerText.toLowerCase().includes(size)) {
+          btn.classList.add('active');
+        } else if (!btn.innerText.toLowerCase().includes('state') && !btn.innerText.toLowerCase().includes('dark') && !btn.innerText.toLowerCase().includes('light') && !btn.innerText.toLowerCase().includes('alarm') && !btn.innerText.toLowerCase().includes('calm') && !btn.innerText.toLowerCase().includes('tax')) {
+          btn.classList.remove('active');
+        }
+      });
+      
+      setTimeout(drawMapMock, 200);
+    }
+
+    // Toggle Light and Dark organic themes
+    function toggleTheme(isDark) {
+      const body = document.body;
+      const frame = document.getElementById('simulator-frame');
+      const btnDark = document.getElementById('btn-theme-dark');
+      const btnLight = document.getElementById('btn-theme-light');
+
+      if (isDark) {
+        body.classList.remove('light-body');
+        frame.classList.remove('light-theme');
+        btnDark.classList.add('active');
+        btnLight.classList.remove('active');
+      } else {
+        body.classList.add('light-body');
+        frame.classList.add('light-theme');
+        btnDark.classList.remove('active');
+        btnLight.classList.add('active');
+      }
+      drawMapMock();
+    }
+
+    // Change Core Horizon Sun states dynamically
+    function setCoreState(state) {
+      appState = state;
+      const sun = document.getElementById('core-sun');
+      const ring = document.getElementById('gravity-ring');
+      const meta = document.getElementById('sun-meta-text');
+      const time = document.getElementById('sun-time-text');
+      const status = document.getElementById('sun-status-text');
+      const taxCard = document.getElementById('dashboard-tax-card');
+      
+      const buttons = document.querySelectorAll('#simulator-bar .btn-control');
+      buttons.forEach(btn => {
+        if(btn.innerText.toLowerCase().includes(state)) {
+          btn.classList.add('active');
+        } else if (!btn.innerText.toLowerCase().includes('phone') && !btn.innerText.toLowerCase().includes('tablet') && !btn.innerText.toLowerCase().includes('desktop') && !btn.innerText.toLowerCase().includes('dark') && !btn.innerText.toLowerCase().includes('light') && !btn.innerText.toLowerCase().includes('alarm')) {
+          btn.classList.remove('active');
+        }
+      });
+
+      sun.className = 'horizon-sun';
+      ring.classList.remove('active');
+      taxCard.style.display = 'none';
+
+      if (state === 'calm') {
+        sun.classList.add('state-calm');
+        meta.innerText = 'Routine status';
+        time.innerText = 'Balanced';
+        status.innerText = 'Calm Core';
+        alarmTaxVal = 1.0;
+        document.getElementById('dashboard-tax-mult').innerText = '1.0x';
+      }
+      if (state === 'scheduled') {
+        sun.classList.add('state-scheduled');
+        ring.classList.add('active');
+        meta.innerText = 'Trigger in';
+        time.innerText = '19h 40m';
+        status.innerText = '07:00 AM';
+        alarmTaxVal = 1.0;
+        document.getElementById('dashboard-tax-mult').innerText = '1.0x';
+      }
+      if (state === 'tax') {
+        sun.classList.add('state-tax');
+        meta.innerText = 'System tax active';
+        time.innerText = 'Compounding';
+        status.innerText = 'Threat active';
+        alarmTaxVal = 1.5;
+        document.getElementById('dashboard-tax-card').style.display = 'flex';
+        document.getElementById('dashboard-tax-mult').innerText = '1.5x';
+        document.getElementById('dashboard-tax-val').innerText = '1.5x';
+      }
+    }
+
+    function triggerCoreAction() {
+      if (appState === 'calm') {
+        alert("Living Horizon core is balanced. Tap on 'Tactical Docks' below to configure routines.");
+      } else if (appState === 'scheduled') {
+        openDetailsSection('alarms');
+      } else if (appState === 'tax') {
+        alert("Your Horizon core is compounding tax multipliers due to a snoozed alert. Capture locations or complete workouts to restore balanced states.");
+      }
+    }
+
+    function togglePermission(element) {
+      element.classList.toggle('granted');
+    }
+
+    function showScheduleModal(show) {
+      const backdrop = document.getElementById('schedule-modal-backdrop');
+      if (show) {
+        backdrop.classList.add('active');
+      } else {
+        backdrop.classList.remove('active');
+      }
+    }
+
+    function adjustReps(diff) {
+      const valText = document.getElementById('reps-val');
+      let reps = parseInt(valText.innerText) + diff;
+      reps = Math.max(5, Math.min(100, reps));
+      valText.innerText = reps;
+    }
+
+    // Modal save
+    function saveNewAlarm() {
+      const exercise = document.getElementById('input-exercise').value;
+      const timeVal = document.getElementById('input-time').value;
+      const reps = document.getElementById('reps-val').innerText;
+      
+      const detailsList = document.getElementById('details-alarms-list');
+      
+      const item = document.createElement('div');
+      item.className = 'alarm-item-card';
+      item.innerHTML = `
+        <div>
+          <span class="alarm-card-time">${timeVal}</span>
+          <div class="alarm-card-meta">${reps} ${exercise}s · Daily</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" checked onchange="toggleOutboxState()">
+          <span class="slider"></span>
+        </label>
+      `;
+      detailsList.appendChild(item);
+      showScheduleModal(false);
+      
+      document.getElementById('dock-alarm-time').innerText = timeVal;
+      setCoreState('scheduled');
+      
+      triggerOutboxQueueSimulation();
+    }
+
+    // Swiping sliders drawer overlays
+    function openDetailsSection(section) {
+      if (section === 'alarms') {
+        document.getElementById('alarms-details-panel').classList.add('active');
+      }
+    }
+
+    function closeDetailsSection(section) {
+      if (section === 'alarms') {
+        document.getElementById('alarms-details-panel').classList.remove('active');
+      }
+    }
+
+    // Switch screens
+    function switchTab(tabId) {
+      activeTab = tabId;
+      
+      const pages = document.querySelectorAll('.page');
+      pages.forEach(p => p.classList.remove('active'));
+      
+      const activePage = document.getElementById('tab-' + tabId);
+      if (activePage) activePage.classList.add('active');
+
+      const bottomBtns = document.querySelectorAll('.bottom-nav-btn');
+      bottomBtns.forEach(btn => {
+        if (btn.getAttribute('data-tab') === tabId) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+
+      if (tabId === 'map') {
+        setTimeout(drawMapMock, 100);
+      }
+    }
+
+    function toggleOutboxState() {
+      triggerOutboxQueueSimulation();
+    }
+
+    function triggerOutboxQueueSimulation() {
+      const chip = document.getElementById('sync-chip');
+      const text = document.getElementById('sync-text');
+      
+      chip.classList.add('syncing');
+      text.innerText = 'Syncing...';
+      
+      setTimeout(() => {
+        chip.classList.remove('syncing');
+        text.innerText = 'Synced';
+      }, 1500);
+    }
+
+    function simulateAccountMigration() {
+      const text = document.getElementById('sync-text');
+      const chip = document.getElementById('sync-chip');
+      
+      alert("Linking guest profile key records with Supabase Auth schema.");
+      chip.classList.add('syncing');
+      text.innerText = 'Re-keying local...';
+      
+      setTimeout(() => {
+        text.innerText = 'Uploading outbox...';
+        setTimeout(() => {
+          chip.classList.remove('syncing');
+          text.innerText = 'Synced';
+          alert("Supabase integration complete! All local database sessions have been secure-adoption verified.");
+        }, 1500);
+      }, 1200);
+    }
+
+    // ALARM HEARTBEAT TAKEOVER SCREEN WAKING INTERCEPTS
+    function triggerMockAlarm() {
+      const ringPanel = document.getElementById('active-ring-panel');
+      const taxBadge = document.getElementById('ring-tax-badge');
+      const reps = alarmTaxVal > 1.0 ? Math.round(15 * alarmTaxVal) : 15;
+      
+      taxBadge.innerText = alarmTaxVal > 1.0 
+        ? `Tax Applied: ${reps} Squats (${alarmTaxVal}x)`
+        : `Required: 15 Squats`;
+
+      ringPanel.style.display = 'flex';
+    }
+
+    let poseAnimationId;
+    let exerciseFrame = 0;
+    let repsCounted = 0;
+    const targetReps = 10;
+    
+    function startAlarmWorkoutFlow() {
+      document.getElementById('active-ring-panel').style.display = 'none';
+      document.getElementById('verification-panel').style.display = 'flex';
+      
+      repsCounted = 0;
+      exerciseFrame = 0;
+      document.getElementById('verif-count-text').innerText = `0 / ${targetReps}`;
+      
+      runPoseSimulation();
+    }
+
+    // Vector blueprint pose loop simulation drawn dynamically on a canvas
+    function runPoseSimulation() {
+      const canvas = document.getElementById('skeletal-canvas');
+      const ctx = canvas.getContext('2d');
+      const bannerTitle = document.getElementById('verif-banner-title');
+      const bannerDesc = document.getElementById('verif-banner-desc');
+      
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+
+      bannerTitle.innerText = "CALIBRATING TACTICAL CORE...";
+      bannerDesc.innerText = "Align your shoulders and knees within camera view";
+
+      setTimeout(() => {
+        bannerTitle.innerText = "CONFIRMING RANGE...";
+        bannerDesc.innerText = "Perform 1 complete squat now to calibrate depth";
+        
+        setTimeout(() => {
+          bannerTitle.innerText = "VERIFICATION ACTIVE";
+          bannerDesc.innerText = "Reps counting. Align spine angle on each down phase.";
+          
+          poseLoop();
+        }, 1500);
+      }, 1500);
+
+      function poseLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const progress = (exerciseFrame % 60) / 60;
+        const amplitude = Math.sin(progress * Math.PI * 2);
+        const squatDepth = (amplitude + 1) / 2; // 0 to 1
+
+        const centerX = canvas.width / 2;
+        const headY = canvas.height * 0.28 + (squatDepth * 80);
+        
+        // Citron Neon theme vector lines
+        ctx.strokeStyle = '#A7F3D0';
+        ctx.shadowColor = 'rgba(167, 243, 208, 0.4)';
+        ctx.shadowBlur = 8;
+        ctx.lineWidth = 2.5;
+
+        // Head Ring
+        ctx.beginPath();
+        ctx.arc(centerX, headY, 18, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Spine
+        const spineLength = 90;
+        const hipY = headY + spineLength;
+        ctx.beginPath();
+        ctx.moveTo(centerX, headY + 18);
+        ctx.lineTo(centerX, hipY);
+        ctx.stroke();
+
+        // Shoulders
+        ctx.beginPath();
+        ctx.moveTo(centerX - 30, headY + 28);
+        ctx.lineTo(centerX + 30, headY + 28);
+        ctx.stroke();
+
+        // Hips
+        const hipWidth = 22;
+        const hipLeftX = centerX - hipWidth;
+        const hipRightX = centerX + hipWidth;
+        ctx.beginPath();
+        ctx.moveTo(hipLeftX, hipY);
+        ctx.lineTo(hipRightX, hipY);
+        ctx.stroke();
+
+        // Knees
+        const kneeY = hipY + 60 - (squatDepth * 32);
+        const kneeLeftX = hipLeftX - 12 - (squatDepth * 12);
+        const kneeRightX = hipRightX + 12 + (squatDepth * 12);
+        
+        ctx.beginPath();
+        ctx.moveTo(hipLeftX, hipY);
+        ctx.lineTo(kneeLeftX, kneeY);
+        ctx.moveTo(hipRightX, hipY);
+        ctx.lineTo(kneeRightX, kneeY);
+        ctx.stroke();
+
+        // Ankles / Feet
+        const feetY = canvas.height * 0.72;
+        const footLeftX = hipLeftX - 10;
+        const footRightX = hipRightX + 10;
+        
+        ctx.beginPath();
+        ctx.moveTo(kneeLeftX, kneeY);
+        ctx.lineTo(footLeftX, feetY);
+        ctx.moveTo(kneeRightX, kneeY);
+        ctx.lineTo(footRightX, feetY);
+        ctx.stroke();
+
+        // Reset shadow
+        ctx.shadowBlur = 0;
+
+        // Draw Joints
+        const joints = [
+          [centerX, headY + 18],
+          [hipLeftX, hipY], [hipRightX, hipY],
+          [kneeLeftX, kneeY], [kneeRightX, kneeY],
+          [footLeftX, feetY], [footRightX, feetY]
+        ];
+
+        joints.forEach(([x, y]) => {
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fill();
+          ctx.strokeStyle = '#A7F3D0';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        });
+
+        if (exerciseFrame > 0 && exerciseFrame % 60 === 0) {
+          repsCounted++;
+          document.getElementById('verif-count-text').innerText = `${repsCounted} / ${targetReps}`;
+          
+          canvas.style.boxShadow = 'inset 0 0 30px rgba(167, 243, 208, 0.25)';
+          setTimeout(() => { canvas.style.boxShadow = 'none'; }, 200);
+
+          if (repsCounted >= targetReps) {
+            cancelAnimationFrame(poseAnimationId);
+            showWorkoutCelebrationPanel();
+            return;
+          }
+        }
+
+        exerciseFrame++;
+        poseAnimationId = requestAnimationFrame(poseLoop);
+      }
+    }
+
+    function terminateVerification(success) {
+      cancelAnimationFrame(poseAnimationId);
+      document.getElementById('verification-panel').style.display = 'none';
+      if (!success) {
+        alert("Bypassed layout lockout. System tax warning logged.");
+        setCoreState('tax');
+      }
+    }
+
+    function showWorkoutCelebrationPanel() {
+      const sheet = document.getElementById('workout-celebration-panel');
+      sheet.style.display = 'block';
+      setTimeout(() => sheet.classList.add('active'), 50);
+    }
+
+    function terminateCelebration() {
+      setCoreState('calm');
+      const sheet = document.getElementById('workout-celebration-panel');
+      sheet.classList.remove('active');
+      setTimeout(() => {
+        sheet.style.display = 'none';
+        document.getElementById('verification-panel').style.display = 'none';
+        switchTab('dashboard');
+      }, 500);
+    }
+
+    // MAP VIEW RUN SIMULATION DRAW
+    let runSimInterval = null;
+    let isRunningSim = false;
+    let runPathPoints = [];
+    let runDurationSec = 0;
+    
+    function drawMapMock() {
+      const canvas = document.getElementById('map-canvas');
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+
+      const isLightTheme = document.getElementById('simulator-frame').classList.contains('light-theme');
+      
+      ctx.fillStyle = isLightTheme ? '#F4F5FA' : '#0B0D16';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = isLightTheme ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.02)';
+      ctx.lineWidth = 1;
+      
+      const grid = 40;
+      for (let x = 0; x < canvas.width; x += grid) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += grid) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      }
+
+      // Draw vector street lines
+      ctx.strokeStyle = isLightTheme ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.05)';
+      ctx.lineWidth = 4;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(40, 100); ctx.lineTo(340, 100); ctx.lineTo(340, 500);
+      ctx.moveTo(100, 200); ctx.lineTo(100, 600); ctx.lineTo(300, 600);
+      ctx.stroke();
+
+      // Render static captured territory polygon (Glacier Blue translucent)
+      if (runPathPoints.length === 0) {
+        ctx.fillStyle = 'rgba(96, 165, 250, 0.08)';
+        ctx.strokeStyle = 'var(--color-glacier)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(80, 140);
+        ctx.lineTo(240, 140);
+        ctx.lineTo(240, 320);
+        ctx.lineTo(80, 320);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.fillStyle = isLightTheme ? '#1E3A8A' : '#93C5FD';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.fillText("Sarah's Domain", 95, 175);
+      }
+
+      if (runPathPoints.length > 0) {
+        ctx.strokeStyle = 'var(--color-glacier)';
+        ctx.lineWidth = 3.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.shadowColor = 'rgba(96, 165, 250, 0.4)';
+        ctx.shadowBlur = 10;
+        
+        ctx.beginPath();
+        ctx.moveTo(runPathPoints[0].x, runPathPoints[0].y);
+        for(let i = 1; i < runPathPoints.length; i++) {
+          ctx.lineTo(runPathPoints[i].x, runPathPoints[i].y);
+        }
+        ctx.stroke();
+        
+        ctx.shadowBlur = 0;
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(runPathPoints[0].x, runPathPoints[0].y, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'var(--color-glacier)';
+        ctx.beginPath();
+        ctx.arc(runPathPoints[runPathPoints.length - 1].x, runPathPoints[runPathPoints.length - 1].y, 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function toggleRunSimulation() {
+      const btn = document.getElementById('btn-run-trigger');
+      const text = document.getElementById('run-btn-text');
+      const icon = document.getElementById('run-btn-icon');
+      
+      if (isRunningSim) {
+        clearInterval(runSimInterval);
+        isRunningSim = false;
+        text.innerText = 'Start Tracker';
+        icon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+        
+        alert("Enclosing path analysis running... Converting simplified track to geofence Polygon.");
+        
+        const canvas = document.getElementById('map-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        ctx.fillStyle = 'rgba(167, 243, 208, 0.2)';
+        ctx.beginPath();
+        ctx.moveTo(runPathPoints[0].x, runPathPoints[0].y);
+        for(let i = 1; i < runPathPoints.length; i++) {
+          ctx.lineTo(runPathPoints[i].x, runPathPoints[i].y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        
+        alert("Loop closure verified! Territory awarded. Synced to Drift Outbox.");
+        triggerOutboxQueueSimulation();
+        
+        runPathPoints = [];
+        drawMapMock();
+        
+      } else {
+        isRunningSim = true;
+        text.innerText = 'Stop & Log';
+        icon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+        runDurationSec = 0;
+        runPathPoints = [];
+        
+        const pathData = [
+          {x: 80, y: 140},
+          {x: 240, y: 140},
+          {x: 240, y: 320},
+          {x: 80, y: 320},
+          {x: 80, y: 144}
+        ];
+
+        let index = 0;
+        runPathPoints.push(pathData[0]);
+
+        runSimInterval = setInterval(() => {
+          runDurationSec++;
+          
+          if (index < pathData.length - 1) {
+            index++;
+            runPathPoints.push(pathData[index]);
+            drawMapMock();
+          }
+
+          document.getElementById('map-dist').innerText = (0.22 * index).toFixed(2) + ' km';
+          document.getElementById('map-time').innerText = formatTimeSec(runDurationSec);
+          document.getElementById('map-speed').innerText = (10.5 + Math.random()).toFixed(1) + ' km/h';
+
+        }, 1100);
+      }
+    }
+
+    function formatTimeSec(sec) {
+      return `${Math.floor(sec / 60).toString().padStart(2, '0')}:${(sec % 60).toString().padStart(2, '0')}`;
+    }
+
+    function simulateFriendTelemetry(name) {
+      alert(`Activating live Broadcast channel for ${name}... Raw telemetry streams rendering on dashboard.`);
+    }
+
+    window.onload = function() {
+      setSize('phone');
+    }
+  </script>
+</body>
+</html>
