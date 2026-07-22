@@ -5,11 +5,15 @@ on:
     branches:
       - main
       - master
+      - design
+      - design-2
   pull_request:
     branches:
       - main
       - master
-  workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
+      - design
+      - design-2
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions UI — pick your branch in the "Use workflow from" dropdown; it defaults to the repo's default branch (master), not whichever branch you're viewing
 
 env:
   FLUTTER_VERSION: "3.44.4"
