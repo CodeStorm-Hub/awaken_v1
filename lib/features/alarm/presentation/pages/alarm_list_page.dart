@@ -868,7 +868,10 @@ class _DayToggle extends StatelessWidget {
           decoration: BoxDecoration(
             color: selected ? scheme.tertiaryContainer : Colors.transparent,
             borderRadius: BorderRadius.circular(selected ? 14 : 999),
-            border: selected ? null : Border.all(color: scheme.outlineVariant),
+            // `outline`, not `outlineVariant` — this border is the only thing
+            // conveying "unselected day" (WCAG 1.4.11 needs 3:1 for
+            // functional boundaries; outlineVariant here measured ~1.6:1).
+            border: selected ? null : Border.all(color: scheme.outline),
           ),
           child: Center(
             child: Text(

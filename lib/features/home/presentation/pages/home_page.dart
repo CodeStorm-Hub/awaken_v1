@@ -212,7 +212,16 @@ class HomePage extends StatelessWidget {
                                             strokeWidth: 6,
                                             strokeCap: StrokeCap.round,
                                             color: scheme.primary,
-                                            backgroundColor: scheme.surfaceContainer,
+                                            // The unfilled track needs real
+                                            // contrast against this card's own
+                                            // surfaceContainerHigh background —
+                                            // surfaceContainer was a near-
+                                            // identical tone (remaining 30% was
+                                            // invisible), and outlineVariant
+                                            // only measures ~1.4:1 here, well
+                                            // under WCAG 1.4.11's 3:1 for a
+                                            // functional progress track.
+                                            backgroundColor: scheme.outline,
                                           ),
                                           Text(
                                             '$goalPct%',
@@ -289,8 +298,15 @@ class HomePage extends StatelessWidget {
                                 const SizedBox(width: 3),
                                 Expanded(
                                   child: _QuickAction(
-                                    bg: scheme.surfaceContainerHigh,
+                                    bg: scheme.surfaceContainerHighest,
                                     fg: scheme.onSurface,
+                                    // surfaceContainerHigh was nearly the same
+                                    // tone as the page's own surface, so this
+                                    // button all but disappeared. `outline`
+                                    // (not `outlineVariant`, ~1.6:1 here) gets
+                                    // this to WCAG 1.4.11's 3:1 for a
+                                    // functional button boundary.
+                                    border: Border.all(color: scheme.outline),
                                     icon: Icons.groups,
                                     label: 'View squad',
                                     radius: const BorderRadius.horizontal(right: Radius.circular(999)),
@@ -483,6 +499,7 @@ class _QuickAction extends StatelessWidget {
     required this.label,
     required this.radius,
     required this.onTap,
+    this.border,
   });
 
   final Color bg;
@@ -491,24 +508,28 @@ class _QuickAction extends StatelessWidget {
   final String label;
   final BorderRadius radius;
   final VoidCallback onTap;
+  final BoxBorder? border;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: bg,
-      borderRadius: radius,
-      child: InkWell(
-        borderRadius: radius,
-        onTap: onTap,
-        child: SizedBox(
-          height: 52,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 20, color: fg),
-              const SizedBox(width: 8),
-              Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: fg)),
-            ],
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(borderRadius: radius, border: border),
+      child: Material(
+        color: bg,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: onTap,
+          child: SizedBox(
+            height: 52,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 20, color: fg),
+                const SizedBox(width: 8),
+                Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: fg)),
+              ],
+            ),
           ),
         ),
       ),

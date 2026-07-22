@@ -217,11 +217,12 @@ class StatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Flat, no elevation — the handoff's own CSS for these tiles has no
+    // box-shadow. Elevation here previously cast a drop shadow into the
+    // 3px gap between adjacent tiles, reading as a stray colored seam.
     return Material(
       color: bg,
       borderRadius: radius,
-      elevation: 2,
-      shadowColor: Theme.of(context).colorScheme.shadow,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
         child: Column(

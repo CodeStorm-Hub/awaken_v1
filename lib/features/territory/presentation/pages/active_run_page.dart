@@ -130,7 +130,11 @@ class _ActiveRunPageState extends State<ActiveRunPage> {
                     child: CustomPaint(
                       painter: _RunPathPainter(
                         progress: (_elapsedSec / _loopCloseSec).clamp(0, 1).toDouble(),
-                        trackColor: scheme.outlineVariant,
+                        // The full route shape is functional information (not
+                        // decoration), so it needs `outline`'s 3:1+ contrast
+                        // against surfaceContainerLow, not outlineVariant's
+                        // ~1:1.6.
+                        trackColor: scheme.outline,
                         pathColor: scheme.primary,
                       ),
                       size: Size.infinite,

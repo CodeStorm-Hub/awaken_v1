@@ -140,8 +140,11 @@ class SquadPage extends StatelessWidget {
                                 ),
                                 FilledButton(
                                   style: FilledButton.styleFrom(
-                                    backgroundColor: scheme.secondary,
-                                    foregroundColor: scheme.onSecondary,
+                                    // Handoff's "Cheer" chip is a soft
+                                    // secondary-container tone, not a solid
+                                    // secondary pill.
+                                    backgroundColor: scheme.secondaryContainer,
+                                    foregroundColor: scheme.onSecondaryContainer,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                                   ),
                                   onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
