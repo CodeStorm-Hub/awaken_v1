@@ -17,6 +17,18 @@ abstract final class Env {
   static String get supabasePublishableKey =>
       _require('SUPABASE_PUBLISHABLE_KEY');
 
+  /// Tile provider URL template for the territory map (plan C3 — never the
+  /// OpenStreetMap public tile server in production). Optional: unset until
+  /// a free-tier provider (MapTiler/Stadia/Thunderforest) key is
+  /// provisioned, in which case `TerritoryPage` shows a "map tiles not
+  /// configured" state instead of a blank/broken map. Include the API key
+  /// directly in the URL template (most providers' convention), e.g.
+  /// `https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=XXX`.
+  static String? get mapTileUrlTemplate => dotenv.maybeGet('MAP_TILE_URL_TEMPLATE');
+
+  static String get mapTileAttribution =>
+      dotenv.maybeGet('MAP_TILE_ATTRIBUTION') ?? 'Map data © contributors';
+
   static String _require(String key) {
     final value = dotenv.maybeGet(key);
     if (value == null || value.isEmpty) {

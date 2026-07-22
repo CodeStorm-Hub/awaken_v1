@@ -88,6 +88,14 @@ class SyncWorker {
   }
 
   Future<void> _push(OutboxEntryRow entry, String userId) async {
+    if (entry.entityTable == 'runs' && entry.operation == OutboxOperation.upsert.name) {
+      // `runs.path` is PostGIS geometry — a raw GeoJSON-string upsert would
+      // not auto-cast. Runs are submitted through `submit_run()` instead of
+      // a generic table upsert; this is the offline-retry path for
+      // `RunTrackingRepositoryImpl.captureRun()`'s online happy path.
+      await _pushRun(entry);
+      return;
+    }
     final table = _supabase.from(entry.entityTable);
     if (entry.operation == OutboxOperation.delete.name) {
       await table.update({'deleted_at': DateTime.now().toIso8601String()}).eq('id', entry.entityId);
@@ -96,6 +104,29 @@ class SyncWorker {
     final payload = Map<String, Object?>.from(jsonDecode(entry.payload) as Map)
       ..['user_id'] = userId;
     await table.upsert(payload);
+  }
+
+  Future<void> _pushRun(OutboxEntryRow entry) async {
+    final payload = jsonDecode(entry.payload) as Map<String, Object?>;
+    final result = await _supabase.rpc<Object?>(
+      'submit_run',
+      params: {
+        'p_run_id': payload['id'],
+        'p_path': jsonDecode(payload['path'] as String),
+        'p_started_at': payload['started_at'],
+        'p_ended_at': payload['ended_at'] ?? payload['started_at'],
+      },
+    );
+    final response = Map<String, Object?>.from(result! as Map);
+    await (_db.update(_db.runs)..where((t) => t.id.equals(payload['id'] as String))).write(
+      RunsCompanion(
+        isClosedLoop: Value(response['closed_loop'] as bool? ?? false),
+        capturedAreaSqm: Value((response['captured_area_sqm'] as num?)?.toDouble()),
+        areaSqm: Value((response['territory_area_sqm'] as num?)?.toDouble()),
+        integrityVerdict: Value(response['accepted'] == true ? 'trusted' : 'rejected'),
+        rejectedReason: Value(response['reason'] as String?),
+      ),
+    );
   }
 
   Future<void> _applyBackoff(OutboxEntryRow entry) async {

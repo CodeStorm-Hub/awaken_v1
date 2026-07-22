@@ -1180,6 +1180,32 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _isClosedLoopMeta = const VerificationMeta(
+    'isClosedLoop',
+  );
+  @override
+  late final GeneratedColumn<bool> isClosedLoop = GeneratedColumn<bool>(
+    'is_closed_loop',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_closed_loop" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _capturedAreaSqmMeta = const VerificationMeta(
+    'capturedAreaSqm',
+  );
+  @override
+  late final GeneratedColumn<double> capturedAreaSqm = GeneratedColumn<double>(
+    'captured_area_sqm',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _areaSqmMeta = const VerificationMeta(
     'areaSqm',
   );
@@ -1242,6 +1268,8 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
     endedAt,
     pointCount,
     pathGeoJson,
+    isClosedLoop,
+    capturedAreaSqm,
     areaSqm,
     integrityVerdict,
     rejectedReason,
@@ -1297,6 +1325,24 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
       );
     } else if (isInserting) {
       context.missing(_pathGeoJsonMeta);
+    }
+    if (data.containsKey('is_closed_loop')) {
+      context.handle(
+        _isClosedLoopMeta,
+        isClosedLoop.isAcceptableOrUnknown(
+          data['is_closed_loop']!,
+          _isClosedLoopMeta,
+        ),
+      );
+    }
+    if (data.containsKey('captured_area_sqm')) {
+      context.handle(
+        _capturedAreaSqmMeta,
+        capturedAreaSqm.isAcceptableOrUnknown(
+          data['captured_area_sqm']!,
+          _capturedAreaSqmMeta,
+        ),
+      );
     }
     if (data.containsKey('area_sqm')) {
       context.handle(
@@ -1365,6 +1411,14 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
         DriftSqlType.string,
         data['${effectivePrefix}path_geo_json'],
       )!,
+      isClosedLoop: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_closed_loop'],
+      )!,
+      capturedAreaSqm: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}captured_area_sqm'],
+      ),
       areaSqm: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}area_sqm'],
@@ -1400,6 +1454,12 @@ class RunRow extends DataClass implements Insertable<RunRow> {
   final DateTime? endedAt;
   final int pointCount;
   final String pathGeoJson;
+  final bool isClosedLoop;
+
+  /// This run's own captured polygon area — what `submit_run()` returns as
+  /// `captured_area_sqm` (the celebration-UI "delta"), distinct from
+  /// `areaSqm` (the user's total territory area after server-side merge).
+  final double? capturedAreaSqm;
   final double? areaSqm;
   final String? integrityVerdict;
   final String? rejectedReason;
@@ -1411,6 +1471,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     this.endedAt,
     required this.pointCount,
     required this.pathGeoJson,
+    required this.isClosedLoop,
+    this.capturedAreaSqm,
     this.areaSqm,
     this.integrityVerdict,
     this.rejectedReason,
@@ -1427,6 +1489,10 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     }
     map['point_count'] = Variable<int>(pointCount);
     map['path_geo_json'] = Variable<String>(pathGeoJson);
+    map['is_closed_loop'] = Variable<bool>(isClosedLoop);
+    if (!nullToAbsent || capturedAreaSqm != null) {
+      map['captured_area_sqm'] = Variable<double>(capturedAreaSqm);
+    }
     if (!nullToAbsent || areaSqm != null) {
       map['area_sqm'] = Variable<double>(areaSqm);
     }
@@ -1452,6 +1518,10 @@ class RunRow extends DataClass implements Insertable<RunRow> {
           : Value(endedAt),
       pointCount: Value(pointCount),
       pathGeoJson: Value(pathGeoJson),
+      isClosedLoop: Value(isClosedLoop),
+      capturedAreaSqm: capturedAreaSqm == null && nullToAbsent
+          ? const Value.absent()
+          : Value(capturedAreaSqm),
       areaSqm: areaSqm == null && nullToAbsent
           ? const Value.absent()
           : Value(areaSqm),
@@ -1479,6 +1549,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
       endedAt: serializer.fromJson<DateTime?>(json['endedAt']),
       pointCount: serializer.fromJson<int>(json['pointCount']),
       pathGeoJson: serializer.fromJson<String>(json['pathGeoJson']),
+      isClosedLoop: serializer.fromJson<bool>(json['isClosedLoop']),
+      capturedAreaSqm: serializer.fromJson<double?>(json['capturedAreaSqm']),
       areaSqm: serializer.fromJson<double?>(json['areaSqm']),
       integrityVerdict: serializer.fromJson<String?>(json['integrityVerdict']),
       rejectedReason: serializer.fromJson<String?>(json['rejectedReason']),
@@ -1495,6 +1567,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
       'endedAt': serializer.toJson<DateTime?>(endedAt),
       'pointCount': serializer.toJson<int>(pointCount),
       'pathGeoJson': serializer.toJson<String>(pathGeoJson),
+      'isClosedLoop': serializer.toJson<bool>(isClosedLoop),
+      'capturedAreaSqm': serializer.toJson<double?>(capturedAreaSqm),
       'areaSqm': serializer.toJson<double?>(areaSqm),
       'integrityVerdict': serializer.toJson<String?>(integrityVerdict),
       'rejectedReason': serializer.toJson<String?>(rejectedReason),
@@ -1509,6 +1583,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     Value<DateTime?> endedAt = const Value.absent(),
     int? pointCount,
     String? pathGeoJson,
+    bool? isClosedLoop,
+    Value<double?> capturedAreaSqm = const Value.absent(),
     Value<double?> areaSqm = const Value.absent(),
     Value<String?> integrityVerdict = const Value.absent(),
     Value<String?> rejectedReason = const Value.absent(),
@@ -1520,6 +1596,10 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     endedAt: endedAt.present ? endedAt.value : this.endedAt,
     pointCount: pointCount ?? this.pointCount,
     pathGeoJson: pathGeoJson ?? this.pathGeoJson,
+    isClosedLoop: isClosedLoop ?? this.isClosedLoop,
+    capturedAreaSqm: capturedAreaSqm.present
+        ? capturedAreaSqm.value
+        : this.capturedAreaSqm,
     areaSqm: areaSqm.present ? areaSqm.value : this.areaSqm,
     integrityVerdict: integrityVerdict.present
         ? integrityVerdict.value
@@ -1541,6 +1621,12 @@ class RunRow extends DataClass implements Insertable<RunRow> {
       pathGeoJson: data.pathGeoJson.present
           ? data.pathGeoJson.value
           : this.pathGeoJson,
+      isClosedLoop: data.isClosedLoop.present
+          ? data.isClosedLoop.value
+          : this.isClosedLoop,
+      capturedAreaSqm: data.capturedAreaSqm.present
+          ? data.capturedAreaSqm.value
+          : this.capturedAreaSqm,
       areaSqm: data.areaSqm.present ? data.areaSqm.value : this.areaSqm,
       integrityVerdict: data.integrityVerdict.present
           ? data.integrityVerdict.value
@@ -1561,6 +1647,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
           ..write('endedAt: $endedAt, ')
           ..write('pointCount: $pointCount, ')
           ..write('pathGeoJson: $pathGeoJson, ')
+          ..write('isClosedLoop: $isClosedLoop, ')
+          ..write('capturedAreaSqm: $capturedAreaSqm, ')
           ..write('areaSqm: $areaSqm, ')
           ..write('integrityVerdict: $integrityVerdict, ')
           ..write('rejectedReason: $rejectedReason, ')
@@ -1577,6 +1665,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     endedAt,
     pointCount,
     pathGeoJson,
+    isClosedLoop,
+    capturedAreaSqm,
     areaSqm,
     integrityVerdict,
     rejectedReason,
@@ -1592,6 +1682,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
           other.endedAt == this.endedAt &&
           other.pointCount == this.pointCount &&
           other.pathGeoJson == this.pathGeoJson &&
+          other.isClosedLoop == this.isClosedLoop &&
+          other.capturedAreaSqm == this.capturedAreaSqm &&
           other.areaSqm == this.areaSqm &&
           other.integrityVerdict == this.integrityVerdict &&
           other.rejectedReason == this.rejectedReason &&
@@ -1605,6 +1697,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
   final Value<DateTime?> endedAt;
   final Value<int> pointCount;
   final Value<String> pathGeoJson;
+  final Value<bool> isClosedLoop;
+  final Value<double?> capturedAreaSqm;
   final Value<double?> areaSqm;
   final Value<String?> integrityVerdict;
   final Value<String?> rejectedReason;
@@ -1617,6 +1711,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     this.endedAt = const Value.absent(),
     this.pointCount = const Value.absent(),
     this.pathGeoJson = const Value.absent(),
+    this.isClosedLoop = const Value.absent(),
+    this.capturedAreaSqm = const Value.absent(),
     this.areaSqm = const Value.absent(),
     this.integrityVerdict = const Value.absent(),
     this.rejectedReason = const Value.absent(),
@@ -1630,6 +1726,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     this.endedAt = const Value.absent(),
     required int pointCount,
     required String pathGeoJson,
+    this.isClosedLoop = const Value.absent(),
+    this.capturedAreaSqm = const Value.absent(),
     this.areaSqm = const Value.absent(),
     this.integrityVerdict = const Value.absent(),
     this.rejectedReason = const Value.absent(),
@@ -1647,6 +1745,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     Expression<DateTime>? endedAt,
     Expression<int>? pointCount,
     Expression<String>? pathGeoJson,
+    Expression<bool>? isClosedLoop,
+    Expression<double>? capturedAreaSqm,
     Expression<double>? areaSqm,
     Expression<String>? integrityVerdict,
     Expression<String>? rejectedReason,
@@ -1660,6 +1760,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
       if (endedAt != null) 'ended_at': endedAt,
       if (pointCount != null) 'point_count': pointCount,
       if (pathGeoJson != null) 'path_geo_json': pathGeoJson,
+      if (isClosedLoop != null) 'is_closed_loop': isClosedLoop,
+      if (capturedAreaSqm != null) 'captured_area_sqm': capturedAreaSqm,
       if (areaSqm != null) 'area_sqm': areaSqm,
       if (integrityVerdict != null) 'integrity_verdict': integrityVerdict,
       if (rejectedReason != null) 'rejected_reason': rejectedReason,
@@ -1675,6 +1777,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     Value<DateTime?>? endedAt,
     Value<int>? pointCount,
     Value<String>? pathGeoJson,
+    Value<bool>? isClosedLoop,
+    Value<double?>? capturedAreaSqm,
     Value<double?>? areaSqm,
     Value<String?>? integrityVerdict,
     Value<String?>? rejectedReason,
@@ -1688,6 +1792,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
       endedAt: endedAt ?? this.endedAt,
       pointCount: pointCount ?? this.pointCount,
       pathGeoJson: pathGeoJson ?? this.pathGeoJson,
+      isClosedLoop: isClosedLoop ?? this.isClosedLoop,
+      capturedAreaSqm: capturedAreaSqm ?? this.capturedAreaSqm,
       areaSqm: areaSqm ?? this.areaSqm,
       integrityVerdict: integrityVerdict ?? this.integrityVerdict,
       rejectedReason: rejectedReason ?? this.rejectedReason,
@@ -1714,6 +1820,12 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     }
     if (pathGeoJson.present) {
       map['path_geo_json'] = Variable<String>(pathGeoJson.value);
+    }
+    if (isClosedLoop.present) {
+      map['is_closed_loop'] = Variable<bool>(isClosedLoop.value);
+    }
+    if (capturedAreaSqm.present) {
+      map['captured_area_sqm'] = Variable<double>(capturedAreaSqm.value);
     }
     if (areaSqm.present) {
       map['area_sqm'] = Variable<double>(areaSqm.value);
@@ -1744,6 +1856,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
           ..write('endedAt: $endedAt, ')
           ..write('pointCount: $pointCount, ')
           ..write('pathGeoJson: $pathGeoJson, ')
+          ..write('isClosedLoop: $isClosedLoop, ')
+          ..write('capturedAreaSqm: $capturedAreaSqm, ')
           ..write('areaSqm: $areaSqm, ')
           ..write('integrityVerdict: $integrityVerdict, ')
           ..write('rejectedReason: $rejectedReason, ')
@@ -3464,6 +3578,8 @@ typedef $$RunsTableCreateCompanionBuilder =
       Value<DateTime?> endedAt,
       required int pointCount,
       required String pathGeoJson,
+      Value<bool> isClosedLoop,
+      Value<double?> capturedAreaSqm,
       Value<double?> areaSqm,
       Value<String?> integrityVerdict,
       Value<String?> rejectedReason,
@@ -3478,6 +3594,8 @@ typedef $$RunsTableUpdateCompanionBuilder =
       Value<DateTime?> endedAt,
       Value<int> pointCount,
       Value<String> pathGeoJson,
+      Value<bool> isClosedLoop,
+      Value<double?> capturedAreaSqm,
       Value<double?> areaSqm,
       Value<String?> integrityVerdict,
       Value<String?> rejectedReason,
@@ -3516,6 +3634,16 @@ class $$RunsTableFilterComposer extends Composer<_$AppDatabase, $RunsTable> {
 
   ColumnFilters<String> get pathGeoJson => $composableBuilder(
     column: $table.pathGeoJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isClosedLoop => $composableBuilder(
+    column: $table.isClosedLoop,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get capturedAreaSqm => $composableBuilder(
+    column: $table.capturedAreaSqm,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3578,6 +3706,16 @@ class $$RunsTableOrderingComposer extends Composer<_$AppDatabase, $RunsTable> {
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isClosedLoop => $composableBuilder(
+    column: $table.isClosedLoop,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get capturedAreaSqm => $composableBuilder(
+    column: $table.capturedAreaSqm,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get areaSqm => $composableBuilder(
     column: $table.areaSqm,
     builder: (column) => ColumnOrderings(column),
@@ -3629,6 +3767,16 @@ class $$RunsTableAnnotationComposer
 
   GeneratedColumn<String> get pathGeoJson => $composableBuilder(
     column: $table.pathGeoJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isClosedLoop => $composableBuilder(
+    column: $table.isClosedLoop,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get capturedAreaSqm => $composableBuilder(
+    column: $table.capturedAreaSqm,
     builder: (column) => column,
   );
 
@@ -3685,6 +3833,8 @@ class $$RunsTableTableManager
                 Value<DateTime?> endedAt = const Value.absent(),
                 Value<int> pointCount = const Value.absent(),
                 Value<String> pathGeoJson = const Value.absent(),
+                Value<bool> isClosedLoop = const Value.absent(),
+                Value<double?> capturedAreaSqm = const Value.absent(),
                 Value<double?> areaSqm = const Value.absent(),
                 Value<String?> integrityVerdict = const Value.absent(),
                 Value<String?> rejectedReason = const Value.absent(),
@@ -3697,6 +3847,8 @@ class $$RunsTableTableManager
                 endedAt: endedAt,
                 pointCount: pointCount,
                 pathGeoJson: pathGeoJson,
+                isClosedLoop: isClosedLoop,
+                capturedAreaSqm: capturedAreaSqm,
                 areaSqm: areaSqm,
                 integrityVerdict: integrityVerdict,
                 rejectedReason: rejectedReason,
@@ -3711,6 +3863,8 @@ class $$RunsTableTableManager
                 Value<DateTime?> endedAt = const Value.absent(),
                 required int pointCount,
                 required String pathGeoJson,
+                Value<bool> isClosedLoop = const Value.absent(),
+                Value<double?> capturedAreaSqm = const Value.absent(),
                 Value<double?> areaSqm = const Value.absent(),
                 Value<String?> integrityVerdict = const Value.absent(),
                 Value<String?> rejectedReason = const Value.absent(),
@@ -3723,6 +3877,8 @@ class $$RunsTableTableManager
                 endedAt: endedAt,
                 pointCount: pointCount,
                 pathGeoJson: pathGeoJson,
+                isClosedLoop: isClosedLoop,
+                capturedAreaSqm: capturedAreaSqm,
                 areaSqm: areaSqm,
                 integrityVerdict: integrityVerdict,
                 rejectedReason: rejectedReason,

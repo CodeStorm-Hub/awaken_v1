@@ -12,6 +12,11 @@ class Runs extends Table {
   DateTimeColumn get endedAt => dateTime().nullable()();
   IntColumn get pointCount => integer()();
   TextColumn get pathGeoJson => text()();
+  BoolColumn get isClosedLoop => boolean().withDefault(const Constant(false))();
+  /// This run's own captured polygon area — what `submit_run()` returns as
+  /// `captured_area_sqm` (the celebration-UI "delta"), distinct from
+  /// `areaSqm` (the user's total territory area after server-side merge).
+  RealColumn get capturedAreaSqm => real().nullable()();
   RealColumn get areaSqm => real().nullable()();
   TextColumn get integrityVerdict => text().nullable()();
   TextColumn get rejectedReason => text().nullable()();

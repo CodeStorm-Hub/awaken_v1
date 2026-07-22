@@ -1,28 +1,78 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
+
+import '../../../../core/config/env.dart';
+import '../../../../core/di/injection.dart';
+import '../../../../core/usecase/usecase.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
+import '../../domain/entities/territory.dart';
+import '../../domain/usecases/refresh_territories.dart';
+import '../../domain/usecases/watch_owned_area.dart';
+import '../../domain/usecases/watch_territories.dart';
 import 'active_run_page.dart';
 
-/// Territory map (Claude Design handoff — `isTerritory`). No Territory
-/// feature exists in the codebase yet, though Supabase already has a real
-/// `territories` table + `submit_run()` RPC (see CLAUDE.md) — wiring this
-/// screen to that backend (real GPS capture, PostGIS polygon rendering) is
-/// a separate, much larger effort than matching the design's UI. This is
-/// presentation-only: the grid/blobs/markers below are static concept
-/// dressing, same as the handoff's own mocked polygons.
-class TerritoryPage extends StatelessWidget {
+/// Territory map (plan §6 Phase 5c). Real `flutter_map` rendering of
+/// server-authoritative territory polygons, replacing the fully-static
+/// painted mock this page used to show. Tile source is a free-tier
+/// commercial/self-hosted provider configured via `.env.client` (plan C3 —
+/// never the OSM public tile server); if unconfigured, the map still renders
+/// polygons/markers over a plain background with an inline notice instead of
+/// silently showing a blank map.
+class TerritoryPage extends StatefulWidget {
   const TerritoryPage({super.key});
 
-  static const _polygons = [
-    (left: 0.08, top: 0.16, width: 0.34, height: 0.26, radius: 42.0, tertiary: false),
-    (left: 0.46, top: 0.46, width: 0.30, height: 0.22, radius: 55.0, tertiary: false),
-    (left: 0.62, top: 0.10, width: 0.24, height: 0.20, radius: 999.0, tertiary: true),
-  ];
+  @override
+  State<TerritoryPage> createState() => _TerritoryPageState();
+}
 
-  static const _squadDots = [
-    (left: 0.70, top: 0.55, initial: 'P'),
-    (left: 0.30, top: 0.65, initial: 'M'),
-  ];
+class _TerritoryPageState extends State<TerritoryPage> {
+  final _mapController = MapController();
+
+  // Falls back to a neutral world view until a fix arrives — avoids
+  // centering on (0,0) "null island" while permission/location resolves.
+  LatLng _center = const LatLng(20, 0);
+  bool _hasFix = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(getIt<RefreshTerritories>()(const NoParams()));
+    unawaited(_locateSelf());
+  }
+
+  Future<void> _locateSelf() async {
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+      );
+      if (!mounted) return;
+      setState(() {
+        _center = LatLng(position.latitude, position.longitude);
+        _hasFix = true;
+      });
+      _mapController.move(_center, 15);
+    } catch (_) {
+      // Best-effort centering only — a failed/denied fix just keeps the
+      // fallback view; the map (and starting a run) still works.
+    }
+  }
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,94 +126,23 @@ class TerritoryPage extends StatelessWidget {
                     color: scheme.surfaceContainerLow,
                     child: Stack(
                       children: [
-                        Positioned.fill(child: CustomPaint(painter: _StreetGridPainter(color: scheme.outlineVariant))),
-                        for (final poly in _polygons)
-                          Positioned.fill(
-                            child: FractionallySizedBox(
-                              alignment: Alignment.topLeft,
-                              widthFactor: 1,
-                              heightFactor: 1,
-                              child: Align(
-                                alignment: Alignment(poly.left * 2 - 1, poly.top * 2 - 1),
-                                child: FractionallySizedBox(
-                                  widthFactor: poly.width,
-                                  heightFactor: poly.height,
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: (poly.tertiary ? scheme.tertiaryContainer : scheme.primaryContainer)
-                                          .withValues(alpha: poly.tertiary ? 0.55 : 0.7),
-                                      borderRadius: BorderRadius.circular(poly.radius),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        for (final dot in _squadDots)
-                          Align(
-                            alignment: Alignment(dot.left * 2 - 1, dot.top * 2 - 1),
-                            child: Container(
-                              width: 26,
-                              height: 26,
-                              decoration: BoxDecoration(
-                                color: scheme.tertiary,
-                                shape: BoxShape.circle,
-                                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 3)],
-                              ),
-                              child: Center(
-                                child: Text(
-                                  dot.initial,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: scheme.onTertiary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        Align(
-                          alignment: const Alignment(-0.12, 0.04),
-                          child: Container(
-                            width: 16,
-                            height: 16,
-                            decoration: BoxDecoration(
-                              color: scheme.primary,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: scheme.surface, width: 3),
-                            ),
-                          ),
+                        StreamBuilder<List<Territory>>(
+                          stream: getIt<WatchTerritories>()(),
+                          builder: (context, snapshot) {
+                            final territories = snapshot.data ?? const [];
+                            return _Map(
+                              controller: _mapController,
+                              center: _center,
+                              hasFix: _hasFix,
+                              territories: territories,
+                              scheme: scheme,
+                            );
+                          },
                         ),
                         Positioned(
                           top: 14,
                           left: 14,
-                          child: Container(
-                            height: 36,
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            decoration: BoxDecoration(
-                              color: scheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(999),
-                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2)],
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.landscape, size: 17, color: scheme.onPrimaryContainer),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '0.21 km² captured',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onPrimaryContainer),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 10,
-                          left: 16,
-                          child: Text(
-                            'Map data placeholder',
-                            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                          ),
+                          child: _OwnedAreaChip(scheme: scheme),
                         ),
                         Positioned(
                           bottom: 14,
@@ -180,7 +159,11 @@ class TerritoryPage extends StatelessWidget {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  _RoundIconButton(icon: Icons.my_location, tooltip: 'Center map', onTap: () {}),
+                                  _RoundIconButton(
+                                    icon: Icons.my_location,
+                                    tooltip: 'Center map',
+                                    onTap: () => _mapController.move(_center, 15),
+                                  ),
                                   FilledButton(
                                     style: FilledButton.styleFrom(
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
@@ -216,6 +199,122 @@ class TerritoryPage extends StatelessWidget {
   }
 }
 
+class _Map extends StatelessWidget {
+  const _Map({
+    required this.controller,
+    required this.center,
+    required this.hasFix,
+    required this.territories,
+    required this.scheme,
+  });
+
+  final MapController controller;
+  final LatLng center;
+  final bool hasFix;
+  final List<Territory> territories;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final tileUrl = Env.mapTileUrlTemplate;
+
+    return FlutterMap(
+      mapController: controller,
+      options: MapOptions(initialCenter: center, initialZoom: hasFix ? 15 : 2),
+      children: [
+        if (tileUrl != null && tileUrl.isNotEmpty)
+          TileLayer(urlTemplate: tileUrl, userAgentPackageName: 'com.awaken.awaken')
+        else
+          const _TilesNotConfiguredNotice(),
+        PolygonLayer(
+          polygons: [
+            for (final territory in territories)
+              for (final ring in territory.rings)
+                Polygon(
+                  points: ring,
+                  color: (territory.isMine ? scheme.primaryContainer : scheme.tertiaryContainer)
+                      .withValues(alpha: 0.55),
+                  borderColor: territory.isMine ? scheme.primary : scheme.tertiary,
+                  borderStrokeWidth: 2,
+                ),
+          ],
+        ),
+        if (hasFix)
+          MarkerLayer(
+            markers: [
+              Marker(
+                point: center,
+                width: 22,
+                height: 22,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.primary,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: scheme.surface, width: 3),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        if (tileUrl != null && tileUrl.isNotEmpty)
+          SimpleAttributionWidget(source: Text(Env.mapTileAttribution)),
+      ],
+    );
+  }
+}
+
+class _TilesNotConfiguredNotice extends StatelessWidget {
+  const _TilesNotConfiguredNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Positioned(
+      bottom: 10,
+      left: 16,
+      right: 16,
+      child: Text(
+        'Map tiles not configured — set MAP_TILE_URL_TEMPLATE in .env.client. '
+        'Territory data still loads.',
+        style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+      ),
+    );
+  }
+}
+
+class _OwnedAreaChip extends StatelessWidget {
+  const _OwnedAreaChip({required this.scheme});
+
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<double>(
+      stream: getIt<WatchOwnedArea>()(),
+      builder: (context, snapshot) {
+        final areaSqm = snapshot.data ?? 0;
+        final label = '${(areaSqm / 1000000).toStringAsFixed(3)} km² captured';
+        return Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: scheme.primaryContainer,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2)],
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.landscape, size: 17, color: scheme.onPrimaryContainer),
+              const SizedBox(width: 6),
+              Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onPrimaryContainer)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _RoundIconButton extends StatelessWidget {
   const _RoundIconButton({required this.icon, required this.tooltip, required this.onTap});
 
@@ -240,27 +339,4 @@ class _RoundIconButton extends StatelessWidget {
       ),
     );
   }
-}
-
-class _StreetGridPainter extends CustomPainter {
-  const _StreetGridPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1;
-    const step = 34.0;
-    for (var x = 0.0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (var y = 0.0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _StreetGridPainter oldDelegate) => oldDelegate.color != color;
 }

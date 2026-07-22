@@ -1,48 +1,41 @@
-import 'dart:async';
-import 'dart:math';
-
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../domain/entities/gps_quality.dart';
+import '../../domain/entities/run_track_state.dart';
+import '../bloc/run_tracking_cubit.dart';
 import '../widgets/territory_capture_sheet.dart';
 
-/// Active-run tracking (Claude Design handoff — `isActiveRun`). Concept-only
-/// — no real GPS/geolocator wiring here, same caveat as `TerritoryPage`.
-/// Elapsed time/distance/loop-closure are simulated on a 1s timer, mirroring
-/// the handoff's own `setInterval` mock.
-class ActiveRunPage extends StatefulWidget {
+/// Active-run tracking (Claude Design handoff — `isActiveRun`). Real GPS
+/// tracking (plan §6 Phase 5): `RunTrackingCubit` drives elapsed/distance/
+/// loop-closure/GPS-quality from `RunTrackingRepository` (geolocator +
+/// kalman_dr EKF smoothing), not the timer/`Random()` mock this page used to
+/// run. The route-shape painter stays stylized rather than a real map trace
+/// — a real `flutter_map` polygon layer is Phase 5c, a separate effort from
+/// wiring up the tracking pipeline itself.
+class ActiveRunPage extends StatelessWidget {
   const ActiveRunPage({super.key});
 
   @override
-  State<ActiveRunPage> createState() => _ActiveRunPageState();
+  Widget build(BuildContext context) {
+    return BlocProvider<RunTrackingCubit>(
+      create: (_) => getIt<RunTrackingCubit>()..begin(),
+      child: const _ActiveRunView(),
+    );
+  }
 }
 
-class _ActiveRunPageState extends State<ActiveRunPage> {
-  static const _loopCloseSec = 8;
-
-  Timer? _timer;
-  int _elapsedSec = 0;
-  double _distanceM = 0;
-  final _random = Random();
-
-  bool get _loopClosed => _elapsedSec >= _loopCloseSec;
+class _ActiveRunView extends StatefulWidget {
+  const _ActiveRunView();
 
   @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      setState(() {
-        _elapsedSec += 1;
-        _distanceM += 2.8 + _random.nextDouble() * 0.6;
-      });
-    });
-  }
+  State<_ActiveRunView> createState() => _ActiveRunViewState();
+}
 
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
+class _ActiveRunViewState extends State<_ActiveRunView> {
+  bool _busy = false;
 
   String _fmtTime(int totalSec) {
     final m = (totalSec ~/ 60).toString().padLeft(2, '0');
@@ -50,11 +43,29 @@ class _ActiveRunPageState extends State<ActiveRunPage> {
     return '$m:$s';
   }
 
-  Future<void> _capture() async {
-    if (!_loopClosed) return;
-    _timer?.cancel();
-    final gainedM2 = 8000 + _random.nextInt(6000);
-    final areaLabel = '${(gainedM2 / 1000000).toStringAsFixed(3)} km²';
+  Future<void> _capture(RunTrackingCubit cubit) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final result = await cubit.capture();
+    if (!mounted) return;
+
+    if (result.pending) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Run saved — will sync territory once back online.')),
+      );
+      Navigator.of(context).pop();
+      return;
+    }
+    if (result.accepted != true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.rejectedReason ?? "Run couldn't be captured.")),
+      );
+      Navigator.of(context).pop();
+      return;
+    }
+
+    final areaSqm = result.capturedAreaSqm ?? result.territoryAreaSqm ?? 0;
+    final areaLabel = '${(areaSqm / 1000000).toStringAsFixed(3)} km²';
     await showModalBottomSheet<void>(
       context: context,
       isDismissible: false,
@@ -65,175 +76,237 @@ class _ActiveRunPageState extends State<ActiveRunPage> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  void _abandon() {
-    _timer?.cancel();
-    Navigator.of(context).pop();
+  Future<void> _abandon(RunTrackingCubit cubit) async {
+    await cubit.abandon();
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final distanceKm = _distanceM / 1000;
-    final paceSecPerKm = distanceKm > 0 ? (_elapsedSec / distanceKm).round() : 0;
+    final cubit = context.read<RunTrackingCubit>();
 
     return PopScope(
-      onPopInvokedWithResult: (didPop, _) => _timer?.cancel(),
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _abandon(cubit);
+      },
       child: Scaffold(
         backgroundColor: scheme.surface,
         body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
+          child: BlocBuilder<RunTrackingCubit, RunTrackState>(
+            builder: (context, state) {
+              if (state.permissionDenied) {
+                return _PermissionDeniedView(onClose: () => Navigator.of(context).pop());
+              }
+
+              final loopClosed = state.isLoopClosed;
+              final distanceKm = state.distanceMeters / 1000;
+              final elapsedSec = state.elapsed.inSeconds;
+              final paceSecPerKm = distanceKm > 0.01 ? (elapsedSec / distanceKm).round() : 0;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _PulsingDot(color: scheme.error),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Tracking run',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: scheme.onSurface),
+                        Row(
+                          children: [
+                            _PulsingDot(color: scheme.error),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Tracking run',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: scheme.onSurface),
+                            ),
+                          ],
+                        ),
+                        _GpsQualityChip(quality: state.gpsQuality),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Container(
+                        height: 190,
+                        color: scheme.surfaceContainerLow,
+                        child: CustomPaint(
+                          painter: _RunPathPainter(
+                            progress: (state.distanceMeters / 400).clamp(0, 1).toDouble(),
+                            trackColor: scheme.outline,
+                            pathColor: scheme.primary,
+                          ),
+                          size: Size.infinite,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: StatTile(
+                            bg: scheme.surfaceContainerHigh,
+                            fg: scheme.onSurface,
+                            value: _fmtTime(elapsedSec),
+                            label: 'Time',
+                            radius: const BorderRadius.horizontal(left: Radius.circular(24)),
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: StatTile(
+                            bg: scheme.primaryContainer,
+                            fg: scheme.onPrimaryContainer,
+                            value: distanceKm.toStringAsFixed(2),
+                            label: 'Distance',
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: StatTile(
+                            bg: scheme.surfaceContainerHigh,
+                            fg: scheme.onSurface,
+                            value: paceSecPerKm > 0 ? _fmtTime(paceSecPerKm) : '--:--',
+                            label: 'Pace /km',
+                            radius: const BorderRadius.horizontal(right: Radius.circular(24)),
+                          ),
                         ),
                       ],
                     ),
-                    Container(
-                      height: 32,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                       decoration: BoxDecoration(
-                        color: scheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(999),
+                        color: scheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(18),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.gps_fixed, size: 15, color: scheme.onPrimaryContainer),
-                          const SizedBox(width: 5),
-                          Text(
-                            'GPS good',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: scheme.onPrimaryContainer),
+                          Icon(
+                            loopClosed ? Icons.check_circle : Icons.route,
+                            size: 22,
+                            color: loopClosed ? scheme.primary : scheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              loopClosed
+                                  ? 'Loop closed — ready to capture!'
+                                  : 'Keep going — return near your start point to close the loop.',
+                              style: TextStyle(fontWeight: FontWeight.w500, color: scheme.onSurface),
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: Container(
-                    height: 190,
-                    color: scheme.surfaceContainerLow,
-                    child: CustomPaint(
-                      painter: _RunPathPainter(
-                        progress: (_elapsedSec / _loopCloseSec).clamp(0, 1).toDouble(),
-                        // The full route shape is functional information (not
-                        // decoration), so it needs `outline`'s 3:1+ contrast
-                        // against surfaceContainerLow, not outlineVariant's
-                        // ~1:1.6.
-                        trackColor: scheme.outline,
-                        pathColor: scheme.primary,
-                      ),
-                      size: Size.infinite,
+                  ),
+                  const Spacer(),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(60),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                            ),
+                            onPressed: (loopClosed && !_busy) ? () => _capture(cubit) : null,
+                            child: _busy
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                                  )
+                                : Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: const [
+                                      Icon(Icons.flag, size: 22),
+                                      SizedBox(width: 8),
+                                      Text('Close loop & capture'),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _busy ? null : () => _abandon(cubit),
+                          child: const Text('Stop without capturing'),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: StatTile(
-                        bg: scheme.surfaceContainerHigh,
-                        fg: scheme.onSurface,
-                        value: _fmtTime(_elapsedSec),
-                        label: 'Time',
-                        radius: const BorderRadius.horizontal(left: Radius.circular(24)),
-                      ),
-                    ),
-                    const SizedBox(width: 3),
-                    Expanded(
-                      child: StatTile(
-                        bg: scheme.primaryContainer,
-                        fg: scheme.onPrimaryContainer,
-                        value: distanceKm.toStringAsFixed(2),
-                        label: 'Distance',
-                      ),
-                    ),
-                    const SizedBox(width: 3),
-                    Expanded(
-                      child: StatTile(
-                        bg: scheme.surfaceContainerHigh,
-                        fg: scheme.onSurface,
-                        value: paceSecPerKm > 0 ? _fmtTime(paceSecPerKm) : '--:--',
-                        label: 'Pace /km',
-                        radius: const BorderRadius.horizontal(right: Radius.circular(24)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _loopClosed ? Icons.check_circle : Icons.route,
-                        size: 22,
-                        color: _loopClosed ? scheme.primary : scheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          _loopClosed
-                              ? 'Loop closed — ready to capture!'
-                              : 'Keep going — return near your start point to close the loop.',
-                          style: TextStyle(fontWeight: FontWeight.w500, color: scheme.onSurface),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const Spacer(),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                child: Column(
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(60),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-                        ),
-                        onPressed: _loopClosed ? _capture : null,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(Icons.flag, size: 22),
-                            SizedBox(width: 8),
-                            Text('Close loop & capture'),
-                          ],
-                        ),
-                      ),
-                    ),
-                    TextButton(onPressed: _abandon, child: const Text('Stop without capturing')),
-                  ],
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GpsQualityChip extends StatelessWidget {
+  const _GpsQualityChip({required this.quality});
+
+  final GpsQuality quality;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final label = switch (quality) {
+      GpsQuality.none => 'Finding GPS…',
+      GpsQuality.good => 'GPS good',
+      GpsQuality.degraded => 'GPS fair',
+      GpsQuality.poor => 'GPS weak',
+    };
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(999)),
+      child: Row(
+        children: [
+          Icon(Icons.gps_fixed, size: 15, color: scheme.onPrimaryContainer),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: scheme.onPrimaryContainer)),
+        ],
+      ),
+    );
+  }
+}
+
+class _PermissionDeniedView extends StatelessWidget {
+  const _PermissionDeniedView({required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.location_off, size: 48, color: scheme.onSurfaceVariant),
+            const SizedBox(height: 16),
+            Text(
+              'Location access is needed to track a run.',
+              style: TextStyle(color: scheme.onSurface),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            FilledButton(onPressed: onClose, child: const Text('Close')),
+          ],
         ),
       ),
     );

@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/expressive_widgets.dart';
 
 /// Territory-captured celebration (Claude Design handoff —
-/// `isTerritoryCelebrate`). Concept-only, same caveat as `TerritoryPage`.
+/// `isTerritoryCelebrate`). `areaLabel` comes from the real `submit_run()`
+/// RPC result via `ActiveRunPage._capture` (plan §6 Phase 5).
 class TerritoryCaptureSheet extends StatelessWidget {
   const TerritoryCaptureSheet({required this.areaLabel, super.key});
 

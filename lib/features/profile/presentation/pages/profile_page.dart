@@ -5,13 +5,14 @@ import '../../../../core/theme/expressive_widgets.dart';
 import '../../../alarm/domain/usecases/watch_current_streak.dart';
 import '../../../alarm/presentation/pages/alarm_reliability_test_page.dart';
 import '../../../onboarding/presentation/pages/battery_exemption_page.dart';
+import '../../../territory/domain/usecases/watch_owned_area.dart';
 
-/// Profile screen (Claude Design handoff — `isProfile`). Streak is real
-/// (`WatchCurrentStreak`); territory area has no domain layer yet
-/// (placeholder, same caveat as `TerritoryPage`). "Alarm reliability" and
-/// "Battery & location" route to the app's real existing pages;
-/// Notifications/Appearance/Sign out are inert, matching the design
-/// prototype's own `onClick: () => {}` no-ops for those rows.
+/// Profile screen (Claude Design handoff — `isProfile`). Streak and
+/// territory area are real (`WatchCurrentStreak`, `WatchOwnedArea` — plan
+/// §6 Phase 5c). "Alarm reliability" and "Battery & location" route to the
+/// app's real existing pages; Notifications/Appearance/Sign out are inert,
+/// matching the design prototype's own `onClick: () => {}` no-ops for those
+/// rows.
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
 
@@ -105,12 +106,18 @@ class ProfilePage extends StatelessWidget {
                         Row(
                           children: [
                             Expanded(
-                              child: StatTile(
-                                bg: scheme.primaryContainer,
-                                fg: scheme.onPrimaryContainer,
-                                value: '0.21 km²',
-                                label: 'Territory',
-                                radius: const BorderRadius.horizontal(left: Radius.circular(24)),
+                              child: StreamBuilder<double>(
+                                stream: getIt<WatchOwnedArea>()(),
+                                builder: (context, ownedAreaSnapshot) {
+                                  final areaSqm = ownedAreaSnapshot.data ?? 0;
+                                  return StatTile(
+                                    bg: scheme.primaryContainer,
+                                    fg: scheme.onPrimaryContainer,
+                                    value: '${(areaSqm / 1000000).toStringAsFixed(2)} km²',
+                                    label: 'Territory',
+                                    radius: const BorderRadius.horizontal(left: Radius.circular(24)),
+                                  );
+                                },
                               ),
                             ),
                             const SizedBox(width: 3),

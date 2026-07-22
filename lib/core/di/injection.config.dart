@@ -52,6 +52,30 @@ import '../../features/profile/domain/repositories/auth_repository.dart'
     as _i487;
 import '../../features/profile/domain/usecases/ensure_auth_session.dart'
     as _i688;
+import '../../features/territory/data/datasources/run_foreground_service.dart'
+    as _i862;
+import '../../features/territory/data/datasources/territory_remote_datasource.dart'
+    as _i246;
+import '../../features/territory/data/repositories/run_tracking_repository_impl.dart'
+    as _i501;
+import '../../features/territory/data/repositories/territory_repository_impl.dart'
+    as _i18;
+import '../../features/territory/domain/repositories/run_tracking_repository.dart'
+    as _i175;
+import '../../features/territory/domain/repositories/territory_repository.dart'
+    as _i706;
+import '../../features/territory/domain/usecases/abandon_run.dart' as _i773;
+import '../../features/territory/domain/usecases/capture_run.dart' as _i125;
+import '../../features/territory/domain/usecases/refresh_territories.dart'
+    as _i490;
+import '../../features/territory/domain/usecases/start_run.dart' as _i592;
+import '../../features/territory/domain/usecases/watch_owned_area.dart'
+    as _i838;
+import '../../features/territory/domain/usecases/watch_run_state.dart' as _i256;
+import '../../features/territory/domain/usecases/watch_territories.dart'
+    as _i38;
+import '../../features/territory/presentation/bloc/run_tracking_cubit.dart'
+    as _i3;
 import '../../features/verification/data/datasources/camera_datasource.dart'
     as _i311;
 import '../../features/verification/data/datasources/pose_detector_datasource.dart'
@@ -89,6 +113,9 @@ _i174.GetIt init(
   gh.lazySingleton<_i96.AlarmLocalDataSource>(
     () => _i96.AlarmLocalDataSource(),
   );
+  gh.lazySingleton<_i862.RunForegroundService>(
+    () => _i862.RunForegroundService(),
+  );
   gh.lazySingleton<_i311.CameraDataSource>(() => _i311.CameraDataSource());
   gh.lazySingleton<_i587.PoseDetectorDataSource>(
     () => _i587.PoseDetectorDataSource(),
@@ -101,6 +128,16 @@ _i174.GetIt init(
       gh<_i90.AppDatabase>(),
       gh<_i454.SupabaseClient>(),
       gh<_i1036.ConnectivityWatcher>(),
+    ),
+  );
+  gh.factory<_i246.TerritoryRemoteDataSource>(
+    () => _i246.TerritoryRemoteDataSource(gh<_i454.SupabaseClient>()),
+  );
+  gh.lazySingleton<_i706.TerritoryRepository>(
+    () => _i18.TerritoryRepositoryImpl(
+      gh<_i246.TerritoryRemoteDataSource>(),
+      gh<_i90.AppDatabase>(),
+      gh<_i454.SupabaseClient>(),
     ),
   );
   gh.lazySingleton<_i670.AuthRemoteDataSource>(
@@ -134,6 +171,15 @@ _i174.GetIt init(
       gh<_i703.WatchVerificationState>(),
     ),
   );
+  gh.factory<_i490.RefreshTerritories>(
+    () => _i490.RefreshTerritories(gh<_i706.TerritoryRepository>()),
+  );
+  gh.factory<_i838.WatchOwnedArea>(
+    () => _i838.WatchOwnedArea(gh<_i706.TerritoryRepository>()),
+  );
+  gh.factory<_i38.WatchTerritories>(
+    () => _i38.WatchTerritories(gh<_i706.TerritoryRepository>()),
+  );
   gh.factory<_i823.CheckBatteryExemptionStatus>(
     () => _i823.CheckBatteryExemptionStatus(
       gh<_i162.BatteryExemptionRepository>(),
@@ -152,6 +198,26 @@ _i174.GetIt init(
   gh.lazySingleton<_i959.WakeUpTaxStore>(
     () => _i959.WakeUpTaxStore(gh<_i90.AppDatabase>(), gh<_i355.LocalWriter>()),
   );
+  gh.lazySingleton<_i175.RunTrackingRepository>(
+    () => _i501.RunTrackingRepositoryImpl(
+      gh<_i862.RunForegroundService>(),
+      gh<_i355.LocalWriter>(),
+      gh<_i666.SyncWorker>(),
+      gh<_i90.AppDatabase>(),
+    ),
+  );
+  gh.factory<_i773.AbandonRun>(
+    () => _i773.AbandonRun(gh<_i175.RunTrackingRepository>()),
+  );
+  gh.factory<_i125.CaptureRun>(
+    () => _i125.CaptureRun(gh<_i175.RunTrackingRepository>()),
+  );
+  gh.factory<_i592.StartRun>(
+    () => _i592.StartRun(gh<_i175.RunTrackingRepository>()),
+  );
+  gh.factory<_i256.WatchRunState>(
+    () => _i256.WatchRunState(gh<_i175.RunTrackingRepository>()),
+  );
   gh.factory<_i688.EnsureAuthSession>(
     () => _i688.EnsureAuthSession(gh<_i487.AuthRepository>()),
   );
@@ -161,6 +227,14 @@ _i174.GetIt init(
       gh<_i355.LocalWriter>(),
       gh<_i90.AppDatabase>(),
       gh<_i959.WakeUpTaxStore>(),
+    ),
+  );
+  gh.factory<_i3.RunTrackingCubit>(
+    () => _i3.RunTrackingCubit(
+      gh<_i592.StartRun>(),
+      gh<_i773.AbandonRun>(),
+      gh<_i125.CaptureRun>(),
+      gh<_i256.WatchRunState>(),
     ),
   );
   gh.factory<_i915.CancelAlarm>(

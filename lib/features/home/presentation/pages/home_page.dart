@@ -8,16 +8,17 @@ import '../../../alarm/domain/usecases/watch_current_streak.dart';
 import '../../../alarm/presentation/bloc/alarm_cubit.dart';
 import '../../../alarm/presentation/bloc/alarm_state.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
+import '../../../territory/domain/usecases/watch_owned_area.dart';
 
 const _weekdayAbbrLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /// Home dashboard (Claude Design handoff — `isHome`). The primary screen the
-/// handoff's own bundle flagged as the intended entry point. Next-alarm and
-/// streak are real (`AlarmCubit`, `WatchCurrentStreak`); territory area,
-/// squad rank, today's goal, achievements, and the activity feed have no
-/// domain/data layer yet (Territory/Squad are Phase 4+ per the project
-/// plan) — those sections use the same placeholder values the design
-/// prototype itself mocks, clearly not wired to a backend.
+/// handoff's own bundle flagged as the intended entry point. Next-alarm,
+/// streak, and territory area are real (`AlarmCubit`, `WatchCurrentStreak`,
+/// `WatchOwnedArea` — plan §6 Phase 5c); squad rank, today's goal,
+/// achievements, and the activity feed have no domain/data layer yet (Squad
+/// is Phase 6) — those sections still use the design prototype's own
+/// placeholder values, clearly not wired to a backend.
 class HomePage extends StatelessWidget {
   const HomePage({required this.onOpenAlarms, required this.onOpenTerritory, required this.onOpenSquad, super.key});
 
@@ -170,12 +171,18 @@ class HomePage extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 3),
                                 Expanded(
-                                  child: StatTile(
-                                    bg: scheme.secondaryContainer,
-                                    fg: scheme.onSecondaryContainer,
-                                    icon: Icons.landscape,
-                                    value: '0.21',
-                                    label: 'km² owned',
+                                  child: StreamBuilder<double>(
+                                    stream: getIt<WatchOwnedArea>()(),
+                                    builder: (context, ownedAreaSnapshot) {
+                                      final areaSqm = ownedAreaSnapshot.data ?? 0;
+                                      return StatTile(
+                                        bg: scheme.secondaryContainer,
+                                        fg: scheme.onSecondaryContainer,
+                                        icon: Icons.landscape,
+                                        value: (areaSqm / 1000000).toStringAsFixed(2),
+                                        label: 'km² owned',
+                                      );
+                                    },
                                   ),
                                 ),
                                 const SizedBox(width: 3),
