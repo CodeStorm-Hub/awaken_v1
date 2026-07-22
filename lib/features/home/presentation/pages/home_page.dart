@@ -192,52 +192,54 @@ class HomePage extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 18),
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: scheme.surfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    width: 64,
-                                    height: 64,
-                                    child: Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        CircularProgressIndicator(
-                                          value: goalPct / 100,
-                                          strokeWidth: 6,
-                                          strokeCap: StrokeCap.round,
-                                          color: scheme.primary,
-                                          backgroundColor: scheme.surfaceContainer,
-                                        ),
-                                        Text(
-                                          '$goalPct%',
-                                          style: TextStyle(fontWeight: FontWeight.w800, color: scheme.onSurface),
-                                        ),
-                                      ],
+                            Material(
+                              color: scheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(24),
+                              elevation: 2,
+                              shadowColor: scheme.shadow,
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 64,
+                                      height: 64,
+                                      child: Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          CircularProgressIndicator(
+                                            value: goalPct / 100,
+                                            strokeWidth: 6,
+                                            strokeCap: StrokeCap.round,
+                                            color: scheme.primary,
+                                            backgroundColor: scheme.surfaceContainer,
+                                          ),
+                                          Text(
+                                            '$goalPct%',
+                                            style: TextStyle(fontWeight: FontWeight.w800, color: scheme.onSurface),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          "Today's goal",
-                                          style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onSurface),
-                                        ),
-                                        Text(
-                                          '14 / 20 squats completed',
-                                          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                                        ),
-                                      ],
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            "Today's goal",
+                                            style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onSurface),
+                                          ),
+                                          Text(
+                                            '14 / 20 squats completed',
+                                            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
-                                ],
+                                    Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+                                  ],
+                                ),
                               ),
                             ),
                             const SizedBox(height: 22),
@@ -308,35 +310,37 @@ class HomePage extends StatelessWidget {
                                 final a = _activity[i];
                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 3),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                    decoration: BoxDecoration(
-                                      color: scheme.surfaceContainerLow,
-                                      borderRadius: groupedItemRadius(index: i, count: _activity.length, outer: 18),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 36,
-                                          height: 36,
-                                          decoration: BoxDecoration(
-                                            color: scheme.surfaceContainerHigh,
-                                            borderRadius: BorderRadius.circular(12),
+                                  child: Material(
+                                    color: scheme.surfaceContainerLow,
+                                    borderRadius: groupedItemRadius(index: i, count: _activity.length, outer: 18),
+                                    elevation: 1,
+                                    shadowColor: scheme.shadow,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 36,
+                                            height: 36,
+                                            decoration: BoxDecoration(
+                                              color: scheme.surfaceContainerHigh,
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Icon(a.icon, size: 19, color: scheme.primary),
                                           ),
-                                          child: Icon(a.icon, size: 19, color: scheme.primary),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Text(
-                                            a.text,
-                                            style: TextStyle(fontSize: 14, color: scheme.onSurface),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Text(
+                                              a.text,
+                                              style: TextStyle(fontSize: 14, color: scheme.onSurface),
+                                            ),
                                           ),
-                                        ),
-                                        Text(
-                                          a.time,
-                                          style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-                                        ),
-                                      ],
+                                          Text(
+                                            a.time,
+                                            style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 );

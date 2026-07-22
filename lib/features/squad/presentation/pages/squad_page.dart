@@ -138,13 +138,15 @@ class SquadPage extends StatelessWidget {
                                     ],
                                   ),
                                 ),
-                                FilledButton.tonal(
+                                FilledButton(
                                   style: FilledButton.styleFrom(
-                                    backgroundColor: scheme.secondaryContainer,
-                                    foregroundColor: scheme.onSecondaryContainer,
+                                    backgroundColor: scheme.secondary,
+                                    foregroundColor: scheme.onSecondary,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                                   ),
-                                  onPressed: () {},
+                                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Cheered for ${m.name}!')),
+                                  ),
                                   child: const Text('Cheer'),
                                 ),
                               ],

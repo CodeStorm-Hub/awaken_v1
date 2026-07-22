@@ -145,7 +145,7 @@ class _AlarmListPageState extends State<AlarmListPage> {
                                   on: on,
                                   radius: groupedItemRadius(index: index, count: n),
                                   onToggle: () => _toggle(alarm.id),
-                                  onDelete: () => context.read<AlarmCubit>().cancel(alarm.id),
+                                  onDelete: () => _confirmDelete(context, alarm),
                                   onTap: () => Navigator.of(context).push(
                                     MaterialPageRoute(builder: (_) => AlarmRingPage(alarm: alarm)),
                                   ),
@@ -170,24 +170,63 @@ class _AlarmListPageState extends State<AlarmListPage> {
 
   Future<void> _showScheduleSheet(BuildContext context) async {
     final cubit = context.read<AlarmCubit>();
+    final messenger = ScaffoldMessenger.of(context);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _ScheduleSheet(
         onSchedule: (mode, reps, minutes, days) {
+          final scheduledTime = DateTime.now().add(Duration(minutes: minutes));
           cubit.schedule(
             AlarmSchedule(
               id: const Uuid().v4(),
-              scheduledTime: DateTime.now().add(Duration(minutes: minutes)),
+              scheduledTime: scheduledTime,
               exerciseMode: mode,
               requiredReps: reps,
               recurringDays: days,
             ),
           );
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                'Alarm scheduled for '
+                '${scheduledTime.hour.toString().padLeft(2, '0')}:'
+                '${scheduledTime.minute.toString().padLeft(2, '0')}',
+              ),
+            ),
+          );
         },
       ),
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, AlarmSchedule alarm) async {
+    final scheme = Theme.of(context).colorScheme;
+    final messenger = ScaffoldMessenger.of(context);
+    final cubit = context.read<AlarmCubit>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      // Flutter's default barrier is a hardcoded Colors.black54 — using
+      // scheme.scrim instead keeps the barrier consistent with the rest of
+      // the Material 3 theme (it's the same tone the seed/dynamic color
+      // algorithm derives for exactly this purpose).
+      barrierColor: scheme.scrim.withValues(alpha: 0.5),
+      builder: (_) => AlertDialog(
+        title: const Text('Delete alarm?'),
+        content: const Text('This alarm will be cancelled and removed from your schedule.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    cubit.cancel(alarm.id);
+    messenger.showSnackBar(const SnackBar(content: Text('Alarm deleted')));
   }
 }
 
