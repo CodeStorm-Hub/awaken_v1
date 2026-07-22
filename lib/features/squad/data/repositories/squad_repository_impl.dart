@@ -203,4 +203,17 @@ class SquadRepositoryImpl implements SquadRepository {
 
     _remote.broadcastTelemetry(squad.id, {'user_id': userId, 'label': label});
   }
+
+  @override
+  Future<void> reportMember({required String reportedUserId, required String reason}) async {
+    final squad = _cachedSquad;
+    final userId = _currentUserId;
+    if (squad == null || userId == null) return;
+    await _remote.reportMember(
+      reporterId: userId,
+      reportedUserId: reportedUserId,
+      squadId: squad.id,
+      reason: reason,
+    );
+  }
 }

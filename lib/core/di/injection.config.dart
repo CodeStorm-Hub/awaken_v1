@@ -69,6 +69,7 @@ import '../../features/profile/data/repositories/auth_repository_impl.dart'
     as _i1;
 import '../../features/profile/domain/repositories/auth_repository.dart'
     as _i487;
+import '../../features/profile/domain/usecases/delete_account.dart' as _i457;
 import '../../features/profile/domain/usecases/ensure_auth_session.dart'
     as _i688;
 import '../../features/profile/domain/usecases/link_with_email.dart' as _i243;
@@ -313,6 +314,9 @@ _i174.GetIt init(
   gh.factory<_i135.WatchRecentActivity>(
     () => _i135.WatchRecentActivity(gh<_i468.HomeActivityRepository>()),
   );
+  gh.factory<_i457.DeleteAccount>(
+    () => _i457.DeleteAccount(gh<_i487.AuthRepository>()),
+  );
   gh.factory<_i688.EnsureAuthSession>(
     () => _i688.EnsureAuthSession(gh<_i487.AuthRepository>()),
   );
@@ -326,14 +330,6 @@ _i174.GetIt init(
   gh.factory<_i560.WatchCurrentUser>(
     () => _i560.WatchCurrentUser(gh<_i487.AuthRepository>()),
   );
-  gh.lazySingleton<_i1014.AlarmRepository>(
-    () => _i153.AlarmRepositoryImpl(
-      gh<_i96.AlarmLocalDataSource>(),
-      gh<_i355.LocalWriter>(),
-      gh<_i90.AppDatabase>(),
-      gh<_i959.WakeUpTaxStore>(),
-    ),
-  );
   gh.factory<_i635.SquadCubit>(
     () => _i635.SquadCubit(
       gh<_i871.WatchMySquad>(),
@@ -342,6 +338,15 @@ _i174.GetIt init(
       gh<_i769.LeaveSquad>(),
       gh<_i670.WatchLeaderboard>(),
       gh<_i597.WatchSquadPresence>(),
+      gh<_i1051.SquadRepository>(),
+    ),
+  );
+  gh.lazySingleton<_i1014.AlarmRepository>(
+    () => _i153.AlarmRepositoryImpl(
+      gh<_i96.AlarmLocalDataSource>(),
+      gh<_i355.LocalWriter>(),
+      gh<_i90.AppDatabase>(),
+      gh<_i959.WakeUpTaxStore>(),
     ),
   );
   gh.factory<_i3.RunTrackingCubit>(

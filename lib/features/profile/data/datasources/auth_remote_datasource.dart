@@ -55,6 +55,17 @@ class AuthRemoteDataSource {
   }
 
   Future<void> signOut() => _client.auth.signOut();
+
+  /// Calls the `delete-account` Edge Function (deployed server-side with
+  /// the service-role key) — the client never holds that key, so account
+  /// deletion can't be done as a plain RPC/table call from here.
+  Future<void> deleteAccount() async {
+    final response = await _client.functions.invoke('delete-account');
+    final data = response.data;
+    if (response.status != 200 || (data is Map && data['error'] != null)) {
+      throw AuthDataSourceException('Account deletion failed: ${response.data}');
+    }
+  }
 }
 
 class AuthDataSourceException implements Exception {

@@ -33,4 +33,11 @@ abstract interface class SquadRepository {
   /// Throttled Broadcast telemetry (H6: ≤1 message per ~3s per user) — a
   /// no-op outside the throttle window or when the user has no squad.
   void broadcastTelemetry({required String label});
+
+  /// UGC report mechanism (Google Play/Apple Guideline 1.2 — squads are
+  /// invite-code/private, so the lighter "specified set of users" tier
+  /// applies: a report path is sufficient, no public block/moderation
+  /// queue). Reports are reviewed by the operator directly, never surfaced
+  /// back to any client.
+  Future<void> reportMember({required String reportedUserId, required String reason});
 }

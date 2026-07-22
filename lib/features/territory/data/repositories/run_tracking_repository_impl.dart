@@ -106,7 +106,17 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     // speed between consecutive fixes is dropped rather than accepted into
     // the path — cheap pre-filter only, server-side `submit_run()` stays
     // authoritative for anti-cheat.
-    if (segmentSeconds > 0 &&
+    //
+    // Real bug found via live device/emulator testing: the original
+    // `segmentSeconds > 0 && speed > cap` condition let a fix straight
+    // through, unlimited distance included, whenever segmentSeconds was
+    // zero or negative (two consecutive smoothed fixes reporting the same
+    // or an out-of-order timestamp — reproduced live with the Android
+    // emulator's `emu geo fix`: a single clean 30m step registered as an
+    // ~8,900km jump). A non-positive time delta means the implied speed is
+    // undefined/unverifiable, not "automatically fine" — must drop the fix
+    // in that case too, not just when the computed speed is too high.
+    if (segmentSeconds <= 0 ||
         segmentMeters / segmentSeconds > AppConstants.maxSustainedSpeedMetersPerSecond) {
       _emit(_state.copyWith(gpsQuality: quality));
       return;

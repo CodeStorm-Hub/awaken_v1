@@ -7,6 +7,7 @@ import '../../../../core/usecase/usecase.dart';
 import '../../domain/entities/leaderboard_entry.dart';
 import '../../domain/entities/squad.dart';
 import '../../domain/entities/squad_presence_member.dart';
+import '../../domain/repositories/squad_repository.dart';
 import '../../domain/usecases/create_squad.dart';
 import '../../domain/usecases/join_squad.dart';
 import '../../domain/usecases/leave_squad.dart';
@@ -26,6 +27,7 @@ class SquadCubit extends Cubit<SquadState> {
     this._leaveSquad,
     this._watchLeaderboard,
     this._watchSquadPresence,
+    this._squadRepository,
   ) : super(const SquadState()) {
     _mySquadSub = _watchMySquad().listen(_onSquadChanged);
   }
@@ -36,6 +38,7 @@ class SquadCubit extends Cubit<SquadState> {
   final LeaveSquad _leaveSquad;
   final WatchLeaderboard _watchLeaderboard;
   final WatchSquadPresence _watchSquadPresence;
+  final SquadRepository _squadRepository;
 
   late final StreamSubscription<Squad?> _mySquadSub;
   StreamSubscription<List<LeaderboardEntry>>? _leaderboardSub;
@@ -77,6 +80,10 @@ class SquadCubit extends Cubit<SquadState> {
 
   Future<void> leaveSquad() async {
     await _leaveSquad(const NoParams());
+  }
+
+  Future<void> reportMember({required String reportedUserId, required String reason}) {
+    return _squadRepository.reportMember(reportedUserId: reportedUserId, reason: reason);
   }
 
   @override

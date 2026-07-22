@@ -491,9 +491,53 @@ class _LeaderboardRow extends StatelessWidget {
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
+            if (!row.isYou) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'Report member',
+                icon: Icon(Icons.flag_outlined, size: 18, color: fg.withValues(alpha: 0.6)),
+                onPressed: () => _showReportMemberDialog(context, userId: row.userId, displayName: row.displayName),
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+}
+
+Future<void> _showReportMemberDialog(BuildContext context, {required String userId, required String displayName}) async {
+  final cubit = context.read<SquadCubit>();
+  final controller = TextEditingController();
+  final reason = await showDialog<String>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text('Report $displayName'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        maxLines: 3,
+        decoration: const InputDecoration(hintText: 'What happened?'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+          child: const Text('Submit report'),
+        ),
+      ],
+    ),
+  );
+  if (reason == null || reason.isEmpty) return;
+
+  try {
+    await cubit.reportMember(reportedUserId: userId, reason: reason);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report submitted. Thank you.')));
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 }

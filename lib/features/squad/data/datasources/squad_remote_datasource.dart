@@ -28,6 +28,20 @@ class SquadRemoteDataSource {
 
   Future<void> leaveSquad() => _supabase.rpc('leave_squad');
 
+  Future<void> reportMember({
+    required String reporterId,
+    required String reportedUserId,
+    required String squadId,
+    required String reason,
+  }) {
+    return _supabase.from('squad_reports').insert({
+      'reporter_id': reporterId,
+      'reported_user_id': reportedUserId,
+      'squad_id': squadId,
+      'reason': reason,
+    });
+  }
+
   Future<List<Map<String, dynamic>>> fetchLeaderboard(String squadId) async {
     final result = await _supabase.rpc('squad_leaderboard', params: {'p_squad_id': squadId});
     return (result as List).cast<Map<String, dynamic>>();

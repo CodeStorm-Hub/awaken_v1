@@ -1,14 +1,13 @@
 import 'package:injectable/injectable.dart';
 
-import '../../../../core/usecase/usecase.dart';
+import '../entities/geo_bounds.dart';
 import '../repositories/territory_repository.dart';
 
 @injectable
-class RefreshTerritories implements UseCase<void, NoParams> {
+class RefreshTerritories {
   RefreshTerritories(this._repository);
 
   final TerritoryRepository _repository;
 
-  @override
-  Future<void> call(NoParams params) => _repository.refreshTerritories();
+  Future<void> call(GeoBounds bounds) => _repository.refreshTerritories(bounds);
 }

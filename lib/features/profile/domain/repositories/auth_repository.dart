@@ -30,4 +30,13 @@ abstract interface class AuthRepository {
   /// only signs out of Supabase; the point of the offline-first design is
   /// that local data survives regardless of auth state.
   Future<void> signOut();
+
+  /// Permanently deletes the signed-in user's account and all associated
+  /// server-side data (Google Play User Data policy / Apple Guideline
+  /// 5.1.1 — in-app self-service deletion, not just deactivation). Calls
+  /// the `delete-account` Edge Function, which runs with the service-role
+  /// key server-side; this method never has that key itself. Local Drift
+  /// data is left untouched by the deletion call itself, but the caller
+  /// signs out immediately after, same as `signOut()`.
+  Future<void> deleteAccount();
 }

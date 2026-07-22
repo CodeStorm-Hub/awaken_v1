@@ -47,6 +47,25 @@ class TerritoryCaptureSheet extends StatelessWidget {
               '+$areaLabel added to your map',
               style: TextStyle(fontSize: 16, color: scheme.onSurfaceVariant),
             ),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: scheme.tertiaryContainer,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.shield, size: 15, color: scheme.onTertiaryContainer),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Land is yours until a rival captures it',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: scheme.onTertiaryContainer),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 22),
             SizedBox(
               width: double.infinity,

@@ -4,6 +4,7 @@ import 'package:injectable/injectable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../sync/local/database.dart';
+import '../../domain/entities/geo_bounds.dart';
 import '../../domain/entities/territory.dart';
 import '../../domain/repositories/territory_repository.dart';
 import '../datasources/territory_remote_datasource.dart';
@@ -40,8 +41,8 @@ class TerritoryRepositoryImpl implements TerritoryRepository {
   }
 
   @override
-  Future<void> refreshTerritories() async {
-    final rows = await _remote.fetchTerritories();
+  Future<void> refreshTerritories(GeoBounds bounds) async {
+    final rows = await _remote.fetchTerritoriesInBbox(bounds);
     await _db.batch((batch) {
       batch.insertAllOnConflictUpdate(
         _db.territories,

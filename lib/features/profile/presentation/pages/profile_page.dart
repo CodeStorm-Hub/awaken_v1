@@ -10,6 +10,7 @@ import '../../../alarm/presentation/pages/alarm_reliability_test_page.dart';
 import '../../../onboarding/presentation/pages/battery_exemption_page.dart';
 import '../../../territory/domain/usecases/watch_owned_area.dart';
 import '../../domain/entities/app_user.dart';
+import '../../domain/usecases/delete_account.dart';
 import '../../domain/usecases/link_with_email.dart';
 import '../../domain/usecases/link_with_google.dart';
 import '../../domain/usecases/sign_out.dart';
@@ -186,6 +187,13 @@ class ProfilePage extends StatelessWidget {
                             child: const Text('Sign out'),
                           ),
                         ),
+                        Center(
+                          child: TextButton(
+                            style: TextButton.styleFrom(foregroundColor: scheme.error),
+                            onPressed: () => _showDeleteAccountDialog(context),
+                            child: const Text('Delete account'),
+                          ),
+                        ),
                       ],
                     ),
                   );
@@ -256,6 +264,39 @@ Future<void> _showSignOutDialog(BuildContext context) async {
   );
   if (confirmed == true) {
     await getIt<SignOut>()(const NoParams());
+  }
+}
+
+Future<void> _showDeleteAccountDialog(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Delete account?'),
+      content: const Text(
+        'This permanently deletes your account and all cloud-synced data — alarms, sessions, '
+        'runs, territories, and squad membership. This cannot be undone.',
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancel')),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Theme.of(dialogContext).colorScheme.error),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return;
+
+  try {
+    await getIt<DeleteAccount>()(const NoParams());
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account deleted.')));
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 }
 

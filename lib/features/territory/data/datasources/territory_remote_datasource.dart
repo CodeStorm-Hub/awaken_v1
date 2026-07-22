@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:injectable/injectable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../domain/entities/geo_bounds.dart';
+
 /// Calls the server-authoritative `submit_run()` RPC (plan §3) directly —
 /// this is the one deliberate exception to "features never touch Supabase
 /// directly" (plan §3 amendment): `submit_run` is a compute call, not a
@@ -34,17 +36,23 @@ class TerritoryRemoteDataSource {
     return Map<String, Object?>.from(result! as Map);
   }
 
-  /// Reads `territories_geojson` (plan §5c) — a view over the PostGIS
-  /// `territories.geom` column, since PostgREST can't serialize `geometry`
-  /// directly. No true bbox filter yet (would need a dedicated RPC); v1
-  /// caps by most-recently-updated, which is adequate for the single-map
-  /// use case at current data volumes.
-  Future<List<Map<String, Object?>>> fetchTerritories({int limit = 200}) async {
-    final rows = await _supabase
-        .from('territories_geojson')
-        .select()
-        .order('updated_at', ascending: false)
-        .limit(limit);
-    return List<Map<String, Object?>>.from(rows as List);
+  /// Bbox/viewport spatial query (closes the territory review's flagged
+  /// gap) via the `territories_in_bbox` RPC — `ST_MakeEnvelope` + `&&`
+  /// against the spatial index, so only territories intersecting the
+  /// current map view are pulled, instead of an unbounded most-recent-N scan
+  /// that silently misses data once real usage grows past the old flat
+  /// limit.
+  Future<List<Map<String, Object?>>> fetchTerritoriesInBbox(GeoBounds bounds, {int limit = 500}) async {
+    final result = await _supabase.rpc<Object?>(
+      'territories_in_bbox',
+      params: {
+        'min_lng': bounds.minLng,
+        'min_lat': bounds.minLat,
+        'max_lng': bounds.maxLng,
+        'max_lat': bounds.maxLat,
+        'row_limit': limit,
+      },
+    );
+    return List<Map<String, Object?>>.from(result! as List);
   }
 }

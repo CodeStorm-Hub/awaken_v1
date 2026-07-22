@@ -1,0 +1,62 @@
+{
+  "project_info": {
+    "project_number": "230513820686",
+    "project_id": "awaken-27f39",
+    "storage_bucket": "awaken-27f39.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:230513820686:android:c71ef9ea26c0c232d0285f",
+        "android_client_info": {
+          "package_name": "com.example.awaken"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "230513820686-dvgdso7035jcvq4jhbu4n1bvrpudqr7v.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.awaken",
+            "certificate_hash": "1ba8506c8bf503447cb46f31660994484f5c7440"
+          }
+        },
+        {
+          "client_id": "230513820686-ua1prkedtbtceb4d39e2kqg5m23q7te8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.awaken",
+            "certificate_hash": "1441a3dee9bfd8f926414d626855d7c9bd3239b1"
+          }
+        },
+        {
+          "client_id": "230513820686-ku2co5m68332qjv7t0cgbe5vk8nlvrea.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDZJQFYBKcCdEStfr9McOiD5bWWbC3V7A8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "230513820686-ku2co5m68332qjv7t0cgbe5vk8nlvrea.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "230513820686-640n9b4ieo9aaraqpj9gs1ajs4e5bp97.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.awaken"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
