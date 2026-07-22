@@ -1,0 +1,59 @@
+name: Build Flutter iOS (Unsigned)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
+
+env:
+  FLUTTER_VERSION: "3.44.4"
+
+jobs:
+  build:
+    name: Build Unsigned iOS IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      # The app requires .env.client to build because it is declared as an asset in pubspec.yaml.
+      # If secrets are not available (e.g., in PRs from forks), we fall back to the example template.
+      - name: Write .env.client
+        run: |
+          if [ -n "${{ secrets.SUPABASE_URL }}" ]; then
+            echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" > .env.client
+            echo "SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" >> .env.client
+          else
+            cp .env.client.example .env.client
+          fi
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Generate drift tables and dependency injection configurations
+      - name: Generate code (drift, injectable)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      # AltStore and SideStore sign the IPA locally on-device, so the build must not be signed.
+      - name: Build iOS Archive (Unsigned)
+        run: flutter build ipa --no-codesign
+
+      - name: Upload Unsigned IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: build/ios/ipa/*.ipa
