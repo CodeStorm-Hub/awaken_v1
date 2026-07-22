@@ -9,6 +9,8 @@ import '../../../alarm/presentation/bloc/alarm_cubit.dart';
 import '../../../alarm/presentation/bloc/alarm_state.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
 
+const _weekdayAbbrLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
 /// Home dashboard (Claude Design handoff — `isHome`). The primary screen the
 /// handoff's own bundle flagged as the intended entry point. Next-alarm and
 /// streak are real (`AlarmCubit`, `WatchCurrentStreak`); territory area,
@@ -42,6 +44,13 @@ class HomePage extends StatelessWidget {
     return sorted.first;
   }
 
+  String _recurrenceSuffix(Set<int> recurringDays) {
+    if (recurringDays.isEmpty) return '';
+    if (recurringDays.length == 7) return ' · Every day';
+    final sorted = recurringDays.toList()..sort();
+    return ' · ${sorted.map((d) => _weekdayAbbrLabels[d - 1]).join(', ')}';
+  }
+
   String _greeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good morning';
@@ -66,7 +75,8 @@ class HomePage extends StatelessWidget {
             final nextAlarmSubtitle = nextAlarm == null
                 ? 'No alarms scheduled'
                 : '${nextAlarm.exerciseMode == ExerciseMode.squat ? 'Squats' : 'Push-ups'} · '
-                      '${nextAlarm.requiredReps} reps';
+                      '${nextAlarm.requiredReps} reps'
+                      '${_recurrenceSuffix(nextAlarm.recurringDays)}';
 
             return StreamBuilder<int>(
               stream: getIt<WatchCurrentStreak>()(),
