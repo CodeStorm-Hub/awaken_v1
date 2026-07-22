@@ -186,3 +186,55 @@ BorderRadius groupedItemRadius({
   final bottom = index == count - 1 ? outer : inner;
   return BorderRadius.vertical(top: Radius.circular(top), bottom: Radius.circular(bottom));
 }
+
+/// A single tile in a connected stat-row (streak/area/rank on Home, the
+/// captured-area chip, Squad rank, Profile stats) — repeats across the
+/// handoff's screens as `flex:1` colored blocks with an optional icon,
+/// a big tabular-numeral value, and a small label underneath.
+class StatTile extends StatelessWidget {
+  const StatTile({
+    required this.bg,
+    required this.fg,
+    required this.value,
+    required this.label,
+    this.icon,
+    this.radius = const BorderRadius.all(Radius.circular(8)),
+    super.key,
+  });
+
+  final Color bg;
+  final Color fg;
+  final String value;
+  final String label;
+  final IconData? icon;
+  final BorderRadius radius;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+      decoration: BoxDecoration(color: bg, borderRadius: radius),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) Icon(icon, size: 22, color: fg),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -1,
+              color: fg,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg),
+          ),
+        ],
+      ),
+    );
+  }
+}
