@@ -48,12 +48,21 @@ jobs:
       - name: Generate code (drift, injectable)
         run: dart run build_runner build --delete-conflicting-outputs
 
-      # AltStore and SideStore sign the IPA locally on-device, so the build must not be signed.
-      - name: Build iOS Archive (Unsigned)
-        run: flutter build ipa --no-codesign
+      # Compile the app bundle (.app) with codesigning disabled.
+      - name: Build iOS App (.app)
+        run: flutter build ios --no-codesign --release
+
+      # AltStore and SideStore require a .ipa package (which is just a zipped Payload/ containing the .app bundle).
+      # Since --no-codesign skips direct IPA packaging, we bundle it manually.
+      - name: Package IPA
+        run: |
+          mkdir -p build/ios/ipa/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ios/ipa/Payload
+          cd build/ios/ipa
+          zip -r Runner.ipa Payload
 
       - name: Upload Unsigned IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-unsigned-ipa
-          path: build/ios/ipa/*.ipa
+          path: build/ios/ipa/Runner.ipa
