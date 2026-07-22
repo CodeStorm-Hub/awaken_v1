@@ -1,0 +1,22 @@
+/* Material 3 default type scale (the plan invokes "the updated M3 type
+   scale" verbatim; awaken_v1's own screens read Theme.of(context).textTheme
+   .{displayLarge,headlineMedium,bodyMedium,...} directly, e.g.
+   alarm_ring_page.dart's rep count in displayLarge). Values are M3's
+   published scale — size/line-height/weight/tracking. */
+:root{
+--text-display-large-size:57px;--text-display-large-line:64px;--text-display-large-weight:400;--text-display-large-tracking:-0.25px;
+--text-display-medium-size:45px;--text-display-medium-line:52px;--text-display-medium-weight:400;--text-display-medium-tracking:0;
+--text-display-small-size:36px;--text-display-small-line:44px;--text-display-small-weight:400;--text-display-small-tracking:0;
+--text-headline-large-size:32px;--text-headline-large-line:40px;--text-headline-large-weight:400;--text-headline-large-tracking:0;
+--text-headline-medium-size:28px;--text-headline-medium-line:36px;--text-headline-medium-weight:400;--text-headline-medium-tracking:0;
+--text-headline-small-size:24px;--text-headline-small-line:32px;--text-headline-small-weight:400;--text-headline-small-tracking:0;
+--text-title-large-size:22px;--text-title-large-line:28px;--text-title-large-weight:500;--text-title-large-tracking:0;
+--text-title-medium-size:16px;--text-title-medium-line:24px;--text-title-medium-weight:500;--text-title-medium-tracking:0.15px;
+--text-title-small-size:14px;--text-title-small-line:20px;--text-title-small-weight:500;--text-title-small-tracking:0.1px;
+--text-body-large-size:16px;--text-body-large-line:24px;--text-body-large-weight:400;--text-body-large-tracking:0.5px;
+--text-body-medium-size:14px;--text-body-medium-line:20px;--text-body-medium-weight:400;--text-body-medium-tracking:0.25px;
+--text-body-small-size:12px;--text-body-small-line:16px;--text-body-small-weight:400;--text-body-small-tracking:0.4px;
+--text-label-large-size:14px;--text-label-large-line:20px;--text-label-large-weight:500;--text-label-large-tracking:0.1px;
+--text-label-medium-size:12px;--text-label-medium-line:16px;--text-label-medium-weight:500;--text-label-medium-tracking:0.5px;
+--text-label-small-size:11px;--text-label-small-line:16px;--text-label-small-weight:500;--text-label-small-tracking:0.5px;
+}
