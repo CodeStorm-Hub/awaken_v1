@@ -121,14 +121,24 @@ the route after every outcome (verified, skipped, or backed out of verification)
 **Verified live**: pressed the system back button on a fresh preview after the fix — it
 correctly returned to the Alarms list instead of staying stuck.
 
-### 6. LOW/KNOWN — Home page mock data contradicts real data on the same screen
-**Confirmed live**, but this is pre-existing, already-tracked debt (see project memory),
-re-surfaced here because it's directly visible on one live screen: the Achievements row shows
-"4-day streak" and "Squad player" as unlocked while the adjacent real "Day streak" stat reads 0
-and the Squad tab (same session) reads "Not in a squad yet." Similarly, "Recent activity"
-hardcodes "Joined Squad 'Sunrise Runners'" despite no such squad existing. This undermines trust
-in the page's otherwise-real numbers. **Not fixed in this pass** (out of scope given everything
-else found); flagged here for prioritization.
+### 6. LOW/KNOWN — Home page mock data contradicted real data on the same screen (fixed and verified live)
+**Confirmed live**: the Achievements row showed "4-day streak" and "Squad player" as unlocked
+regardless of the adjacent real "Day streak" stat (which read 0) or actual squad membership.
+"Recent activity" hardcoded a fake "Joined Squad 'Sunrise Runners'" entry with no backing event.
+This undermined trust in the page's otherwise-real numbers.
+
+**Fix**: Achievements now compute real unlock state — "4-day"/"30-day streak" from
+`WatchCurrentStreak`, "First territory" from `WatchOwnedArea` (unlocked once owned area > 0),
+"Squad player" from `WatchMySquad` (unlocked once actually in a squad). Recent Activity is now
+backed by a new `HomeActivityRepository` reading local `sessions`/`runs` directly (same
+online-agnostic, read-only pattern as `TerritoryRepositoryImpl`), merging and sorting real
+dismissed-alarm and captured-territory events with relative timestamps; shows an honest empty
+state ("No activity yet…") instead of a fabricated feed. Squad-join isn't modeled as an activity
+kind since no join-timestamp event exists yet — noted rather than faked.
+
+**Verified live**: with a real squad joined but 0 streak/territory, Achievements now correctly
+show only "Squad player" unlocked (the other three greyed out), and Recent Activity shows the
+honest empty state.
 
 ---
 
@@ -145,18 +155,23 @@ else found); flagged here for prioritization.
 5. `AlarmRingPage`/`AlarmListPage` — added an `isPreview` flag so the "preview the wake-up flow"
    entry point actually exits (back button + auto-pop on every outcome) instead of trapping the
    user permanently.
+6. `HomePage` — new `HomeActivityRepository`/`WatchRecentActivity` (real activity feed from
+   local `sessions`/`runs`) and real achievement-unlock logic, replacing both hardcoded mock
+   lists.
 
-All five verified against `flutter analyze` (0 issues), `flutter test` (no new failures beyond
+All six verified against `flutter analyze` (0 issues), `flutter test` (no new failures beyond
 the one pre-existing flaky timer test), and live on the emulator via hot restart — including a
-full real create-squad round trip (RLS + RPCs + client) once finding #0 was resolved.
+full real create-squad round trip (RLS + RPCs + client) once finding #0 was resolved, and the
+Achievements/Recent-activity sections correctly reflecting that real squad membership plus zero
+streak/territory.
 
 ## Resolved during this session
 - **Finding #0 (Supabase Anonymous Sign-ins disabled)** — the user enabled it mid-session; a
   hot restart afterward produced a real `auth.users` row and a fully working squad create/
   leaderboard/rank flow. No further action needed here.
+- **Home page mock data (item 6)** — now backed by real data end-to-end; see fix #6 above.
 
-## Not fixed in this pass (recommend as next priorities)
-1. Home page mock Achievements/Recent-activity vs. real data (item 6 above) — needs a real
-   domain concept for achievements or the mock rows removed.
-2. Everything already tracked in project memory's Phase 7 inventory (Play compliance, Sentry,
-   Patrol/pgTAP tests, the two hardware exit criteria) is unaffected by this pass.
+## Not fixed in this pass (out of scope, unaffected by this review)
+Everything already tracked in project memory's Phase 7 inventory (Play compliance, Sentry,
+Patrol/pgTAP tests, the two hardware exit criteria) — separate, larger initiatives requiring
+physical devices/external accounts, not UI/UX bugs.
