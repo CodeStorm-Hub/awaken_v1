@@ -140,14 +140,17 @@ class _AlarmListPageState extends State<AlarmListPage> {
                               itemBuilder: (context, index) {
                                 final alarm = alarms[index];
                                 final on = !_disabled.contains(alarm.id);
-                                return _AlarmCard(
-                                  alarm: alarm,
-                                  on: on,
-                                  radius: groupedItemRadius(index: index, count: n),
-                                  onToggle: () => _toggle(alarm.id),
-                                  onDelete: () => _confirmDelete(context, alarm),
-                                  onTap: () => Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => AlarmRingPage(alarm: alarm)),
+                                return _RiseIn(
+                                  delay: Duration(milliseconds: index * 60),
+                                  child: _AlarmCard(
+                                    alarm: alarm,
+                                    on: on,
+                                    radius: groupedItemRadius(index: index, count: n),
+                                    onToggle: () => _toggle(alarm.id),
+                                    onDelete: () => _confirmDelete(context, alarm),
+                                    onTap: () => Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => AlarmRingPage(alarm: alarm)),
+                                    ),
                                   ),
                                 );
                               },
@@ -307,6 +310,48 @@ class _EmptyState extends StatelessWidget {
           ),
         ],
       ),
+      ),
+    );
+  }
+}
+
+/// Staggered entrance for each alarm card (handoff's `m3x-rise` keyframe:
+/// fade + rise-up + slight scale-in, played once per card with a
+/// `60ms * index` stagger). Gated on `_played` — since `AlarmListPage`
+/// rebuilds its `ListView` on every toggle/delete, this must not replay
+/// on every parent rebuild, only on this card's first appearance.
+class _RiseIn extends StatefulWidget {
+  const _RiseIn({required this.delay, required this.child});
+
+  final Duration delay;
+  final Widget child;
+
+  @override
+  State<_RiseIn> createState() => _RiseInState();
+}
+
+class _RiseInState extends State<_RiseIn> {
+  bool _played = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(widget.delay, () {
+      if (mounted) setState(() => _played = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSlide(
+      offset: _played ? Offset.zero : const Offset(0, 0.12),
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOutBack,
+      child: AnimatedOpacity(
+        opacity: _played ? 1 : 0,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOut,
+        child: widget.child,
       ),
     );
   }

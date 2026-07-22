@@ -213,19 +213,29 @@ class _RingingBell extends StatefulWidget {
   State<_RingingBell> createState() => _RingingBellState();
 }
 
-class _RingingBellState extends State<_RingingBell> with SingleTickerProviderStateMixin {
+class _RingingBellState extends State<_RingingBell> with TickerProviderStateMixin {
   late final AnimationController _controller;
+  // Handoff's `m3x-wiggle`: -8deg..8deg, 0.5s ease-in-out infinite — a
+  // 250ms repeat(reverse: true) cycle covers exactly that 0.5s round trip.
+  late final AnimationController _wiggleController;
+  late final Animation<double> _wiggle;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))
       ..repeat();
+    _wiggleController = AnimationController(vsync: this, duration: const Duration(milliseconds: 250))
+      ..repeat(reverse: true);
+    _wiggle = Tween<double>(begin: -8 * (3.14159 / 180), end: 8 * (3.14159 / 180)).animate(
+      CurvedAnimation(parent: _wiggleController, curve: Curves.easeInOut),
+    );
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _wiggleController.dispose();
     super.dispose();
   }
 
@@ -250,7 +260,11 @@ class _RingingBellState extends State<_RingingBell> with SingleTickerProviderSta
         child: ExpressiveFlower(
           size: 128,
           color: scheme.error,
-          child: Icon(Icons.alarm, size: 52, color: scheme.onError),
+          child: AnimatedBuilder(
+            animation: _wiggle,
+            builder: (context, child) => Transform.rotate(angle: _wiggle.value, child: child),
+            child: Icon(Icons.alarm, size: 52, color: scheme.onError),
+          ),
         ),
       ),
     );
