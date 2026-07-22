@@ -55,10 +55,13 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
         builder: (_) => VerificationPage(exercise: widget.alarm.exerciseMode, targetReps: effectiveReps),
       ),
     );
-    if (result == null || !mounted) {
-      setState(() {
-        _workoutStarted = false;
-      });
+    if (result == null) {
+      // `||` short-circuits, so `!mounted` must guard setState directly —
+      // checking it only as part of this condition still let setState fire
+      // unconditionally whenever `result == null`/`!result.completed` was
+      // true, even after the ring page had already been disposed (e.g. the
+      // native alarm's own ring cycle ended while verification was up).
+      if (mounted) setState(() => _workoutStarted = false);
       return;
     }
 
@@ -67,12 +70,11 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
       verified: result.completed,
       repsCompleted: result.repsCompleted,
     );
-    if (!result.completed || !mounted) {
-      setState(() {
-        _workoutStarted = false;
-      });
+    if (!result.completed) {
+      if (mounted) setState(() => _workoutStarted = false);
       return;
     }
+    if (!mounted) return;
 
     final navContext = navigatorKey.currentContext;
     if (navContext != null && navContext.mounted) {
@@ -106,6 +108,11 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
         backgroundColor: scheme.errorContainer,
         body: SafeArea(
           child: Stack(
+            // Stack defaults to StackFit.loose — without `expand`, the
+            // non-positioned Padding/Column below shrink-wraps to its
+            // content's width and renders off-center instead of filling
+            // (centering) across the full screen.
+            fit: StackFit.expand,
             children: [
               Positioned(
                 top: 8,
@@ -282,7 +289,11 @@ class _StartWorkoutButtonState extends State<_StartWorkoutButton> {
   @override
   Widget build(BuildContext context) {
     final scheme = widget.scheme;
-    return GestureDetector(
+    return Semantics(
+      button: true,
+      label: 'Start workout to dismiss',
+      child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTapDown: (_) => setState(() => _pressed = true),
       onTapCancel: () => setState(() => _pressed = false),
       onTapUp: (_) => setState(() => _pressed = false),
@@ -298,21 +309,30 @@ class _StartWorkoutButtonState extends State<_StartWorkoutButton> {
             BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
           ],
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.videocam, size: 24, color: scheme.errorContainer),
-            const SizedBox(width: 10),
-            Text(
-              'Start workout to dismiss',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: scheme.errorContainer,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.videocam, size: 24, color: scheme.errorContainer),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  'Start workout to dismiss',
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: scheme.errorContainer,
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
       ),
     );
   }

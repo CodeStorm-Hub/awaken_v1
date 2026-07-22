@@ -355,19 +355,22 @@ class _ProfileAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.secondaryContainer,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Center(
-            child: Text(
-              'G',
-              style: TextStyle(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600, fontSize: 15),
+    return Tooltip(
+      message: 'Profile',
+      child: Material(
+        color: scheme.secondaryContainer,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Center(
+              child: Text(
+                'G',
+                style: TextStyle(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600, fontSize: 15),
+              ),
             ),
           ),
         ),

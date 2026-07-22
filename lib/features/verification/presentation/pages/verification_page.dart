@@ -143,32 +143,40 @@ class _StatusBannerState extends State<_StatusBanner> with SingleTickerProviderS
     };
     if (message.isEmpty) return const SizedBox.shrink();
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.54),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (!state.isComplete) ...[
-            FadeTransition(
-              opacity: _pulse,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(color: Color(0xFFFF5449), shape: BoxShape.circle),
+    // Longer real-app strings (e.g. the low-light message) can exceed a
+    // single line at this font — the design's own mock strings are all
+    // short, so the prototype never needed a max-width/wrap safety net.
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width - 40),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.54),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!state.isComplete) ...[
+              FadeTransition(
+                opacity: _pulse,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(color: Color(0xFFFF5449), shape: BoxShape.circle),
+                ),
+              ),
+              const SizedBox(width: 10),
+            ],
+            Flexible(
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                textAlign: TextAlign.center,
               ),
             ),
-            const SizedBox(width: 10),
           ],
-          Text(
-            message,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
-            textAlign: TextAlign.center,
-          ),
-        ],
+        ),
       ),
     );
   }

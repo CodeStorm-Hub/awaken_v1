@@ -88,6 +88,7 @@ class _AlarmRingOverlay extends StatelessWidget {
       builder: (context, state) {
         final ringing = state.ringingAlarm;
         return Stack(
+          fit: StackFit.expand,
           children: [
             child,
             if (ringing != null) AlarmRingPage(alarm: ringing),

@@ -50,18 +50,21 @@ class SquadPage extends StatelessWidget {
                       ),
                     ],
                   ),
-                  Material(
-                    color: scheme.secondaryContainer,
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: () =>
-                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfilePage())),
-                      child: SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: Center(
-                          child: Text('G', style: TextStyle(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600)),
+                  Tooltip(
+                    message: 'Profile',
+                    child: Material(
+                      color: scheme.secondaryContainer,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () =>
+                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfilePage())),
+                        child: SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: Center(
+                            child: Text('G', style: TextStyle(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600)),
+                          ),
                         ),
                       ),
                     ),

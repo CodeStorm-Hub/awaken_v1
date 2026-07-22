@@ -55,13 +55,12 @@ class _ActiveRunPageState extends State<ActiveRunPage> {
     _timer?.cancel();
     final gainedM2 = 8000 + _random.nextInt(6000);
     final areaLabel = '${(gainedM2 / 1000000).toStringAsFixed(3)} km²';
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          body: TerritoryCaptureSheet(areaLabel: areaLabel),
-        ),
-        fullscreenDialog: true,
-      ),
+    await showModalBottomSheet<void>(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (_) => TerritoryCaptureSheet(areaLabel: areaLabel),
     );
     if (mounted) Navigator.of(context).pop();
   }

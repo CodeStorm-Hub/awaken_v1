@@ -135,9 +135,14 @@ class ExpressiveSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      child: AnimatedContainer(
+    return Semantics(
+      button: true,
+      toggled: value,
+      label: value ? 'Alarm on' : 'Alarm off',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onChanged(!value),
+        child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOut,
         width: 56,
@@ -168,6 +173,7 @@ class ExpressiveSwitch extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }

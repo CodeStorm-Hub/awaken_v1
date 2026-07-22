@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../../onboarding/presentation/pages/battery_exemption_page.dart';
+import '../../../profile/presentation/pages/profile_page.dart';
 import '../../domain/entities/alarm_schedule.dart';
 import '../bloc/alarm_cubit.dart';
 import '../bloc/alarm_state.dart';
@@ -33,20 +34,14 @@ class AlarmListPage extends StatefulWidget {
 }
 
 class _AlarmListPageState extends State<AlarmListPage> {
-  Set<String>? _enabled;
-
-  Set<String> _enabledFor(List<AlarmSchedule> alarms) =>
-      _enabled ??= alarms.map((a) => a.id).toSet();
+  // Tracked as "disabled" (not "enabled") ids, defaulting empty, so any
+  // newly-scheduled alarm is enabled by default without needing to
+  // backfill it into a separate enabled-set on every alarms-list change.
+  final Set<String> _disabled = {};
 
   void _toggle(String id) {
     setState(() {
-      final next = {...?_enabled};
-      if (next.contains(id)) {
-        next.remove(id);
-      } else {
-        next.add(id);
-      }
-      _enabled = next;
+      if (!_disabled.add(id)) _disabled.remove(id);
     });
   }
 
@@ -61,10 +56,16 @@ class _AlarmListPageState extends State<AlarmListPage> {
         child: BlocBuilder<AlarmCubit, AlarmState>(
           builder: (context, state) {
             final alarms = state.alarms;
-            final enabled = _enabledFor(alarms);
             final n = alarms.length;
 
             return Stack(
+              // Stack defaults to StackFit.loose, which lets this Column
+              // shrink-wrap to its content's natural width instead of
+              // filling the screen — that shifted the whole page (title,
+              // empty state) left instead of centering/filling properly.
+              // StackFit.expand forces it to the Stack's full bounds; the
+              // FAB below is `Positioned` so it's unaffected either way.
+              fit: StackFit.expand,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -96,7 +97,12 @@ class _AlarmListPageState extends State<AlarmListPage> {
                               ),
                             ],
                           ),
-                          _ProfileButton(scheme: scheme),
+                          _ProfileButton(
+                            scheme: scheme,
+                            onTap: () => Navigator.of(
+                              context,
+                            ).push(MaterialPageRoute(builder: (_) => const ProfilePage())),
+                          ),
                         ],
                       ),
                     ),
@@ -133,7 +139,7 @@ class _AlarmListPageState extends State<AlarmListPage> {
                               separatorBuilder: (_, _) => const SizedBox(height: 3),
                               itemBuilder: (context, index) {
                                 final alarm = alarms[index];
-                                final on = enabled.contains(alarm.id);
+                                final on = !_disabled.contains(alarm.id);
                                 return _AlarmCard(
                                   alarm: alarm,
                                   on: on,
@@ -186,28 +192,32 @@ class _AlarmListPageState extends State<AlarmListPage> {
 }
 
 class _ProfileButton extends StatelessWidget {
-  const _ProfileButton({required this.scheme});
+  const _ProfileButton({required this.scheme, required this.onTap});
 
   final ColorScheme scheme;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: scheme.secondaryContainer,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: () {},
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Center(
-            child: Text(
-              'G',
-              style: TextStyle(
-                color: scheme.onSecondaryContainer,
-                fontWeight: FontWeight.w600,
-                fontSize: 15,
+    return Tooltip(
+      message: 'Profile',
+      child: Material(
+        color: scheme.secondaryContainer,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Center(
+              child: Text(
+                'G',
+                style: TextStyle(
+                  color: scheme.onSecondaryContainer,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                ),
               ),
             ),
           ),
@@ -225,7 +235,15 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    // `Expanded` only controls the outer Column's main (vertical) axis; on
+    // the cross axis this child still gets a loose width constraint, so
+    // without forcing full width here, this whole block shrink-wraps to
+    // its widest line of text and sits flush against the outer Column's
+    // `crossAxisAlignment.start` — i.e. off-center — instead of centering
+    // across the screen.
+    return SizedBox(
+      width: double.infinity,
+      child: Padding(
       padding: const EdgeInsets.only(top: 56),
       child: Column(
         children: [
@@ -249,6 +267,7 @@ class _EmptyState extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -395,26 +414,31 @@ class _ExpressiveFabState extends State<_ExpressiveFab> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTap: widget.onPressed,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutBack,
-        width: 68,
-        height: 68,
-        transform: Matrix4.diagonal3Values(_pressed ? 1.06 : 1, _pressed ? 1.06 : 1, 1),
-        transformAlignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: scheme.primary,
-          borderRadius: BorderRadius.circular(_pressed ? 999 : 22),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6, offset: const Offset(0, 2)),
-          ],
+    return Semantics(
+      button: true,
+      label: 'Add alarm',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutBack,
+          width: 68,
+          height: 68,
+          transform: Matrix4.diagonal3Values(_pressed ? 1.06 : 1, _pressed ? 1.06 : 1, 1),
+          transformAlignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: scheme.primary,
+            borderRadius: BorderRadius.circular(_pressed ? 999 : 22),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6, offset: const Offset(0, 2)),
+            ],
+          ),
+          child: Icon(Icons.add, size: 30, color: scheme.onPrimary),
         ),
-        child: Icon(Icons.add, size: 30, color: scheme.onPrimary),
       ),
     );
   }
@@ -496,6 +520,8 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
             _Stepper(
               label: 'Reps',
               value: '$_reps',
+              decrementLabel: 'Fewer reps',
+              incrementLabel: 'More reps',
               radius: const BorderRadius.vertical(
                 top: Radius.circular(18),
                 bottom: Radius.circular(8),
@@ -507,6 +533,8 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
             _Stepper(
               label: 'Minutes from now',
               value: '$_minutes',
+              decrementLabel: 'Sooner',
+              incrementLabel: 'Later',
               radius: const BorderRadius.vertical(
                 top: Radius.circular(8),
                 bottom: Radius.circular(18),
@@ -590,33 +618,39 @@ class _ModeButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutBack,
-        height: 52,
-        decoration: BoxDecoration(
-          color: selected ? scheme.primary : scheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(selected ? 999 : 12),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              selected ? Icons.check : icon,
-              size: 20,
-              color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutBack,
+          height: 52,
+          decoration: BoxDecoration(
+            color: selected ? scheme.primary : scheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(selected ? 999 : 12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                selected ? Icons.check : icon,
+                size: 20,
                 color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                  color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -627,6 +661,8 @@ class _Stepper extends StatelessWidget {
   const _Stepper({
     required this.label,
     required this.value,
+    required this.decrementLabel,
+    required this.incrementLabel,
     required this.radius,
     required this.onDecrement,
     required this.onIncrement,
@@ -634,6 +670,8 @@ class _Stepper extends StatelessWidget {
 
   final String label;
   final String value;
+  final String decrementLabel;
+  final String incrementLabel;
   final BorderRadius radius;
   final VoidCallback onDecrement;
   final VoidCallback onIncrement;
@@ -650,7 +688,7 @@ class _Stepper extends StatelessWidget {
           Text(label, style: TextStyle(color: scheme.onSurface, fontSize: 16)),
           Row(
             children: [
-              _StepButton(icon: Icons.remove, onTap: onDecrement),
+              _StepButton(icon: Icons.remove, label: decrementLabel, onTap: onDecrement),
               SizedBox(
                 width: 44,
                 child: Text(
@@ -664,7 +702,7 @@ class _Stepper extends StatelessWidget {
                   ),
                 ),
               ),
-              _StepButton(icon: Icons.add, onTap: onIncrement),
+              _StepButton(icon: Icons.add, label: incrementLabel, onTap: onIncrement),
             ],
           ),
         ],
@@ -674,9 +712,10 @@ class _Stepper extends StatelessWidget {
 }
 
 class _StepButton extends StatefulWidget {
-  const _StepButton({required this.icon, required this.onTap});
+  const _StepButton({required this.icon, required this.label, required this.onTap});
 
   final IconData icon;
+  final String label;
   final VoidCallback onTap;
 
   @override
@@ -690,23 +729,27 @@ class _StepButtonState extends State<_StepButton> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final radius = BorderRadius.circular(_pressed ? 999 : 14);
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTapUp: (_) => setState(() => _pressed = false),
-      child: Material(
-        color: scheme.secondaryContainer,
-        borderRadius: radius,
-        child: InkWell(
+    return Tooltip(
+      message: widget.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTapUp: (_) => setState(() => _pressed = false),
+        child: Material(
+          color: scheme.secondaryContainer,
           borderRadius: radius,
-          onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutBack,
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(borderRadius: radius),
-            child: Icon(widget.icon, size: 20, color: scheme.onSecondaryContainer),
+          child: InkWell(
+            borderRadius: radius,
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutBack,
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(borderRadius: radius),
+              child: Icon(widget.icon, size: 20, color: scheme.onSecondaryContainer),
+            ),
           ),
         ),
       ),
