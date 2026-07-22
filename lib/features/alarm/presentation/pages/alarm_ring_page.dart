@@ -15,10 +15,22 @@ import '../widgets/workout_celebration_sheet.dart';
 /// activity flags (MainActivity.kt). Dismissal is gated by camera-verified
 /// exercise reps (plan §6 Phase 4) — the raw `dismiss()` path from Phase 1
 /// is no longer reachable from here.
+///
+/// Used two ways: as a raw `Stack` child inside `_AlarmRingOverlay` (no
+/// `Navigator` route of its own — it just disappears once
+/// `AlarmCubit.state.ringingAlarm` goes back to null), and pushed as a
+/// normal `MaterialPageRoute` from `AlarmListPage`'s "tap one to preview
+/// the wake-up flow". [isPreview] must be true only for the latter: found
+/// via live device testing that the pushed preview route never popped
+/// itself under any outcome (verified, skipped, or backed out of
+/// verification), permanently stranding whoever opened a preview. The
+/// overlay usage must NOT pop — it isn't a pushed route, and popping would
+/// remove whatever the real current app route actually is.
 class AlarmRingPage extends StatefulWidget {
-  const AlarmRingPage({required this.alarm, super.key});
+  const AlarmRingPage({required this.alarm, this.isPreview = false, super.key});
 
   final AlarmSchedule alarm;
+  final bool isPreview;
 
   @override
   State<AlarmRingPage> createState() => _AlarmRingPageState();
@@ -62,6 +74,7 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
       // true, even after the ring page had already been disposed (e.g. the
       // native alarm's own ring cycle ended while verification was up).
       if (mounted) setState(() => _workoutStarted = false);
+      _popIfPreview();
       return;
     }
 
@@ -72,6 +85,7 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
     );
     if (!result.completed) {
       if (mounted) setState(() => _workoutStarted = false);
+      _popIfPreview();
       return;
     }
     if (!mounted) return;
@@ -86,12 +100,43 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
         builder: (_) => WorkoutCelebrationSheet(alarm: widget.alarm, repsCompleted: result.repsCompleted),
       );
     }
+    _popIfPreview();
+  }
+
+  /// Only the pushed preview instance owns a poppable route — see the
+  /// class doc comment.
+  void _popIfPreview() {
+    if (!widget.isPreview || !mounted) return;
+    final navigator = Navigator.maybeOf(context);
+    if (navigator != null && navigator.canPop()) navigator.pop();
   }
 
   @override
   Widget build(BuildContext context) {
     if (_workoutStarted) {
-      return const SizedBox.shrink();
+      // Was previously a bare `SizedBox.shrink()` — a blank frame with zero
+      // feedback while the camera/ML Kit warm up (found via live device
+      // testing: opening the camera + fetching ML Kit's remote config can
+      // take several seconds, and a silent blank screen reads as "the tap
+      // didn't register," prompting repeated taps). A visible loading
+      // state keeps the same background so the transition doesn't flash.
+      final scheme = Theme.of(context).colorScheme;
+      return Scaffold(
+        backgroundColor: scheme.errorContainer,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: scheme.onErrorContainer),
+              const SizedBox(height: 16),
+              Text(
+                'Opening camera…',
+                style: TextStyle(color: scheme.onErrorContainer, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     // Wake-up tax is global/per-user, not per-alarm (plan discussion — a
@@ -103,7 +148,13 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
         '${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}';
 
     return PopScope(
-      canPop: false, // back button must not silently dismiss the alarm
+      // A real ringing alarm must never be silently dismissed via back —
+      // but the preview entry point (`AlarmListPage`'s "tap one to preview
+      // the wake-up flow") isn't a real alarm at all, and blocking back
+      // there left it as the only unrecoverable dead end in the app (found
+      // via live testing: previously nothing popped this route under any
+      // outcome either, compounding the problem).
+      canPop: widget.isPreview,
       child: Scaffold(
         backgroundColor: scheme.errorContainer,
         body: SafeArea(

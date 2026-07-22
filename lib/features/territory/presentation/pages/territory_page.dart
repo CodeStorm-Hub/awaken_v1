@@ -269,14 +269,26 @@ class _TilesNotConfiguredNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // Anchored below the owned-area chip rather than at the bottom of the
+    // map: the bottom edge is where the floating locate/Start-run/layers
+    // control bar sits, and a bottom-pinned notice there gets visually cut
+    // off/hidden behind it (found via live device testing — the text was
+    // unreadable, truncated mid-sentence by the control bar on top of it).
     return Positioned(
-      bottom: 10,
-      left: 16,
-      right: 16,
-      child: Text(
-        'Map tiles not configured — set MAP_TILE_URL_TEMPLATE in .env.client. '
-        'Territory data still loads.',
-        style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+      top: 62,
+      left: 14,
+      right: 14,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHigh.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          'Map tiles not configured — set MAP_TILE_URL_TEMPLATE in .env.client. '
+          'Territory data still loads.',
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+        ),
       ),
     );
   }

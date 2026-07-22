@@ -23,9 +23,10 @@ const _weekdayFullLabels = [
 ];
 
 /// M3 Expressive Alarm Management Dashboard (UI/UX plan §2 / Claude Design
-/// handoff "AlarmListScreen"). Enabled/disabled is presentation-only, same
-/// as the design prototype — the domain layer has no per-alarm toggle
-/// use case yet, only schedule/cancel.
+/// handoff "AlarmListScreen"). Enable/disable persists through
+/// `AlarmCubit.setActive` (plan §6 Phase 6.5) — `alarm.isActive` on the
+/// merged native+Drift stream (see `AlarmRepositoryImpl.watchAlarms`) is
+/// the single source of truth, not local widget state.
 class AlarmListPage extends StatefulWidget {
   const AlarmListPage({super.key});
 
@@ -34,17 +35,6 @@ class AlarmListPage extends StatefulWidget {
 }
 
 class _AlarmListPageState extends State<AlarmListPage> {
-  // Tracked as "disabled" (not "enabled") ids, defaulting empty, so any
-  // newly-scheduled alarm is enabled by default without needing to
-  // backfill it into a separate enabled-set on every alarms-list change.
-  final Set<String> _disabled = {};
-
-  void _toggle(String id) {
-    setState(() {
-      if (!_disabled.add(id)) _disabled.remove(id);
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -139,17 +129,16 @@ class _AlarmListPageState extends State<AlarmListPage> {
                               separatorBuilder: (_, _) => const SizedBox(height: 3),
                               itemBuilder: (context, index) {
                                 final alarm = alarms[index];
-                                final on = !_disabled.contains(alarm.id);
                                 return _RiseIn(
                                   delay: Duration(milliseconds: index * 60),
                                   child: _AlarmCard(
                                     alarm: alarm,
-                                    on: on,
+                                    on: alarm.isActive,
                                     radius: groupedItemRadius(index: index, count: n),
-                                    onToggle: () => _toggle(alarm.id),
+                                    onToggle: () => context.read<AlarmCubit>().setActive(alarm.id, !alarm.isActive),
                                     onDelete: () => _confirmDelete(context, alarm),
                                     onTap: () => Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => AlarmRingPage(alarm: alarm)),
+                                      MaterialPageRoute(builder: (_) => AlarmRingPage(alarm: alarm, isPreview: true)),
                                     ),
                                   ),
                                 );

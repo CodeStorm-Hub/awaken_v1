@@ -5,6 +5,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../../core/usecase/usecase.dart';
 import '../../../alarm/domain/entities/alarm_schedule.dart';
+import '../../../squad/domain/repositories/squad_repository.dart';
 import '../../domain/entities/verification_state.dart';
 import '../../domain/usecases/start_verification_session.dart';
 import '../../domain/usecases/stop_verification_session.dart';
@@ -16,12 +17,16 @@ import '../../domain/usecases/watch_verification_state.dart';
 /// lifetime.
 @injectable
 class VerificationCubit extends Cubit<VerificationState> {
-  VerificationCubit(this._startSession, this._stopSession, this._watchState)
+  VerificationCubit(this._startSession, this._stopSession, this._watchState, this._squadRepository)
     : super(const VerificationState());
 
   final StartVerificationSession _startSession;
   final StopVerificationSession _stopSession;
   final WatchVerificationState _watchState;
+
+  /// Squad-telemetry broadcast (plan §6 Phase 6, H6) — throttled and a
+  /// no-op internally when the user has no squad.
+  final SquadRepository _squadRepository;
 
   Future<void> begin({required ExerciseMode exercise, required int targetReps}) async {
     final status = await Permission.camera.request();
@@ -31,7 +36,13 @@ class VerificationCubit extends Cubit<VerificationState> {
     }
 
     await WakelockPlus.enable();
-    _watchState().listen(emit);
+    _watchState().listen((state) {
+      emit(state);
+      if (state.status == VerificationStatus.counting || state.status == VerificationStatus.calibrating) {
+        final label = state.exerciseMode == ExerciseMode.squat ? 'squats' : 'push-ups';
+        _squadRepository.broadcastTelemetry(label: 'Workout · ${state.completedReps}/${state.targetReps} $label');
+      }
+    });
     await _startSession(StartVerificationParams(exercise: exercise, targetReps: targetReps));
   }
 

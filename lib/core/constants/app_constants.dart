@@ -18,4 +18,11 @@ abstract final class AppConstants {
   // Sync engine (plan §6 Phase 3)
   static const Duration syncInitialBackoff = Duration(minutes: 2);
   static const Duration syncMaxBackoff = Duration(minutes: 30);
+
+  // Squad streak tiers (plan §6 Phase 6) — mirrored in the
+  // `recompute_streak_tier()` Postgres trigger (migration
+  // `add_squad_social_phase6`); keep both in sync if these change.
+  static const int bronzeStreakTierThreshold = 3;
+  static const int silverStreakTierThreshold = 7;
+  static const int goldStreakTierThreshold = 14;
 }

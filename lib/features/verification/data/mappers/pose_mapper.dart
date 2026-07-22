@@ -17,10 +17,31 @@ const _orientationDegrees = {
   DeviceOrientation.landscapeRight: 270,
 };
 
-/// Converts a raw camera frame (NV21 on Android, per
-/// `CameraDataSource`'s `ImageFormatGroup.nv21`) into the `InputImage`
-/// ML Kit's pose detector expects, front-camera rotation-compensated.
+/// Maps the camera frame's *actual* reported format to the `InputImageFormat`
+/// ML Kit needs. Deliberately reads `image.format.group` at runtime instead
+/// of assuming `CameraDataSource`'s requested `ImageFormatGroup` was
+/// honored — on iOS, `camera`'s platform implementation only ever reports
+/// back `yuv420`/`jpeg`/`bgra8888` regardless of what was requested (verified
+/// against `camera_platform_interface`'s own `type_conversion.dart`), and
+/// `InputImageFormat.nv21` is Android-only per `google_mlkit_commons`'s own
+/// docs — feeding it to iOS's ML Kit build means every frame is
+/// misinterpreted and pose detection silently never finds a pose. Returns
+/// `null` for anything unsupported so the frame is dropped rather than fed
+/// to ML Kit with a wrong/guessed format.
+InputImageFormat? mlkitFormatFor(ImageFormatGroup group) => switch (group) {
+  ImageFormatGroup.nv21 => InputImageFormat.nv21,
+  ImageFormatGroup.bgra8888 => InputImageFormat.bgra8888,
+  ImageFormatGroup.yuv420 => InputImageFormat.yuv420,
+  ImageFormatGroup.jpeg || ImageFormatGroup.unknown => null,
+};
+
+/// Converts a raw camera frame into the `InputImage` ML Kit's pose detector
+/// expects, front-camera rotation-compensated (rotation is ignored on iOS
+/// by `google_mlkit_commons` itself — nothing to compensate for there).
 InputImage? cameraImageToInputImage(CameraImage image, CameraController controller) {
+  final format = mlkitFormatFor(image.format.group);
+  if (format == null) return null;
+
   final sensorOrientation = controller.description.sensorOrientation;
   final deviceOrientationDegrees = _orientationDegrees[controller.value.deviceOrientation] ?? 0;
 
@@ -36,7 +57,7 @@ InputImage? cameraImageToInputImage(CameraImage image, CameraController controll
     metadata: InputImageMetadata(
       size: Size(image.width.toDouble(), image.height.toDouble()),
       rotation: rotation,
-      format: InputImageFormat.nv21,
+      format: format,
       bytesPerRow: plane.bytesPerRow,
     ),
   );

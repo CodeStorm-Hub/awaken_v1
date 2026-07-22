@@ -32,4 +32,14 @@ class AuthRepositoryImpl implements AuthRepository {
     final user = await _remote.signInAnonymously();
     return _toAppUser(user);
   }
+
+  @override
+  Future<void> linkWithEmail({required String email, required String password}) =>
+      _remote.linkWithEmail(email: email, password: password);
+
+  @override
+  Future<void> linkWithGoogle() => _remote.linkWithGoogle();
+
+  @override
+  Future<void> signOut() => _remote.signOut();
 }

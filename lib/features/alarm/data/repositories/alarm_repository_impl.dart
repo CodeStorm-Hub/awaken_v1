@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:alarm/alarm.dart';
 import 'package:injectable/injectable.dart';
 import 'package:uuid/uuid.dart';
@@ -80,11 +82,105 @@ class AlarmRepositoryImpl implements AlarmRepository {
     );
   }
 
+  AlarmSchedule _toAlarmScheduleFromRow(AlarmRow row) {
+    return AlarmSchedule(
+      id: row.id,
+      scheduledTime: row.scheduledTime,
+      exerciseMode: ExerciseMode.values.byName(row.exerciseMode),
+      requiredReps: row.requiredReps,
+      penaltyMultiplier: row.penaltyMultiplier,
+      isActive: row.isActive,
+      recurringDays: row.recurringDays.isEmpty
+          ? const {}
+          : row.recurringDays.split(',').map(int.parse).toSet(),
+    );
+  }
+
+  /// Native `alarm` package scheduling stays the source of truth for
+  /// anything currently armed (`isActive: true`, project convention —
+  /// see `docs`/memory on recurrence). Disabled alarms are cancelled
+  /// natively (so they can't ring) but must still show up in the list,
+  /// greyed out — those come from the local Drift cache instead, since
+  /// disabling removes them from the native `scheduled` set entirely.
+  /// Hand-rolled combine-latest (no rxdart dependency, matching this
+  /// project's "hand-rolled over heavy dependency" bias): re-emits the
+  /// merged list whenever either source updates.
   @override
   Stream<List<AlarmSchedule>> watchAlarms() {
-    return _local.scheduled.map(
-      (settingsList) => settingsList.map(_toAlarmSchedule).whereType<AlarmSchedule>().toList(),
+    late final StreamController<List<AlarmSchedule>> controller;
+    List<AlarmSchedule> latestNative = const [];
+    List<AlarmSchedule> latestDisabled = const [];
+    var hasNative = false;
+    var hasDisabled = false;
+
+    void emitIfReady() {
+      if (!hasNative || !hasDisabled) return;
+      final disabledIds = latestDisabled.map((a) => a.id).toSet();
+      final merged = [
+        ...latestNative.where((a) => !disabledIds.contains(a.id)),
+        ...latestDisabled,
+      ];
+      controller.add(merged);
+    }
+
+    late final StreamSubscription<List<AlarmSettings>> nativeSub;
+    late final StreamSubscription<List<AlarmRow>> disabledSub;
+
+    controller = StreamController<List<AlarmSchedule>>.broadcast(
+      onListen: () {
+        nativeSub = _local.scheduled.listen((settingsList) {
+          latestNative = settingsList.map(_toAlarmSchedule).whereType<AlarmSchedule>().toList();
+          hasNative = true;
+          emitIfReady();
+        });
+        disabledSub = (_db.select(_db.alarms)
+              ..where((t) => t.isActive.equals(false))
+              ..where((t) => t.deletedAt.isNull()))
+            .watch()
+            .listen((rows) {
+          latestDisabled = rows.map(_toAlarmScheduleFromRow).toList();
+          hasDisabled = true;
+          emitIfReady();
+        });
+      },
+      onCancel: () {
+        unawaited(nativeSub.cancel());
+        unawaited(disabledSub.cancel());
+      },
     );
+
+    return controller.stream;
+  }
+
+  @override
+  Future<void> setActive(String id, bool isActive) async {
+    if (!isActive) {
+      await _local.stop(AlarmPayload.nativeId(id));
+      final row = await (_db.select(_db.alarms)..where((t) => t.id.equals(id))).getSingleOrNull();
+      if (row == null) return;
+      await _localWriter.upsertAlarm(
+        id: row.id,
+        scheduledTime: row.scheduledTime,
+        exerciseMode: row.exerciseMode,
+        requiredReps: row.requiredReps,
+        penaltyMultiplier: row.penaltyMultiplier,
+        isActive: false,
+        recurringDays: row.recurringDays.isEmpty
+            ? const {}
+            : row.recurringDays.split(',').map(int.parse).toSet(),
+      );
+      return;
+    }
+
+    final row = await (_db.select(_db.alarms)..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (row == null) return;
+    var schedule = _toAlarmScheduleFromRow(row).copyWith(isActive: true);
+    final now = DateTime.now();
+    if (schedule.isRecurring && schedule.scheduledTime.isBefore(now)) {
+      final next = schedule.nextOccurrenceAfter(now);
+      if (next != null) schedule = schedule.copyWith(scheduledTime: next);
+    }
+    await scheduleAlarm(schedule);
   }
 
   @override
@@ -173,6 +269,30 @@ class AlarmRepositoryImpl implements AlarmRepository {
       if (next != null) {
         await scheduleAlarm(alarm.copyWith(scheduledTime: next));
       }
+    }
+  }
+
+  @override
+  Future<void> rearmFromCache() async {
+    final armedIds = await _local.scheduled.first.then(
+      (list) => list.map(_toAlarmSchedule).whereType<AlarmSchedule>().map((a) => a.id).toSet(),
+    );
+    final rows = await (_db.select(_db.alarms)
+          ..where((t) => t.isActive.equals(true))
+          ..where((t) => t.deletedAt.isNull()))
+        .get();
+
+    final now = DateTime.now();
+    for (final row in rows) {
+      if (armedIds.contains(row.id)) continue;
+      var schedule = _toAlarmScheduleFromRow(row);
+      if (schedule.isRecurring && schedule.scheduledTime.isBefore(now)) {
+        final next = schedule.nextOccurrenceAfter(now);
+        if (next != null) schedule = schedule.copyWith(scheduledTime: next);
+      } else if (!schedule.isRecurring && schedule.scheduledTime.isBefore(now)) {
+        continue; // a past one-shot alarm has nothing sensible to re-arm to
+      }
+      await scheduleAlarm(schedule);
     }
   }
 

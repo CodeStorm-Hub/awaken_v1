@@ -8,8 +8,10 @@ import 'core/di/injection.dart';
 import 'core/usecase/usecase.dart';
 import 'features/alarm/data/datasources/alarm_local_datasource.dart';
 import 'features/alarm/domain/usecases/reconcile_recurring_alarms.dart';
+import 'features/alarm/domain/usecases/rearm_alarms_from_cache.dart';
 import 'features/profile/domain/usecases/ensure_auth_session.dart';
 import 'sync/outbox/sync_worker.dart';
+import 'sync/pull/pull_down_sync.dart';
 
 /// Shared bootstrap for both flavors. See main_dev.dart / main_prod.dart.
 Future<void> bootstrap({required String envFile}) async {
@@ -43,6 +45,12 @@ Future<void> bootstrap({required String envFile}) async {
   // that need auth.uid() should retry via the same use case later.
   try {
     await getIt<EnsureAuthSession>()(const NoParams());
+
+    // Reinstall/new-device hydration (plan §6 Phase 6.5) — no-ops if the
+    // local cache is already populated. Re-arms any alarm the pull
+    // hydrated that wasn't previously scheduled natively.
+    await getIt<PullDownSync>().run();
+    await getIt<RearmAlarmsFromCache>()(const NoParams());
   } catch (_) {
     // TODO(Phase 3b): offline-first-launch fallback — local placeholder
     // UUID + re-key routine (plan §2.2 H8, kept only as a fallback).

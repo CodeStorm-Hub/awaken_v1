@@ -8,36 +8,27 @@ import '../../../alarm/domain/usecases/watch_current_streak.dart';
 import '../../../alarm/presentation/bloc/alarm_cubit.dart';
 import '../../../alarm/presentation/bloc/alarm_state.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
+import '../../../squad/domain/entities/squad.dart';
+import '../../../squad/domain/usecases/watch_my_rank.dart';
+import '../../../squad/domain/usecases/watch_my_squad.dart';
 import '../../../territory/domain/usecases/watch_owned_area.dart';
+import '../../domain/entities/recent_activity_entry.dart';
+import '../../domain/usecases/watch_recent_activity.dart';
 
 const _weekdayAbbrLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-/// Home dashboard (Claude Design handoff — `isHome`). The primary screen the
-/// handoff's own bundle flagged as the intended entry point. Next-alarm,
-/// streak, and territory area are real (`AlarmCubit`, `WatchCurrentStreak`,
-/// `WatchOwnedArea` — plan §6 Phase 5c); squad rank, today's goal,
-/// achievements, and the activity feed have no domain/data layer yet (Squad
-/// is Phase 6) — those sections still use the design prototype's own
-/// placeholder values, clearly not wired to a backend.
+/// Home dashboard (Claude Design handoff — `isHome`). Next-alarm, streak,
+/// territory area, squad rank, achievements, and the activity feed are all
+/// real now (`AlarmCubit`, `WatchCurrentStreak`, `WatchOwnedArea`,
+/// `WatchMyRank`/`WatchMySquad`, `WatchRecentActivity` — plan §6 Phases 5c/
+/// 6). "Today's goal" remains the design prototype's placeholder — there's
+/// still no daily-goal domain concept.
 class HomePage extends StatelessWidget {
   const HomePage({required this.onOpenAlarms, required this.onOpenTerritory, required this.onOpenSquad, super.key});
 
   final VoidCallback onOpenAlarms;
   final VoidCallback onOpenTerritory;
   final VoidCallback onOpenSquad;
-
-  static const _achievements = [
-    (icon: Icons.local_fire_department, label: '4-day streak', unlocked: true),
-    (icon: Icons.landscape, label: 'First territory', unlocked: true),
-    (icon: Icons.groups, label: 'Squad player', unlocked: true),
-    (icon: Icons.emoji_events, label: '30-day streak', unlocked: false),
-  ];
-
-  static const _activity = [
-    (icon: Icons.check_circle, text: 'Dismissed alarm — 20 squats', time: '7h ago'),
-    (icon: Icons.landscape, text: 'Captured 0.01 km² of territory', time: 'Yesterday'),
-    (icon: Icons.groups, text: 'Joined Squad "Sunrise Runners"', time: '3d ago'),
-  ];
 
   AlarmSchedule? _nextAlarm(List<AlarmSchedule> alarms) {
     if (alarms.isEmpty) return null;
@@ -187,13 +178,19 @@ class HomePage extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 3),
                                 Expanded(
-                                  child: StatTile(
-                                    bg: scheme.surfaceContainerHigh,
-                                    fg: scheme.onSurface,
-                                    icon: Icons.emoji_events,
-                                    value: '#3',
-                                    label: 'Squad rank',
-                                    radius: const BorderRadius.horizontal(right: Radius.circular(24)),
+                                  child: StreamBuilder<int?>(
+                                    stream: getIt<WatchMyRank>()(),
+                                    builder: (context, rankSnapshot) {
+                                      final rank = rankSnapshot.data;
+                                      return StatTile(
+                                        bg: scheme.surfaceContainerHigh,
+                                        fg: scheme.onSurface,
+                                        icon: Icons.emoji_events,
+                                        value: rank == null ? '—' : '#$rank',
+                                        label: 'Squad rank',
+                                        radius: const BorderRadius.horizontal(right: Radius.circular(24)),
+                                      );
+                                    },
                                   ),
                                 ),
                               ],
@@ -264,31 +261,7 @@ class HomePage extends StatelessWidget {
                               style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onSurface),
                             ),
                             const SizedBox(height: 12),
-                            Row(
-                              children: _achievements.map((a) {
-                                return Expanded(
-                                  child: Column(
-                                    children: [
-                                      ExpressiveFlower(
-                                        size: 58,
-                                        color: a.unlocked ? scheme.tertiaryContainer : scheme.surfaceContainerHigh,
-                                        child: Icon(
-                                          a.icon,
-                                          size: 26,
-                                          color: a.unlocked ? scheme.onTertiaryContainer : scheme.outline,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 7),
-                                      Text(
-                                        a.label,
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                            ),
+                            _AchievementsRow(streak: streak),
                             const SizedBox(height: 22),
                             Row(
                               children: [
@@ -328,47 +301,7 @@ class HomePage extends StatelessWidget {
                               style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onSurface),
                             ),
                             const SizedBox(height: 10),
-                            Column(
-                              children: List.generate(_activity.length, (i) {
-                                final a = _activity[i];
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 3),
-                                  child: Material(
-                                    color: scheme.surfaceContainerLow,
-                                    borderRadius: groupedItemRadius(index: i, count: _activity.length, outer: 18),
-                                    elevation: 1,
-                                    shadowColor: scheme.shadow,
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                      child: Row(
-                                        children: [
-                                          Container(
-                                            width: 36,
-                                            height: 36,
-                                            decoration: BoxDecoration(
-                                              color: scheme.surfaceContainerHigh,
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: Icon(a.icon, size: 19, color: scheme.primary),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Text(
-                                              a.text,
-                                              style: TextStyle(fontSize: 14, color: scheme.onSurface),
-                                            ),
-                                          ),
-                                          Text(
-                                            a.time,
-                                            style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }),
-                            ),
+                            const _RecentActivitySection(),
                           ],
                         ),
                       ),
@@ -412,6 +345,135 @@ class _ProfileAvatar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Real unlock state (previously a hardcoded mock list contradicting the
+/// adjacent real "Day streak"/squad stats — found in a live UI review).
+class _AchievementsRow extends StatelessWidget {
+  const _AchievementsRow({required this.streak});
+
+  final int streak;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<double>(
+      stream: getIt<WatchOwnedArea>()(),
+      builder: (context, areaSnapshot) {
+        final areaSqm = areaSnapshot.data ?? 0;
+        return StreamBuilder<Squad?>(
+          stream: getIt<WatchMySquad>()(),
+          builder: (context, squadSnapshot) {
+            final scheme = Theme.of(context).colorScheme;
+            final achievements = [
+              (icon: Icons.local_fire_department, label: '4-day streak', unlocked: streak >= 4),
+              (icon: Icons.landscape, label: 'First territory', unlocked: areaSqm > 0),
+              (icon: Icons.groups, label: 'Squad player', unlocked: squadSnapshot.data != null),
+              (icon: Icons.emoji_events, label: '30-day streak', unlocked: streak >= 30),
+            ];
+            return Row(
+              children: achievements.map((a) {
+                return Expanded(
+                  child: Column(
+                    children: [
+                      ExpressiveFlower(
+                        size: 58,
+                        color: a.unlocked ? scheme.tertiaryContainer : scheme.surfaceContainerHigh,
+                        child: Icon(
+                          a.icon,
+                          size: 26,
+                          color: a.unlocked ? scheme.onTertiaryContainer : scheme.outline,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        a.label,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Real activity feed sourced from local `sessions`/`runs` (previously a
+/// hardcoded mock list, including a "Joined Squad" entry with no backing
+/// event data — found in a live UI review). Squad-join isn't modeled here
+/// since nothing tracks a join timestamp yet.
+class _RecentActivitySection extends StatelessWidget {
+  const _RecentActivitySection();
+
+  String _relativeTime(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${dt.month}/${dt.day}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return StreamBuilder<List<RecentActivityEntry>>(
+      stream: getIt<WatchRecentActivity>()(),
+      builder: (context, snapshot) {
+        final activity = snapshot.data ?? const [];
+        if (activity.isEmpty) {
+          return Text(
+            'No activity yet — dismiss an alarm or capture territory to see it here.',
+            style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+          );
+        }
+        return Column(
+          children: List.generate(activity.length, (i) {
+            final a = activity[i];
+            final icon = a.kind == RecentActivityKind.alarmDismissed ? Icons.check_circle : Icons.landscape;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Material(
+                color: scheme.surfaceContainerLow,
+                borderRadius: groupedItemRadius(index: i, count: activity.length, outer: 18),
+                elevation: 1,
+                shadowColor: scheme.shadow,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(icon, size: 19, color: scheme.primary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(a.text, style: TextStyle(fontSize: 14, color: scheme.onSurface)),
+                      ),
+                      Text(
+                        _relativeTime(a.occurredAt),
+                        style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        );
+      },
     );
   }
 }

@@ -1,13 +1,23 @@
+import 'dart:io';
+
 import 'package:camera/camera.dart';
 import 'package:injectable/injectable.dart';
 
 /// Wraps `package:camera` — the only place besides `camera_preview_source`
-/// (presentation) that touches it directly. Android-only per the app's
-/// scope; always opens the front camera (the user is holding/propping the
-/// phone to see their own reps).
+/// (presentation) that touches it directly. Always opens the front camera
+/// (the user is holding/propping the phone to see their own reps).
 @lazySingleton
 class CameraDataSource {
   CameraController? _controller;
+
+  /// ML Kit's Android build only accepts NV21 (plan H5); its iOS build
+  /// never receives NV21 frames at all — `camera`'s iOS implementation
+  /// (`camera_platform_interface`'s `type_conversion.dart`) only ever
+  /// reports back `yuv420`/`jpeg`/`bgra8888`, regardless of what's
+  /// requested here. `pose_mapper.dart`'s `cameraImageToInputImage` reads
+  /// the frame's *actual* reported format rather than assuming this
+  /// request was honored, so this is a request, not a hard guarantee.
+  static final _preferredFormat = Platform.isAndroid ? ImageFormatGroup.nv21 : ImageFormatGroup.bgra8888;
 
   /// Exposed for `CameraPreview(controller)` in the presentation layer.
   /// This is a narrow, deliberate exception to "presentation never touches
@@ -28,7 +38,7 @@ class CameraDataSource {
       front,
       ResolutionPreset.medium,
       enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.nv21,
+      imageFormatGroup: _preferredFormat,
     );
     _controller = controller;
 

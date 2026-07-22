@@ -1,18 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/theme_mode_cubit.dart';
+import '../../../../core/usecase/usecase.dart';
 import '../../../alarm/domain/usecases/watch_current_streak.dart';
 import '../../../alarm/presentation/pages/alarm_reliability_test_page.dart';
 import '../../../onboarding/presentation/pages/battery_exemption_page.dart';
 import '../../../territory/domain/usecases/watch_owned_area.dart';
+import '../../domain/entities/app_user.dart';
+import '../../domain/usecases/link_with_email.dart';
+import '../../domain/usecases/link_with_google.dart';
+import '../../domain/usecases/sign_out.dart';
+import '../../domain/usecases/watch_current_user.dart';
 
 /// Profile screen (Claude Design handoff — `isProfile`). Streak and
 /// territory area are real (`WatchCurrentStreak`, `WatchOwnedArea` — plan
 /// §6 Phase 5c). "Alarm reliability" and "Battery & location" route to the
-/// app's real existing pages; Notifications/Appearance/Sign out are inert,
-/// matching the design prototype's own `onClick: () => {}` no-ops for those
-/// rows.
+/// app's real existing pages. "Migrate to cloud"/Appearance/Sign out are
+/// wired to real auth/theme state (plan §6 Phase 6.5) — Notifications was
+/// cut entirely rather than left as a dead tappable row, since no
+/// notification-settings feature exists to back it.
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
 
@@ -61,46 +70,57 @@ class ProfilePage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-                          decoration: BoxDecoration(
-                            color: scheme.surfaceContainerHigh,
-                            borderRadius: BorderRadius.circular(28),
-                          ),
-                          child: Column(
-                            children: [
-                              ExpressiveFlower(
-                                size: 84,
-                                color: scheme.secondaryContainer,
-                                child: Text(
-                                  'G',
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w800,
-                                    color: scheme.onSecondaryContainer,
+                        StreamBuilder<AppUser?>(
+                          stream: getIt<WatchCurrentUser>()(),
+                          builder: (context, userSnapshot) {
+                            final user = userSnapshot.data;
+                            final isAnonymous = user?.isAnonymous ?? true;
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+                              decoration: BoxDecoration(
+                                color: scheme.surfaceContainerHigh,
+                                borderRadius: BorderRadius.circular(28),
+                              ),
+                              child: Column(
+                                children: [
+                                  ExpressiveFlower(
+                                    size: 84,
+                                    color: scheme.secondaryContainer,
+                                    child: Text(
+                                      isAnonymous ? 'G' : 'A',
+                                      style: TextStyle(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w800,
+                                        color: scheme.onSecondaryContainer,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    isAnonymous ? 'Guest' : 'Account linked',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: scheme.onSurface),
+                                  ),
+                                  Text(
+                                    isAnonymous
+                                        ? 'Progress is saved on this device only'
+                                        : 'Progress syncs across devices',
+                                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                                  ),
+                                  if (isAnonymous) ...[
+                                    const SizedBox(height: 4),
+                                    FilledButton(
+                                      style: FilledButton.styleFrom(
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                      ),
+                                      onPressed: () => _showMigrateToCloudDialog(context),
+                                      child: const Text('Migrate to cloud'),
+                                    ),
+                                  ],
+                                ],
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Guest',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: scheme.onSurface),
-                              ),
-                              Text(
-                                'Progress is saved on this device only',
-                                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                              ),
-                              const SizedBox(height: 4),
-                              FilledButton(
-                                style: FilledButton.styleFrom(
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-                                ),
-                                onPressed: () {},
-                                child: const Text('Migrate to cloud'),
-                              ),
-                            ],
-                          ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 14),
                         Row(
@@ -136,15 +156,9 @@ class ProfilePage extends StatelessWidget {
                         Text('Settings', style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onSurface)),
                         const SizedBox(height: 10),
                         _SettingsRow(
-                          icon: Icons.notifications,
-                          label: 'Notifications',
-                          radius: const BorderRadius.vertical(top: Radius.circular(20), bottom: Radius.circular(8)),
-                          onTap: () {},
-                        ),
-                        const SizedBox(height: 3),
-                        _SettingsRow(
                           icon: Icons.bug_report,
                           label: 'Alarm reliability',
+                          radius: const BorderRadius.vertical(top: Radius.circular(20), bottom: Radius.circular(8)),
                           onTap: () => Navigator.of(context).push(
                             MaterialPageRoute(builder: (_) => const AlarmReliabilityTestPage()),
                           ),
@@ -162,13 +176,13 @@ class ProfilePage extends StatelessWidget {
                           icon: Icons.palette,
                           label: 'Appearance',
                           radius: const BorderRadius.vertical(top: Radius.circular(8), bottom: Radius.circular(20)),
-                          onTap: () {},
+                          onTap: () => _showAppearanceDialog(context),
                         ),
                         const SizedBox(height: 18),
                         Center(
                           child: TextButton(
                             style: TextButton.styleFrom(foregroundColor: scheme.error),
-                            onPressed: () {},
+                            onPressed: () => _showSignOutDialog(context),
                             child: const Text('Sign out'),
                           ),
                         ),
@@ -183,6 +197,147 @@ class ProfilePage extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> _showAppearanceDialog(BuildContext context) async {
+  final cubit = context.read<ThemeModeCubit>();
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return BlocBuilder<ThemeModeCubit, ThemeMode>(
+        bloc: cubit,
+        builder: (context, current) {
+          return SimpleDialog(
+            title: const Text('Appearance'),
+            children: [
+              RadioGroup<ThemeMode>(
+                groupValue: current,
+                onChanged: (value) {
+                  if (value != null) cubit.setThemeMode(value);
+                  Navigator.of(dialogContext).pop();
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final mode in ThemeMode.values)
+                      RadioListTile<ThemeMode>(
+                        title: Text(switch (mode) {
+                          ThemeMode.light => 'Light',
+                          ThemeMode.dark => 'Dark',
+                          ThemeMode.system => 'System default',
+                        }),
+                        value: mode,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+Future<void> _showSignOutDialog(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Sign out?'),
+      content: const Text(
+        "You'll lose access to your cloud-synced data on this device unless you've linked an "
+        'account. Data already on this device stays put.',
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Sign out')),
+      ],
+    ),
+  );
+  if (confirmed == true) {
+    await getIt<SignOut>()(const NoParams());
+  }
+}
+
+Future<void> _showMigrateToCloudDialog(BuildContext context) async {
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: const Text('Migrate to cloud'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Password'),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () async {
+                  final email = emailController.text.trim();
+                  final password = passwordController.text;
+                  if (email.isEmpty || password.isEmpty) return;
+                  Navigator.of(dialogContext).pop();
+                  try {
+                    await getIt<LinkWithEmail>()(email: email, password: password);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Check your email to confirm linking your account.')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                    }
+                  }
+                },
+                child: const Text('Continue with email'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.g_mobiledata),
+                onPressed: () async {
+                  Navigator.of(dialogContext).pop();
+                  try {
+                    await getIt<LinkWithGoogle>()(const NoParams());
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(const SnackBar(content: Text('Account linked with Google.')));
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                    }
+                  }
+                },
+                label: const Text('Continue with Google'),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+        ],
+      );
+    },
+  );
 }
 
 class _SettingsRow extends StatelessWidget {

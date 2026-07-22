@@ -11,6 +11,12 @@ abstract interface class AlarmRepository {
   Future<void> scheduleAlarm(AlarmSchedule alarm);
   Future<void> cancelAlarm(String id);
 
+  /// Enable/disable an alarm without discarding its settings (unlike
+  /// `cancelAlarm`, which deletes it outright). Disabling cancels the
+  /// native schedule but keeps the alarm's config in the local cache so it
+  /// can be re-armed later; `watchAlarms()` still shows it, greyed out.
+  Future<void> setActive(String id, bool isActive);
+
   /// Stops the ringing alarm. Phase 1 scope only — this is a raw dismiss,
   /// not gated by exercise verification yet (that's Phase 4, plan §6).
   Future<void> dismissAlarm(String id);
@@ -37,4 +43,11 @@ abstract interface class AlarmRepository {
   /// post-ring reschedule in `completeWorkout` never ran (app killed,
   /// crashed, etc). Call once on app launch.
   Future<void> reconcileRecurringAlarms();
+
+  /// Re-arms any active alarm present in the local cache but not currently
+  /// scheduled natively — the gap `reconcileRecurringAlarms` doesn't cover,
+  /// since that one only fixes up alarms native already knows about.
+  /// Needed after `PullDownSync` hydrates the local cache on a fresh
+  /// install/new device, where nothing has been armed natively yet.
+  Future<void> rearmFromCache();
 }

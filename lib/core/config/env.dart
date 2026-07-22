@@ -29,6 +29,15 @@ abstract final class Env {
   static String get mapTileAttribution =>
       dotenv.maybeGet('MAP_TILE_ATTRIBUTION') ?? 'Map data © contributors';
 
+  /// Web/server OAuth client id (Google Cloud Console "Web application"
+  /// type) — this is the audience `GoogleSignIn.instance.initialize`'s
+  /// `serverClientId` needs so the resulting ID token is accepted by
+  /// Supabase's `linkIdentityWithIdToken`. Optional: null until a real
+  /// Google Cloud project + Supabase Google provider are configured (an
+  /// unavoidable manual/dashboard step — same class of gap as this
+  /// project's other "needs a human in a console somewhere" notes).
+  static String? get googleOAuthClientId => dotenv.maybeGet('GOOGLE_OAUTH_CLIENT_ID');
+
   static String _require(String key) {
     final value = dotenv.maybeGet(key);
     if (value == null || value.isEmpty) {

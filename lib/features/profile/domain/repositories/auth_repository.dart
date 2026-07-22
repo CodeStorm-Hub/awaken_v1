@@ -13,8 +13,21 @@ abstract interface class AuthRepository {
   /// Guarantees a session exists, signing in anonymously if needed (plan
   /// H8: anonymous-first over the error-prone guest re-key routine).
   /// Returns the resulting user.
-  ///
-  /// Linking an anonymous session to a real identity (email/OAuth) is a
-  /// Phase 3 concern (plan §6) — not implemented here yet.
   Future<AppUser> ensureSession();
+
+  /// Upgrades the current anonymous session to a real email/password
+  /// identity — same `uid`, no re-keying (H8's documented pattern:
+  /// `updateUser` on an anonymous session attaches credentials to it rather
+  /// than creating a new account). Supabase sends a confirmation email;
+  /// the account isn't fully "linked" until the user clicks it.
+  Future<void> linkWithEmail({required String email, required String password});
+
+  /// Upgrades the current anonymous session via native Google Sign-In +
+  /// ID-token linking (no browser redirect) — same `uid`, no re-keying.
+  Future<void> linkWithGoogle();
+
+  /// Ends the remote session. Local Drift data is never touched — this
+  /// only signs out of Supabase; the point of the offline-first design is
+  /// that local data survives regardless of auth state.
+  Future<void> signOut();
 }

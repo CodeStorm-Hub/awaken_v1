@@ -4,10 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Awaken: a gamified alarm + fitness Android app (Flutter). Alarms can only be dismissed by
-performing camera-verified exercises; outdoor runs that close a geographic loop capture
-"territory" on a shared map, with squads/leaderboards. Android-only for v1 — iOS is explicitly
-out of scope (see refined plan §8).
+Awaken: a gamified alarm + fitness app (Flutter) targeting **Android and iOS**. Alarms can only
+be dismissed by performing camera-verified exercises; outdoor runs that close a geographic loop
+capture "territory" on a shared map, with squads/leaderboards.
+
+**Scope note (updated 2026-07-22, supersedes the refined plan §8 / original dev-plan
+"Android-only"):** the refined plan and its risk register were written Android-first, and this
+doc previously said iOS was explicitly out of scope. The project has since been retargeted to
+both platforms — `ios/` already has real prep (Info.plist usage strings, ML Kit-pinned Podfile
+deployment target) predating this note, and Android remains the more mature/tested platform.
+When touching platform-specific code, check both `android/` and `ios/`, and don't assume an
+Android-only pattern (MethodChannels, foreground services, image formats) transfers to iOS
+without verification — several real gaps were found and partly fixed in the 2026-07-22 Phase 6
+session (see below): `SystemCapabilities`' MethodChannel has no iOS implementation (now
+platform-gated rather than crashing), pose detection was feeding ML Kit an Android-only image
+format on both platforms (fixed), and `flutter_foreground_task`'s run-tracking approach doesn't
+carry over to iOS as-is (still open — iOS needs its own code path via `geolocator`'s background
+location support, not flutter_foreground_task).
 
 **Read `awaken_app_refined_plan.md` before making architectural changes.** It is the authoritative
 build plan — corrected package versions, the phased roadmap (§6, with per-phase exit criteria),
