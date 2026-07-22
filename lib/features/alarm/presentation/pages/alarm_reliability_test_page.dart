@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/theme/expressive_widgets.dart';
 import '../../domain/entities/alarm_schedule.dart';
 import '../bloc/alarm_cubit.dart';
 import '../bloc/alarm_state.dart';
@@ -83,61 +84,143 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<AlarmCubit>();
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Alarm reliability self-test')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
+      backgroundColor: scheme.surface,
+      body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'This schedules a test alarm ${_testDelay.inSeconds} seconds from '
-              'now, with a 1-rep squat requirement. For a real test of OEM '
-              'battery killers, start it, then LOCK YOUR SCREEN and, '
-              'ideally, swipe Awaken away from the recent-apps list. The '
-              'alarm should still fire.',
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+              child: Material(
+                color: scheme.surfaceContainerHigh,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => Navigator.of(context).pop(),
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: Icon(Icons.arrow_back, size: 22, color: scheme.onSurface),
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(height: 24),
-            _buildStatus(),
-            const Spacer(),
-            FilledButton(
-              onPressed: _phase == _TestPhase.waiting ? null : () => _startTest(cubit),
-              child: Text(_phase == _TestPhase.waiting ? 'Test running…' : 'Start test'),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Alarm reliability self-test',
+                      style: TextStyle(
+                        fontSize: 30,
+                        height: 36 / 30,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.4,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'This schedules a test alarm ${_testDelay.inSeconds} seconds from '
+                      'now, with a 1-rep squat requirement. For a real test of OEM '
+                      'battery killers, start it, then lock your screen and, '
+                      'ideally, swipe Awaken away from the recent-apps list. The '
+                      'alarm should still fire.',
+                      style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 22),
+                    _StatusContainer(
+                      phase: _phase,
+                      measuredDelay: _measuredDelay,
+                      scheme: scheme,
+                    ),
+                    const SizedBox(height: 200),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(56),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  ),
+                  onPressed: _phase == _TestPhase.waiting ? null : () => _startTest(cubit),
+                  child: Text(
+                    _phase == _TestPhase.waiting
+                        ? 'Test running…'
+                        : _phase == _TestPhase.passed || _phase == _TestPhase.timedOut
+                        ? 'Run again'
+                        : 'Start test',
+                  ),
+                ),
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildStatus() {
-    switch (_phase) {
-      case _TestPhase.idle:
-        return const Text('Not started.');
-      case _TestPhase.waiting:
-        return Text('Waiting for alarm scheduled at ${_scheduledFor!.toLocal()}…');
-      case _TestPhase.passed:
-        return Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.green),
-            const SizedBox(width: 8),
-            Text('PASS — fired ${_measuredDelay!.inSeconds}s after scheduling.'),
-          ],
-        );
-      case _TestPhase.timedOut:
-        return const Row(
-          children: [
-            Icon(Icons.error, color: Colors.red),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'FAIL — alarm did not fire within the expected window. Check '
-                'battery-exemption settings and OEM autostart permissions.',
-              ),
+class _StatusContainer extends StatelessWidget {
+  const _StatusContainer({required this.phase, required this.measuredDelay, required this.scheme});
+
+  final _TestPhase phase;
+  final Duration? measuredDelay;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final passed = phase == _TestPhase.passed;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 18),
+      decoration: BoxDecoration(
+        color: passed ? scheme.primaryContainer : scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        children: [
+          switch (phase) {
+            _TestPhase.idle => Icon(Icons.bug_report, size: 36, color: scheme.onSurfaceVariant),
+            _TestPhase.waiting => const ExpressiveLoader(),
+            _TestPhase.passed => ExpressiveFlower(
+              size: 72,
+              color: scheme.primary,
+              animatePop: true,
+              child: Icon(Icons.check, size: 34, color: scheme.onPrimary),
             ),
-          ],
-        );
-    }
+            _TestPhase.timedOut => Icon(Icons.error, size: 36, color: scheme.error),
+          },
+          const SizedBox(height: 12),
+          Text(
+            switch (phase) {
+              _TestPhase.idle => 'Not started.',
+              _TestPhase.waiting => 'Waiting for alarm…',
+              _TestPhase.passed => 'PASS — fired ${measuredDelay!.inSeconds}s after scheduling.',
+              _TestPhase.timedOut =>
+                'FAIL — alarm did not fire within the expected window. Check '
+                    'battery-exemption settings and OEM autostart permissions.',
+            },
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: phase == _TestPhase.passed ? FontWeight.w800 : FontWeight.w600,
+              color: passed ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -53,6 +53,11 @@ dependencies:
   sentry_flutter: ^9.0.0
   motor: ^1.1.0
 
+  # Type (UI/UX plan "Emphatic Typography" — Roboto Flex/Google Sans Flex
+  # variable font; Google Sans Flex isn't publicly distributed, so this
+  # substitutes Roboto Flex, per the Claude Design handoff's fonts.css).
+  google_fonts: ^6.2.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

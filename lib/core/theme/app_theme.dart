@@ -1,5 +1,6 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Builds light/dark [ThemeData] from a seed or dynamic [ColorScheme].
 /// Dynamic color (Material You) is wired up in `main.dart` via
@@ -30,10 +31,14 @@ abstract final class AppTheme {
   }
 
   static ThemeData _build(ColorScheme scheme) {
-    return ThemeData(
-      colorScheme: scheme,
-      useMaterial3: true,
-      brightness: scheme.brightness,
+    final base = ThemeData(colorScheme: scheme, useMaterial3: true, brightness: scheme.brightness);
+    return base.copyWith(
+      // "Emphatic Typography" (UI/UX plan) calls for a variable font that
+      // can stretch/compress weight — Roboto Flex substitutes for the
+      // plan's unavailable Google Sans Flex (see the Claude Design
+      // handoff's fonts.css substitution note).
+      textTheme: GoogleFonts.robotoFlexTextTheme(base.textTheme),
+      primaryTextTheme: GoogleFonts.robotoFlexTextTheme(base.primaryTextTheme),
     );
   }
 }
