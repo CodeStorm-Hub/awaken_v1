@@ -26,7 +26,7 @@ void main() {
 
     await tester.pumpWidget(wrap(const AlarmListPage()));
 
-    expect(find.text('No alarms scheduled.'), findsOneWidget);
+    expect(find.text('No alarms scheduled'), findsOneWidget);
   });
 
   testWidgets('shows a scheduled alarm', (tester) async {
@@ -41,6 +41,7 @@ void main() {
     await tester.pumpWidget(wrap(const AlarmListPage()));
 
     expect(find.text('07:00'), findsOneWidget);
-    expect(find.text('squat · 20 reps · One-time'), findsOneWidget);
+    expect(find.text('20 squats'), findsOneWidget);
+    expect(find.text('One-time'), findsOneWidget);
   });
 }

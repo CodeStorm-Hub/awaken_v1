@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/theme/expressive_widgets.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../domain/entities/battery_exemption_status.dart';
 import '../../domain/usecases/check_battery_exemption_status.dart';
@@ -49,75 +50,199 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
     if (mounted) setState(() => _status = status);
   }
 
+  String _capitalize(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+
   @override
   Widget build(BuildContext context) {
     final status = _status;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final showOemStep = status != null && status.isAggressiveOem && !status.isExempt;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Keep alarms reliable')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
+      backgroundColor: scheme.surface,
+      body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Android can silently stop apps in the background to save '
-              'power. If that happens to Awaken, your alarm may not ring. '
-              'Allowing unrestricted battery usage keeps it reliable.',
-            ),
-            const SizedBox(height: 24),
-            if (status == null)
-              const Center(child: CircularProgressIndicator())
-            else ...[
-              Row(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    status.isExempt ? Icons.check_circle : Icons.warning_amber,
-                    color: status.isExempt ? Colors.green : Colors.orange,
+                  ExpressiveFlower(
+                    size: 64,
+                    color: scheme.secondaryContainer,
+                    child: Icon(
+                      Icons.battery_charging_full,
+                      size: 30,
+                      color: scheme.onSecondaryContainer,
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      status.isExempt
-                          ? 'Battery optimization exemption granted.'
-                          : 'Battery optimization is still restricting Awaken.',
+                  const SizedBox(height: 14),
+                  Text(
+                    'Keep alarms reliable',
+                    style: TextStyle(
+                      fontSize: 30,
+                      height: 36 / 30,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.4,
+                      color: scheme.onSurface,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              if (!status.isExempt)
-                FilledButton(
-                  onPressed: () async {
-                    await getIt<RequestBatteryExemption>()(const NoParams());
-                    await _refreshStatus();
-                  },
-                  child: const Text('Allow unrestricted battery usage'),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Android can silently stop apps in the background to save '
+                      'power. If that happens to Awaken, your alarm may not ring. '
+                      'Allowing unrestricted battery usage keeps it reliable.',
+                      style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                    if (status == null)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 36),
+                        child: Center(child: ExpressiveLoader()),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.only(top: 20),
+                        child: Column(
+                          children: [
+                            _StatusRow(
+                              radius: showOemStep
+                                  ? const BorderRadius.vertical(
+                                      top: Radius.circular(20),
+                                      bottom: Radius.circular(8),
+                                    )
+                                  : BorderRadius.circular(20),
+                              bg: status.isExempt ? scheme.primaryContainer : const Color(0xFFFFE08C),
+                              fg: status.isExempt ? scheme.onPrimaryContainer : const Color(0xFF2A1F00),
+                              icon: status.isExempt ? Icons.check_circle : Icons.warning,
+                              title: status.isExempt ? 'Exemption granted' : 'Still restricted',
+                              subtitle: status.isExempt
+                                  ? 'Battery optimization exemption granted.'
+                                  : 'Battery optimization is still restricting Awaken.',
+                              actionLabel: status.isExempt ? null : 'Allow',
+                              onAction: status.isExempt
+                                  ? null
+                                  : () async {
+                                      await getIt<RequestBatteryExemption>()(const NoParams());
+                                      await _refreshStatus();
+                                    },
+                            ),
+                            if (showOemStep) ...[
+                              const SizedBox(height: 3),
+                              _StatusRow(
+                                radius: const BorderRadius.vertical(
+                                  top: Radius.circular(8),
+                                  bottom: Radius.circular(20),
+                                ),
+                                bg: scheme.surfaceContainerHigh,
+                                fg: scheme.onSurface,
+                                icon: Icons.settings,
+                                iconColor: scheme.onSurfaceVariant,
+                                title: '${_capitalize(status.manufacturer)} extra step',
+                                subtitle:
+                                    '${_capitalize(status.manufacturer)} devices often need an '
+                                    'extra step: allow Awaken to auto-start in the background.',
+                                actionLabel: 'Open',
+                                outlined: true,
+                                onAction: () => getIt<OpenOemAutostartSettings>()(const NoParams()),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
-              if (status.isAggressiveOem) ...[
-                const SizedBox(height: 16),
-                Text(
-                  '${_capitalize(status.manufacturer)} devices often need an extra '
-                  'step: allow Awaken to auto-start in the background.',
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(56),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  ),
+                  onPressed: widget.onContinue,
+                  child: const Text('Continue'),
                 ),
-                const SizedBox(height: 8),
-                OutlinedButton(
-                  onPressed: () async {
-                    await getIt<OpenOemAutostartSettings>()(const NoParams());
-                  },
-                  child: Text('Open ${_capitalize(status.manufacturer)} settings'),
-                ),
-              ],
-            ],
-            const Spacer(),
-            FilledButton.tonal(
-              onPressed: widget.onContinue,
-              child: const Text('Continue'),
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  String _capitalize(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+class _StatusRow extends StatelessWidget {
+  const _StatusRow({
+    required this.radius,
+    required this.bg,
+    required this.fg,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.iconColor,
+    this.actionLabel,
+    this.onAction,
+    this.outlined = false,
+  });
+
+  final BorderRadius radius;
+  final Color bg;
+  final Color fg;
+  final IconData icon;
+  final Color? iconColor;
+  final String title;
+  final String subtitle;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final bool outlined;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(color: bg, borderRadius: radius),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 26, color: iconColor ?? fg),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: fg)),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 13, color: fg.withValues(alpha: 0.85)),
+                ),
+              ],
+            ),
+          ),
+          if (actionLabel != null)
+            outlined
+                ? OutlinedButton(onPressed: onAction, child: Text(actionLabel!))
+                : FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: fg, foregroundColor: bg),
+                    onPressed: onAction,
+                    child: Text(actionLabel!),
+                  ),
+        ],
+      ),
+    );
+  }
 }
