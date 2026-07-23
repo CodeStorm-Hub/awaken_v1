@@ -79,6 +79,21 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
   }
 
   void _onPosition(GeoPosition position) {
+    // Real bug found via live device/emulator testing: `kalman_dr`'s
+    // `DeadReckoningProvider` transparently keeps emitting *extrapolated*
+    // positions on the same `positions` stream once real GPS has been lost
+    // for `gpsTimeout` (3s) — without this check, those synthetic
+    // "phantom movement" fixes were being accumulated into `distanceMeters`
+    // and `points` exactly like real GPS, letting a run's distance grow (and
+    // even close a loop) with zero actual movement, e.g. walking into a
+    // tunnel/underpass. Territory capture must only reward verified real
+    // movement, so extrapolated fixes are dropped from the tracked path
+    // entirely — surfaced to the user as degraded GPS quality instead.
+    if (_locationProvider?.isDrActive ?? false) {
+      _emit(_state.copyWith(gpsQuality: GpsQuality.poor));
+      return;
+    }
+
     final quality = GpsQuality.fromAccuracyMeters(position.accuracy);
     final point = TrackPoint(
       latitude: position.latitude,

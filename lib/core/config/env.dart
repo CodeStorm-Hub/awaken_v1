@@ -17,33 +17,24 @@ abstract final class Env {
   static String get supabasePublishableKey =>
       _require('SUPABASE_PUBLISHABLE_KEY');
 
-  /// Primary tile provider URL template for the territory map (plan C3 —
-  /// never the OpenStreetMap public tile server in production). Optional:
-  /// unset until a free-tier provider key is provisioned, in which case the
-  /// map shows a "map tiles not configured" state instead of a blank/broken
-  /// map. Must be a **raster** XYZ template (`{z}/{x}/{y}`) — `flutter_map`'s
-  /// plain `TileLayer` renders raster tiles only. Note: OpenFreeMap serves
-  /// vector tiles (a MapLibre `style.json`), not raster XYZ, so it cannot be
-  /// used here directly; wiring it up would need the `vector_map_tiles`
-  /// package as a separate, larger integration — tracked as a follow-up, not
-  /// done as part of this fallback chain. Raster-capable free-tier options:
-  /// MapTiler, Stadia Maps, Thunderforest. Include the API key directly in
-  /// the URL template (most providers' convention), e.g.
-  /// `https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=XXX`.
-  static String? get mapTileUrlTemplate => dotenv.maybeGet('MAP_TILE_URL_TEMPLATE');
+  /// MapLibre style URL for the territory map (plan C3 — never the
+  /// OpenStreetMap public raster tile server in production). Points at a
+  /// MapLibre `style.json` — vector tiles, not raster XYZ — rendered via
+  /// `maplibre_gl`'s `MapLibreMap` widget. Defaults to OpenFreeMap's
+  /// "Liberty" style (free, no API key, commercial use permitted — see
+  /// openfreemap.org) so the map works out of the box; override for a
+  /// self-hosted or commercial style. Attribution is baked into the style
+  /// document itself and rendered by the map automatically — no separate
+  /// attribution string needed, unlike the old raster-tile setup.
+  static String get mapStyleUrl =>
+      dotenv.maybeGet('MAP_STYLE_URL') ?? 'https://tiles.openfreemap.org/styles/liberty';
 
-  static String get mapTileAttribution =>
-      dotenv.maybeGet('MAP_TILE_ATTRIBUTION') ?? 'Map data © contributors';
-
-  /// Secondary raster tile provider, used only when the primary's tiles
-  /// start failing to load (see `_ResilientTileLayer` in `territory_map.dart`)
-  /// — insurance against a single provider's outage/rate-limit silently
-  /// blanking the map for every user, since neither of the two free-tier
-  /// hosted options (MapTiler/OpenFreeMap-class services) commits to an SLA.
-  static String? get mapTileFallbackUrlTemplate => dotenv.maybeGet('MAP_TILE_FALLBACK_URL_TEMPLATE');
-
-  static String get mapTileFallbackAttribution =>
-      dotenv.maybeGet('MAP_TILE_FALLBACK_ATTRIBUTION') ?? mapTileAttribution;
+  /// Optional second style URL to fall back to manually (e.g. in
+  /// `.env.client`) if the primary style host has an outage — MapLibre's
+  /// plugin API doesn't expose a per-tile error hook to automate this
+  /// switch the way the old raster `TileLayer.errorTileCallback` did, so
+  /// this is a manual override, not an automatic runtime fallback.
+  static String? get mapStyleFallbackUrl => dotenv.maybeGet('MAP_STYLE_FALLBACK_URL');
 
   /// Web/server OAuth client id (Google Cloud Console "Web application"
   /// type) — this is the audience `GoogleSignIn.instance.initialize`'s

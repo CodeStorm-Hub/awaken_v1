@@ -1,26 +1,30 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 
+import '../../../../core/config/env.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/theme/expressive_widgets.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
 import '../../domain/entities/geo_bounds.dart';
 import '../../domain/entities/territory.dart';
 import '../../domain/usecases/refresh_territories.dart';
 import '../../domain/usecases/watch_owned_area.dart';
 import '../../domain/usecases/watch_territories.dart';
-import '../widgets/territory_map_tiles.dart';
+import '../widgets/territory_map_style.dart';
 import 'active_run_page.dart';
 
 /// Territory map (plan §6 Phase 5c, redesigned per the territory feature
-/// review). Real `flutter_map` rendering of server-authoritative territory
-/// polygons, now bbox-queried against the current viewport (closes the
-/// review's flagged gap — was a flat most-recent-200 scan) and backed by a
-/// disk tile cache + fallback provider (`ResilientTerritoryTileLayer`) so
-/// the map keeps working offline or through a tile-host outage.
+/// review). Real vector-tile rendering via `maplibre_gl` — replaces the
+/// earlier `flutter_map` raster setup, which couldn't consume OpenFreeMap's
+/// tiles (vector-only) without a much larger integration. The `MapLibreMap`
+/// widget is built exactly once and never rebuilt from state changes;
+/// territory polygons/markers are synced onto it *imperatively* via the
+/// controller (`addFill`/`removeFills`) so the native map view is never
+/// torn down and re-created — that rebuild-on-every-change pattern was the
+/// direct cause of this page's earlier map/GPS-page choppiness.
 class TerritoryPage extends StatefulWidget {
   const TerritoryPage({super.key});
 
@@ -29,11 +33,11 @@ class TerritoryPage extends StatefulWidget {
 }
 
 class _TerritoryPageState extends State<TerritoryPage> {
-  final _mapController = MapController();
-  Timer? _refreshDebounce;
+  MapLibreMapController? _controller;
+  StreamSubscription<List<Territory>>? _territoriesSub;
+  final _fillsByTerritoryId = <String, List<Fill>>{};
+  List<Territory> _lastTerritories = const [];
 
-  // Falls back to a neutral world view until a fix arrives — avoids
-  // centering on (0,0) "null island" while permission/location resolves.
   LatLng _center = const LatLng(20, 0);
   bool _hasFix = false;
   bool _showRivalTerritory = true;
@@ -44,6 +48,12 @@ class _TerritoryPageState extends State<TerritoryPage> {
     unawaited(_locateSelf());
   }
 
+  @override
+  void dispose() {
+    unawaited(_territoriesSub?.cancel());
+    super.dispose();
+  }
+
   Future<void> _locateSelf() async {
     try {
       var permission = await Geolocator.checkPermission();
@@ -51,7 +61,6 @@ class _TerritoryPageState extends State<TerritoryPage> {
         permission = await Geolocator.requestPermission();
       }
       if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-        _refreshForCurrentView();
         return;
       }
       final position = await Geolocator.getCurrentPosition(
@@ -62,41 +71,106 @@ class _TerritoryPageState extends State<TerritoryPage> {
         _center = LatLng(position.latitude, position.longitude);
         _hasFix = true;
       });
-      _mapController.move(_center, 15);
+      final controller = _controller;
+      if (controller != null) {
+        await controller.animateCamera(CameraUpdate.newLatLngZoom(_center, 15));
+        await _syncCurrentPositionMarker();
+      }
     } catch (_) {
       // Best-effort centering only — a failed/denied fix just keeps the
       // fallback view; the map (and starting a run) still works.
-    } finally {
-      _refreshForCurrentView();
     }
   }
 
-  void _refreshForCurrentView() {
-    final bounds = _mapController.camera.visibleBounds;
+  Circle? _positionMarker;
+
+  Future<void> _syncCurrentPositionMarker() async {
+    final controller = _controller;
+    if (controller == null || !_hasFix) return;
+    final scheme = Theme.of(context).colorScheme;
+    if (_positionMarker == null) {
+      _positionMarker = await controller.addCircle(
+        CircleOptions(
+          geometry: _center,
+          circleRadius: 7,
+          circleColor: _colorToHex(scheme.primary),
+          circleStrokeColor: _colorToHex(scheme.surface),
+          circleStrokeWidth: 2,
+        ),
+      );
+    } else {
+      await controller.updateCircle(_positionMarker!, CircleOptions(geometry: _center));
+    }
+  }
+
+  Future<void> _onMapCreated(MapLibreMapController controller) async {
+    _controller = controller;
+  }
+
+  Future<void> _onStyleLoaded() async {
+    if (_hasFix) {
+      await _controller?.animateCamera(CameraUpdate.newLatLngZoom(_center, 15));
+      await _syncCurrentPositionMarker();
+    }
+    await _refreshForCurrentView();
+    _territoriesSub = getIt<WatchTerritories>()().listen(_onTerritoriesChanged);
+  }
+
+  void _onTerritoriesChanged(List<Territory> territories) {
+    _lastTerritories = territories;
+    unawaited(_redrawFills());
+  }
+
+  Future<void> _redrawFills() async {
+    final controller = _controller;
+    if (controller == null) return;
+    final scheme = Theme.of(context).colorScheme;
+
+    final allFills = _fillsByTerritoryId.values.expand((f) => f).toList();
+    if (allFills.isNotEmpty) {
+      await controller.removeFills(allFills);
+    }
+    _fillsByTerritoryId.clear();
+
+    for (final territory in _lastTerritories) {
+      if (!territory.isMine && !_showRivalTerritory) continue;
+      final rings = TerritoryMapStyle.territoryRingsToLatLng(territory);
+      final fills = <Fill>[];
+      for (final ring in rings) {
+        final fill = await controller.addFill(
+          FillOptions(
+            geometry: [ring],
+            fillColor: _colorToHex(territory.isMine ? scheme.primary : scheme.tertiary),
+            fillOpacity: 0.45,
+            fillOutlineColor: _colorToHex(territory.isMine ? scheme.primary : scheme.tertiary),
+          ),
+        );
+        fills.add(fill);
+      }
+      _fillsByTerritoryId[territory.id] = fills;
+    }
+  }
+
+  Future<void> _refreshForCurrentView() async {
+    final controller = _controller;
+    if (controller == null) return;
+    final bounds = await controller.getVisibleRegion();
     unawaited(
       getIt<RefreshTerritories>()(
         GeoBounds(
-          minLat: bounds.southWest.latitude,
-          minLng: bounds.southWest.longitude,
-          maxLat: bounds.northEast.latitude,
-          maxLng: bounds.northEast.longitude,
+          minLat: bounds.southwest.latitude,
+          minLng: bounds.southwest.longitude,
+          maxLat: bounds.northeast.latitude,
+          maxLng: bounds.northeast.longitude,
         ),
       ),
     );
   }
 
-  void _onMapEvent(MapEvent event) {
-    if (event is MapEventMoveEnd || event is MapEventFlingAnimationEnd) {
-      _refreshDebounce?.cancel();
-      _refreshDebounce = Timer(const Duration(milliseconds: 500), _refreshForCurrentView);
-    }
-  }
-
-  @override
-  void dispose() {
-    _refreshDebounce?.cancel();
-    _mapController.dispose();
-    super.dispose();
+  Future<void> _recenter() async {
+    final controller = _controller;
+    if (controller == null) return;
+    await controller.animateCamera(CameraUpdate.newLatLngZoom(_center, 15));
   }
 
   @override
@@ -147,85 +221,77 @@ class _TerritoryPageState extends State<TerritoryPage> {
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(28),
-                  child: Container(
-                    color: scheme.surfaceContainerLow,
-                    child: Stack(
-                      children: [
-                        StreamBuilder<List<Territory>>(
-                          stream: getIt<WatchTerritories>()(),
-                          builder: (context, snapshot) {
-                            final territories = snapshot.data ?? const [];
-                            return _Map(
-                              controller: _mapController,
-                              center: _center,
-                              hasFix: _hasFix,
-                              territories: territories,
-                              showRivalTerritory: _showRivalTerritory,
-                              scheme: scheme,
-                              onMapEvent: _onMapEvent,
-                            );
-                          },
+                  child: Stack(
+                    children: [
+                      MapLibreMap(
+                        styleString: Env.mapStyleUrl,
+                        initialCameraPosition: const CameraPosition(target: LatLng(20, 0), zoom: 2),
+                        onMapCreated: _onMapCreated,
+                        onStyleLoadedCallback: _onStyleLoaded,
+                        onCameraIdle: () => unawaited(_refreshForCurrentView()),
+                        myLocationEnabled: false,
+                        logoEnabled: false,
+                        attributionButtonPosition: AttributionButtonPosition.bottomLeft,
+                      ),
+                      Positioned(
+                        top: 14,
+                        left: 14,
+                        right: 14,
+                        child: Row(
+                          children: [
+                            _OwnedAreaChip(scheme: scheme),
+                            const Spacer(),
+                            _TerritoryLegend(scheme: scheme, showRivalTerritory: _showRivalTerritory),
+                          ],
                         ),
-                        Positioned(
-                          top: 14,
-                          left: 14,
-                          right: 14,
-                          child: Row(
-                            children: [
-                              _OwnedAreaChip(scheme: scheme),
-                              const Spacer(),
-                              _TerritoryLegend(scheme: scheme, showRivalTerritory: _showRivalTerritory),
-                            ],
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 14,
-                          left: 0,
-                          right: 0,
-                          child: Center(
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: scheme.surfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(999),
-                                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6)],
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _RoundIconButton(
-                                    icon: Icons.my_location,
-                                    tooltip: 'Center map',
-                                    onTap: () => _mapController.move(_center, 15),
+                      ),
+                      Positioned(
+                        bottom: 14,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: scheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(999),
+                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6)],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _RoundIconButton(
+                                  icon: Icons.my_location,
+                                  tooltip: 'Center map',
+                                  onTap: _recenter,
+                                ),
+                                FilledButton(
+                                  style: FilledButton.styleFrom(
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                                   ),
-                                  FilledButton(
-                                    style: FilledButton.styleFrom(
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-                                    ),
-                                    onPressed: () => Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => const ActiveRunPage()),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: const [
-                                        Icon(Icons.directions_run, size: 20),
-                                        SizedBox(width: 8),
-                                        Text('Start run'),
-                                      ],
-                                    ),
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const ActiveRunPage()),
                                   ),
-                                  _RoundIconButton(
-                                    icon: Icons.layers,
-                                    tooltip: 'Map layers',
-                                    onTap: () => _showLayersSheet(context),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Icon(Icons.directions_run, size: 20),
+                                      SizedBox(width: 8),
+                                      Text('Start run'),
+                                    ],
                                   ),
-                                ],
-                              ),
+                                ),
+                                _RoundIconButton(
+                                  icon: Icons.layers,
+                                  tooltip: 'Map layers',
+                                  onTap: () => _showLayersSheet(context),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -271,6 +337,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
                       onChanged: (value) {
                         setSheetState(() => _showRivalTerritory = value);
                         setState(() => _showRivalTerritory = value);
+                        unawaited(_redrawFills());
                       },
                     ),
                   ],
@@ -284,101 +351,9 @@ class _TerritoryPageState extends State<TerritoryPage> {
   }
 }
 
-class _Map extends StatelessWidget {
-  const _Map({
-    required this.controller,
-    required this.center,
-    required this.hasFix,
-    required this.territories,
-    required this.showRivalTerritory,
-    required this.scheme,
-    required this.onMapEvent,
-  });
-
-  final MapController controller;
-  final LatLng center;
-  final bool hasFix;
-  final List<Territory> territories;
-  final bool showRivalTerritory;
-  final ColorScheme scheme;
-  final void Function(MapEvent event) onMapEvent;
-
-  @override
-  Widget build(BuildContext context) {
-    return FlutterMap(
-      mapController: controller,
-      options: MapOptions(
-        initialCenter: center,
-        initialZoom: hasFix ? 15 : 2,
-        onMapEvent: onMapEvent,
-      ),
-      children: [
-        if (isAnyTileProviderConfigured) const ResilientTerritoryTileLayer() else const _TilesNotConfiguredNotice(),
-        PolygonLayer(
-          polygons: [
-            for (final territory in territories)
-              if (territory.isMine || showRivalTerritory)
-                for (final ring in territory.rings)
-                  Polygon(
-                    points: ring,
-                    color: (territory.isMine ? scheme.primaryContainer : scheme.tertiaryContainer)
-                        .withValues(alpha: 0.55),
-                    borderColor: territory.isMine ? scheme.primary : scheme.tertiary,
-                    borderStrokeWidth: 2,
-                  ),
-          ],
-        ),
-        if (hasFix)
-          MarkerLayer(
-            markers: [
-              Marker(
-                point: center,
-                width: 22,
-                height: 22,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: scheme.primary,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: scheme.surface, width: 3),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        const ResilientTerritoryAttribution(),
-      ],
-    );
-  }
-}
-
-class _TilesNotConfiguredNotice extends StatelessWidget {
-  const _TilesNotConfiguredNotice();
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    // Anchored below the chip row rather than at the bottom of the map: the
-    // bottom edge is where the floating locate/Start-run/layers control bar
-    // sits, and a bottom-pinned notice there gets visually cut off/hidden
-    // behind it (found via live device testing).
-    return Positioned(
-      top: 62,
-      left: 14,
-      right: 14,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerHigh.withValues(alpha: 0.92),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          'Map tiles not configured — set MAP_TILE_URL_TEMPLATE in .env.client. '
-          'Territory data still loads.',
-          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-        ),
-      ),
-    );
-  }
+String _colorToHex(Color color) {
+  final argb = color.toARGB32().toRadixString(16).padLeft(8, '0');
+  return '#${argb.substring(2)}';
 }
 
 class _OwnedAreaChip extends StatelessWidget {
@@ -415,9 +390,6 @@ class _OwnedAreaChip extends StatelessWidget {
   }
 }
 
-/// Small color-key so "which land is mine vs. a rival's" is legible without
-/// having to already know the color convention — a gap in the previous
-/// design (the polygon colors existed but were never explained on-screen).
 class _TerritoryLegend extends StatelessWidget {
   const _TerritoryLegend({required this.scheme, required this.showRivalTerritory});
 

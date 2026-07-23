@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -11,7 +10,6 @@ import 'features/alarm/data/datasources/alarm_local_datasource.dart';
 import 'features/alarm/domain/usecases/reconcile_recurring_alarms.dart';
 import 'features/alarm/domain/usecases/rearm_alarms_from_cache.dart';
 import 'features/profile/domain/usecases/ensure_auth_session.dart';
-import 'features/territory/presentation/widgets/territory_map_tiles.dart';
 import 'sync/outbox/sync_worker.dart';
 import 'sync/pull/pull_down_sync.dart';
 
@@ -24,13 +22,6 @@ Future<void> bootstrap({required String envFile}) async {
     publishableKey: Env.supabasePublishableKey,
   );
   await configureDependencies();
-
-  // Offline tile persistence (territory feature review gap #3 — flutter_map
-  // has no built-in disk cache) — must init before any TileLayer builds, so
-  // it's here alongside the other one-time startup work rather than lazily
-  // inside TerritoryPage.
-  await FMTCObjectBoxBackend().initialise();
-  await FMTCStore(territoryTileStoreName).manage.create();
 
   // Android 13+ blocks ALL notifications — including the alarm's
   // full-screen-intent notification — until POST_NOTIFICATIONS is granted
