@@ -100,17 +100,15 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     final latLngPoints = [for (final p in points) TerritoryMapStyle.trackPointToLatLng(p)];
     final current = latLngPoints.last;
 
-    if (_startMarker == null) {
-      _startMarker = await controller.addCircle(
-        CircleOptions(
-          geometry: latLngPoints.first,
-          circleRadius: 6,
-          circleColor: _colorToHex(scheme.tertiary),
-          circleStrokeColor: _colorToHex(scheme.surface),
-          circleStrokeWidth: 2,
-        ),
-      );
-    }
+    _startMarker ??= await controller.addCircle(
+      CircleOptions(
+        geometry: latLngPoints.first,
+        circleRadius: 6,
+        circleColor: _colorToHex(scheme.tertiary),
+        circleStrokeColor: _colorToHex(scheme.surface),
+        circleStrokeWidth: 2,
+      ),
+    );
 
     if (_currentMarker == null) {
       _currentMarker = await controller.addCircle(

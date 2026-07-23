@@ -6,7 +6,6 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../../core/config/env.dart';
 import '../../../../core/di/injection.dart';
-import '../../../../core/theme/expressive_widgets.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
 import '../../domain/entities/geo_bounds.dart';
 import '../../domain/entities/territory.dart';
