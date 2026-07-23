@@ -26,15 +26,29 @@ abstract final class Env {
   /// self-hosted or commercial style. Attribution is baked into the style
   /// document itself and rendered by the map automatically — no separate
   /// attribution string needed, unlike the old raster-tile setup.
-  static String get mapStyleUrl =>
-      dotenv.maybeGet('MAP_STYLE_URL') ?? 'https://tiles.openfreemap.org/styles/liberty';
+  static String get mapStyleUrl {
+    // Real bug found via live emulator testing: `.env.client` deliberately
+    // ships `MAP_STYLE_URL=` (present, empty — a placeholder for later
+    // overriding) rather than omitting the key. `dotenv.maybeGet` returns
+    // `''` for that, not `null`, so a plain `?? default` never triggers and
+    // `MapLibreMap` was constructed with `styleString: ''`
+    // ("MapLibreMapController: setStyleString - string empty or null" in
+    // logcat, map renders solid black). Must explicitly check `isEmpty` too
+    // — same pattern `_require` below already uses for required keys.
+    final value = dotenv.maybeGet('MAP_STYLE_URL');
+    if (value == null || value.isEmpty) return 'https://tiles.openfreemap.org/styles/liberty';
+    return value;
+  }
 
   /// Optional second style URL to fall back to manually (e.g. in
   /// `.env.client`) if the primary style host has an outage — MapLibre's
   /// plugin API doesn't expose a per-tile error hook to automate this
   /// switch the way the old raster `TileLayer.errorTileCallback` did, so
   /// this is a manual override, not an automatic runtime fallback.
-  static String? get mapStyleFallbackUrl => dotenv.maybeGet('MAP_STYLE_FALLBACK_URL');
+  static String? get mapStyleFallbackUrl {
+    final value = dotenv.maybeGet('MAP_STYLE_FALLBACK_URL');
+    return (value == null || value.isEmpty) ? null : value;
+  }
 
   /// Web/server OAuth client id (Google Cloud Console "Web application"
   /// type) — this is the audience `GoogleSignIn.instance.initialize`'s
