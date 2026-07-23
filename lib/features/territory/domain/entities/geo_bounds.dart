@@ -1,10 +1,10 @@
 import 'package:equatable/equatable.dart';
 
 /// A plain lat/lng bounding box — the domain layer's own type rather than
-/// reusing `flutter_map`'s `LatLngBounds`, since `domain/` has a "zero
-/// Flutter imports" convention (see CLAUDE.md) and `flutter_map` depends on
-/// Flutter. Presentation converts a `MapController`'s `LatLngBounds` into
-/// this at the call site.
+/// reusing `maplibre_gl`'s `LatLngBounds`, since `domain/` has a "zero
+/// Flutter imports" convention (see CLAUDE.md) and `maplibre_gl` depends on
+/// Flutter. Presentation converts a `MapLibreMapController.getVisibleRegion()`
+/// result into this at the call site.
 class GeoBounds extends Equatable {
   const GeoBounds({
     required this.minLat,
