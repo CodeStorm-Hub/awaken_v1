@@ -15,18 +15,28 @@ import '../../domain/entities/run_capture_result.dart';
 import '../../domain/entities/run_track_state.dart';
 import '../../domain/entities/track_point.dart';
 import '../../domain/repositories/run_tracking_repository.dart';
-import '../datasources/geolocator_location_provider.dart';
+import '../datasources/location_provider_factory.dart';
 import '../datasources/run_foreground_service.dart';
 import '../mappers/path_simplifier.dart';
 
 @LazySingleton(as: RunTrackingRepository)
 class RunTrackingRepositoryImpl implements RunTrackingRepository {
-  RunTrackingRepositoryImpl(this._foregroundService, this._localWriter, this._syncWorker, this._db);
+  RunTrackingRepositoryImpl(
+    this._foregroundService,
+    this._localWriter,
+    this._syncWorker,
+    this._db,
+    this._locationProviderFactory,
+  );
 
   final RunForegroundService _foregroundService;
   final LocalWriter _localWriter;
   final SyncWorker _syncWorker;
   final AppDatabase _db;
+
+  /// Real GPS in production, a fixture-replaying provider in `main_e2e.dart`
+  /// builds — see `RegisterModule.locationProviderFactory`.
+  final LocationProviderFactory _locationProviderFactory;
 
   final _stateController = StreamController<RunTrackState>.broadcast();
   RunTrackState _state = const RunTrackState();
@@ -57,7 +67,7 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     await WakelockPlus.enable();
 
     final provider = DeadReckoningProvider(
-      inner: GeolocatorLocationProvider(),
+      inner: _locationProviderFactory.create(),
       mode: DeadReckoningMode.kalman,
     );
     _locationProvider = provider;
@@ -70,7 +80,10 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
       return;
     }
 
-    _positionSub = provider.positions.listen(_onPosition, onError: _onPositionError);
+    _positionSub = provider.positions.listen(
+      _onPosition,
+      onError: _onPositionError,
+    );
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       final started = _startedAt;
       if (started == null) return;
@@ -115,7 +128,8 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
       point.latitude,
       point.longitude,
     );
-    final segmentSeconds = point.timestamp.difference(previous.timestamp).inMilliseconds / 1000.0;
+    final segmentSeconds =
+        point.timestamp.difference(previous.timestamp).inMilliseconds / 1000.0;
 
     // Client-side velocity gate (plan H7): a physically-impossible implied
     // speed between consecutive fixes is dropped rather than accepted into
@@ -132,7 +146,8 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     // undefined/unverifiable, not "automatically fine" — must drop the fix
     // in that case too, not just when the computed speed is too high.
     if (segmentSeconds <= 0 ||
-        segmentMeters / segmentSeconds > AppConstants.maxSustainedSpeedMetersPerSecond) {
+        segmentMeters / segmentSeconds >
+            AppConstants.maxSustainedSpeedMetersPerSecond) {
       _emit(_state.copyWith(gpsQuality: quality));
       return;
     }
@@ -168,7 +183,11 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
 
     if (points.length < 2 || startedAt == null) {
       _emit(const RunTrackState());
-      return const RunCaptureResult(pending: false, accepted: false, rejectedReason: 'No GPS points captured');
+      return const RunCaptureResult(
+        pending: false,
+        accepted: false,
+        rejectedReason: 'No GPS points captured',
+      );
     }
 
     final simplified = PathSimplifier.simplify(points);
@@ -190,7 +209,9 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     // queued in the outbox and this just falls through to the pending case.
     await _syncWorker.drainOutbox();
 
-    final row = await (_db.select(_db.runs)..where((t) => t.id.equals(id))).getSingleOrNull();
+    final row = await (_db.select(
+      _db.runs,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
     _emit(const RunTrackState());
 
     if (row == null || row.integrityVerdict == null) {

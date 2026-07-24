@@ -93,11 +93,16 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     await _syncMapAnnotations(controller, state.points);
   }
 
-  Future<void> _syncMapAnnotations(MapLibreMapController controller, List<TrackPoint> points) async {
+  Future<void> _syncMapAnnotations(
+    MapLibreMapController controller,
+    List<TrackPoint> points,
+  ) async {
     if (points.isEmpty) return;
     final scheme = _scheme;
     if (scheme == null) return;
-    final latLngPoints = [for (final p in points) TerritoryMapStyle.trackPointToLatLng(p)];
+    final latLngPoints = [
+      for (final p in points) TerritoryMapStyle.trackPointToLatLng(p),
+    ];
     final current = latLngPoints.last;
 
     _startMarker ??= await controller.addCircle(
@@ -121,16 +126,26 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
         ),
       );
     } else {
-      await controller.updateCircle(_currentMarker!, CircleOptions(geometry: current));
+      await controller.updateCircle(
+        _currentMarker!,
+        CircleOptions(geometry: current),
+      );
     }
 
     if (latLngPoints.length >= 2) {
       if (_routeLine == null) {
         _routeLine = await controller.addLine(
-          LineOptions(geometry: latLngPoints, lineColor: _colorToHex(scheme.primary), lineWidth: 4),
+          LineOptions(
+            geometry: latLngPoints,
+            lineColor: _colorToHex(scheme.primary),
+            lineWidth: 4,
+          ),
         );
       } else {
-        await controller.updateLine(_routeLine!, LineOptions(geometry: latLngPoints));
+        await controller.updateLine(
+          _routeLine!,
+          LineOptions(geometry: latLngPoints),
+        );
       }
     }
 
@@ -143,7 +158,9 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     final controller = _controller;
     setState(() => _autoFollow = true);
     if (controller == null || _currentMarker == null) return;
-    await controller.animateCamera(CameraUpdate.newLatLngZoom(_currentMarker!.options.geometry!, 17));
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(_currentMarker!.options.geometry!, 17),
+    );
   }
 
   Future<void> _capture(RunTrackingCubit cubit) async {
@@ -154,14 +171,18 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
 
     if (result.pending) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Run saved — will sync territory once back online.')),
+        const SnackBar(
+          content: Text('Run saved — will sync territory once back online.'),
+        ),
       );
       Navigator.of(context).pop();
       return;
     }
     if (result.accepted != true) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.rejectedReason ?? "Run couldn't be captured.")),
+        SnackBar(
+          content: Text(result.rejectedReason ?? "Run couldn't be captured."),
+        ),
       );
       Navigator.of(context).pop();
       return;
@@ -198,10 +219,13 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
         backgroundColor: scheme.surface,
         body: SafeArea(
           child: BlocBuilder<RunTrackingCubit, RunTrackState>(
-            buildWhen: (previous, current) => previous.permissionDenied != current.permissionDenied,
+            buildWhen: (previous, current) =>
+                previous.permissionDenied != current.permissionDenied,
             builder: (context, gateState) {
               if (gateState.permissionDenied) {
-                return _PermissionDeniedView(onClose: () => Navigator.of(context).pop());
+                return _PermissionDeniedView(
+                  onClose: () => Navigator.of(context).pop(),
+                );
               }
 
               return BlocListener<RunTrackingCubit, RunTrackState>(
@@ -220,13 +244,19 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                               const SizedBox(width: 8),
                               Text(
                                 'Tracking run',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: scheme.onSurface),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: scheme.onSurface,
+                                ),
                               ),
                             ],
                           ),
                           BlocBuilder<RunTrackingCubit, RunTrackState>(
-                            buildWhen: (previous, current) => previous.gpsQuality != current.gpsQuality,
-                            builder: (context, state) => _GpsQualityChip(quality: state.gpsQuality),
+                            buildWhen: (previous, current) =>
+                                previous.gpsQuality != current.gpsQuality,
+                            builder: (context, state) =>
+                                _GpsQualityChip(quality: state.gpsQuality),
                           ),
                         ],
                       ),
@@ -242,19 +272,27 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                               // must never sit inside a BlocBuilder scoped to RunTrackState.
                               MapLibreMap(
                                 styleString: Env.mapStyleUrl,
-                                initialCameraPosition: const CameraPosition(target: LatLng(20, 0), zoom: 2),
+                                initialCameraPosition: const CameraPosition(
+                                  target: LatLng(20, 0),
+                                  zoom: 2,
+                                ),
                                 onMapCreated: _onMapCreated,
                                 onStyleLoadedCallback: _onStyleLoaded,
                                 myLocationEnabled: false,
                                 logoEnabled: false,
-                                attributionButtonPosition: AttributionButtonPosition.bottomLeft,
+                                attributionButtonPosition:
+                                    AttributionButtonPosition.bottomLeft,
                               ),
                               Positioned(
                                 top: 10,
                                 right: 10,
                                 child: _RoundMapButton(
-                                  icon: _autoFollow ? Icons.gps_fixed : Icons.gps_not_fixed,
-                                  tooltip: _autoFollow ? 'Following your position' : 'Recenter',
+                                  icon: _autoFollow
+                                      ? Icons.gps_fixed
+                                      : Icons.gps_not_fixed,
+                                  tooltip: _autoFollow
+                                      ? 'Following your position'
+                                      : 'Recenter',
                                   onTap: _recenter,
                                 ),
                               ),
@@ -268,8 +306,12 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                         final loopClosed = state.isLoopClosed;
                         final distanceKm = state.distanceMeters / 1000;
                         final elapsedSec = state.elapsed.inSeconds;
-                        final paceSecPerKm = distanceKm > 0.01 ? (elapsedSec / distanceKm).round() : 0;
-                        final loopProgress = (state.distanceMeters / 400).clamp(0, 1).toDouble();
+                        final paceSecPerKm = distanceKm > 0.01
+                            ? (elapsedSec / distanceKm).round()
+                            : 0;
+                        final loopProgress = (state.distanceMeters / 400)
+                            .clamp(0, 1)
+                            .toDouble();
 
                         return Column(
                           children: [
@@ -283,7 +325,9 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                       fg: scheme.onSurface,
                                       value: _fmtTime(elapsedSec),
                                       label: 'Time',
-                                      radius: const BorderRadius.horizontal(left: Radius.circular(24)),
+                                      radius: const BorderRadius.horizontal(
+                                        left: Radius.circular(24),
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 3),
@@ -300,9 +344,13 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                     child: StatTile(
                                       bg: scheme.surfaceContainerHigh,
                                       fg: scheme.onSurface,
-                                      value: paceSecPerKm > 0 ? _fmtTime(paceSecPerKm) : '--:--',
+                                      value: paceSecPerKm > 0
+                                          ? _fmtTime(paceSecPerKm)
+                                          : '--:--',
                                       label: 'Pace /km',
-                                      radius: const BorderRadius.horizontal(right: Radius.circular(24)),
+                                      radius: const BorderRadius.horizontal(
+                                        right: Radius.circular(24),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -311,25 +359,36 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                               child: TweenAnimationBuilder<double>(
-                                tween: Tween(begin: 0, end: loopClosed ? 1 : loopProgress),
+                                tween: Tween(
+                                  begin: 0,
+                                  end: loopClosed ? 1 : loopProgress,
+                                ),
                                 duration: const Duration(milliseconds: 400),
                                 curve: Curves.easeOut,
                                 builder: (context, animatedProgress, _) {
                                   return Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 18,
+                                      vertical: 14,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: scheme.surfaceContainerLow,
                                       borderRadius: BorderRadius.circular(18),
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           children: [
                                             Icon(
-                                              loopClosed ? Icons.check_circle : Icons.route,
+                                              loopClosed
+                                                  ? Icons.check_circle
+                                                  : Icons.route,
                                               size: 22,
-                                              color: loopClosed ? scheme.primary : scheme.onSurfaceVariant,
+                                              color: loopClosed
+                                                  ? scheme.primary
+                                                  : scheme.onSurfaceVariant,
                                             ),
                                             const SizedBox(width: 10),
                                             Expanded(
@@ -337,19 +396,27 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                                 loopClosed
                                                     ? 'Loop closed — ready to capture!'
                                                     : 'Keep going — return near your start point to close the loop.',
-                                                style: TextStyle(fontWeight: FontWeight.w500, color: scheme.onSurface),
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w500,
+                                                  color: scheme.onSurface,
+                                                ),
                                               ),
                                             ),
                                           ],
                                         ),
                                         const SizedBox(height: 10),
                                         ClipRRect(
-                                          borderRadius: BorderRadius.circular(999),
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
                                           child: LinearProgressIndicator(
                                             value: animatedProgress,
                                             minHeight: 6,
-                                            backgroundColor: scheme.surfaceContainerHighest,
-                                            color: loopClosed ? scheme.primary : scheme.tertiary,
+                                            backgroundColor:
+                                                scheme.surfaceContainerHighest,
+                                            color: loopClosed
+                                                ? scheme.primary
+                                                : scheme.tertiary,
                                           ),
                                         ),
                                       ],
@@ -359,30 +426,54 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                               ),
                             ),
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                16,
+                                16,
+                                20,
+                              ),
                               child: Column(
                                 children: [
                                   TweenAnimationBuilder<double>(
-                                    tween: Tween(begin: 0.96, end: loopClosed ? 1 : 0.96),
+                                    tween: Tween(
+                                      begin: 0.96,
+                                      end: loopClosed ? 1 : 0.96,
+                                    ),
                                     duration: const Duration(milliseconds: 350),
                                     curve: Curves.easeOutBack,
-                                    builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+                                    builder: (context, scale, child) =>
+                                        Transform.scale(
+                                          scale: scale,
+                                          child: child,
+                                        ),
                                     child: SizedBox(
                                       width: double.infinity,
                                       child: FilledButton(
                                         style: FilledButton.styleFrom(
-                                          minimumSize: const Size.fromHeight(60),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                          minimumSize: const Size.fromHeight(
+                                            60,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
+                                          ),
                                         ),
-                                        onPressed: (loopClosed && !_busy) ? () => _capture(cubit) : null,
+                                        onPressed: (loopClosed && !_busy)
+                                            ? () => _capture(cubit)
+                                            : null,
                                         child: _busy
                                             ? const SizedBox(
                                                 width: 22,
                                                 height: 22,
-                                                child: CircularProgressIndicator(strokeWidth: 2.5),
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2.5,
+                                                    ),
                                               )
                                             : Row(
-                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
                                                 children: const [
                                                   Icon(Icons.flag, size: 22),
                                                   SizedBox(width: 8),
@@ -393,7 +484,9 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                     ),
                                   ),
                                   TextButton(
-                                    onPressed: _busy ? null : () => _abandon(cubit),
+                                    onPressed: _busy
+                                        ? null
+                                        : () => _abandon(cubit),
                                     child: const Text('Stop without capturing'),
                                   ),
                                 ],
@@ -420,7 +513,11 @@ String _colorToHex(Color color) {
 }
 
 class _RoundMapButton extends StatelessWidget {
-  const _RoundMapButton({required this.icon, required this.tooltip, required this.onTap});
+  const _RoundMapButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String tooltip;
@@ -437,7 +534,13 @@ class _RoundMapButton extends StatelessWidget {
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
-          child: SizedBox(width: 38, height: 38, child: Icon(icon, size: 18, color: scheme.onSurface)),
+          // Was 38x38 — below WCAG 2.5.5's 44x44 minimum, found in
+          // accessibility review. Icon stays visually the same size.
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(icon, size: 18, color: scheme.onSurface),
+          ),
         ),
       ),
     );
@@ -461,12 +564,22 @@ class _GpsQualityChip extends StatelessWidget {
     return Container(
       height: 32,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(999)),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
       child: Row(
         children: [
           Icon(Icons.gps_fixed, size: 15, color: scheme.onPrimaryContainer),
           const SizedBox(width: 5),
-          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: scheme.onPrimaryContainer)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: scheme.onPrimaryContainer,
+            ),
+          ),
         ],
       ),
     );
@@ -512,13 +625,17 @@ class _PulsingDot extends StatefulWidget {
   State<_PulsingDot> createState() => _PulsingDotState();
 }
 
-class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
+class _PulsingDotState extends State<_PulsingDot>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1300))..repeat(reverse: true);
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1300),
+    )..repeat(reverse: true);
   }
 
   @override
@@ -531,7 +648,11 @@ class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderState
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: Tween(begin: 0.5, end: 1.0).animate(_controller),
-      child: Container(width: 10, height: 10, decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle)),
+      child: Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
+      ),
     );
   }
 }

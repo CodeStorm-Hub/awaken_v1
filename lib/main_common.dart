@@ -10,11 +10,20 @@ import 'features/alarm/data/datasources/alarm_local_datasource.dart';
 import 'features/alarm/domain/usecases/reconcile_recurring_alarms.dart';
 import 'features/alarm/domain/usecases/rearm_alarms_from_cache.dart';
 import 'features/profile/domain/usecases/ensure_auth_session.dart';
+import 'features/territory/data/datasources/location_provider_factory.dart';
 import 'sync/outbox/sync_worker.dart';
 import 'sync/pull/pull_down_sync.dart';
 
 /// Shared bootstrap for both flavors. See main_dev.dart / main_prod.dart.
-Future<void> bootstrap({required String envFile}) async {
+///
+/// [locationProviderOverride] is only ever passed by `main_e2e.dart` — a
+/// plain post-DI `getIt` re-registration (not an injectable environment),
+/// so it needs no code generation to swap in `ScriptedLocationProvider` for
+/// Appium E2E runs on both Android and real iOS hardware.
+Future<void> bootstrap({
+  required String envFile,
+  LocationProviderFactory? locationProviderOverride,
+}) async {
   WidgetsFlutterBinding.ensureInitialized();
   await Env.load(fileName: envFile);
   await Supabase.initialize(
@@ -22,6 +31,13 @@ Future<void> bootstrap({required String envFile}) async {
     publishableKey: Env.supabasePublishableKey,
   );
   await configureDependencies();
+
+  if (locationProviderOverride != null) {
+    getIt.unregister<LocationProviderFactory>();
+    getIt.registerLazySingleton<LocationProviderFactory>(
+      () => locationProviderOverride,
+    );
+  }
 
   // Android 13+ blocks ALL notifications — including the alarm's
   // full-screen-intent notification — until POST_NOTIFICATIONS is granted

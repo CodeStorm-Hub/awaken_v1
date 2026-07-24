@@ -40,19 +40,22 @@ class ProfilePage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
               child: Row(
                 children: [
-                  Material(
-                    color: scheme.surfaceContainerHigh,
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: () => Navigator.of(context).pop(),
-                      child: SizedBox(
-                        width: 44,
-                        height: 44,
-                        child: Icon(
-                          Icons.arrow_back,
-                          size: 22,
-                          color: scheme.onSurface,
+                  Tooltip(
+                    message: 'Back',
+                    child: Material(
+                      color: scheme.surfaceContainerHigh,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () => Navigator.of(context).pop(),
+                        child: SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: Icon(
+                            Icons.arrow_back,
+                            size: 22,
+                            color: scheme.onSurface,
+                          ),
                         ),
                       ),
                     ),
@@ -128,18 +131,24 @@ class ProfilePage extends StatelessWidget {
                                     ),
                                   ),
                                   if (isAnonymous) ...[
-                                    const SizedBox(height: 4),
-                                    FilledButton(
-                                      style: FilledButton.styleFrom(
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            999,
+                                    const SizedBox(height: 12),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton(
+                                        style: FilledButton.styleFrom(
+                                          minimumSize: const Size.fromHeight(
+                                            48,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
                                           ),
                                         ),
+                                        onPressed: () =>
+                                            _showMigrateToCloudDialog(context),
+                                        child: const Text('Migrate to cloud'),
                                       ),
-                                      onPressed: () =>
-                                          _showMigrateToCloudDialog(context),
-                                      child: const Text('Migrate to cloud'),
                                     ),
                                   ],
                                 ],
@@ -494,7 +503,7 @@ class _SettingsRow extends StatelessWidget {
                 height: 38,
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainer,
-                  borderRadius: BorderRadius.circular(13),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, size: 20, color: scheme.onSurfaceVariant),
               ),

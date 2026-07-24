@@ -78,6 +78,7 @@ flutter:
   uses-material-design: true
   assets:
     - .env.client
+    - assets/e2e/scripted_run_fixture.json
 
 dependency_overrides:
   flutter_fgbg: 0.7.1

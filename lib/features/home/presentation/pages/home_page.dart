@@ -231,8 +231,20 @@ class HomePage extends StatelessWidget {
                                     builder: (context, rankSnapshot) {
                                       final rank = rankSnapshot.data;
                                       return StatTile(
-                                        bg: scheme.surfaceContainerHigh,
-                                        fg: scheme.onSurface,
+                                        // surfaceContainerHigh (tone ~92) sat
+                                        // only ~6 tones below the page's own
+                                        // surface (~98) with zero chroma —
+                                        // visually invisible next to its
+                                        // chroma-bearing siblings
+                                        // (tertiary/secondaryContainer),
+                                        // confirmed against a live
+                                        // screenshot. primaryContainer
+                                        // completes the primary/secondary/
+                                        // tertiary triad across the row
+                                        // instead of relying on lightness
+                                        // alone to read as a tile.
+                                        bg: scheme.primaryContainer,
+                                        fg: scheme.onPrimaryContainer,
                                         icon: Icons.emoji_events,
                                         value: rank == null ? '—' : '#$rank',
                                         label: 'Squad rank',
@@ -652,16 +664,27 @@ class _NextAlarmCard extends StatelessWidget {
   }
 }
 
-/// Single merged pill for "Start run"/"View squad" — previously two separate
-/// `Container`s, each with its own asymmetric `BorderRadius.horizontal` and
-/// (for the right half) its own `Border.all()`. That combination produced a
-/// stray line where the border failed to follow the curve at the seam
-/// between the rounded outer corner and the square inner one (an Impeller
-/// border/radius rendering quirk, found via a live-screenshot review). One
-/// shared outer border + one shared radius avoids the combination entirely.
-/// Also gives "Start run" the stronger filled treatment — it's the core
-/// gamification-loop entry point and previously read as visually weaker
-/// than "View alarms" above it for no deliberate reason.
+/// "Start run" (primary) + "Squad" (secondary shortcut) as two visually
+/// distinct pills, not one split-down-the-middle segmented control.
+///
+/// Redesigned from an earlier single-pill version (shared outer border +
+/// 1px divider, equal 50/50 width) that fixed a real Impeller border-radius
+/// rendering bug but, in doing so, made two *unrelated destinations* read
+/// as mutually-exclusive options in a toggle — the visual grammar of a
+/// segmented control implies "pick one," not "here's the hero action plus
+/// a shortcut." Flagged directly by the user against a live screenshot.
+/// Fixed by giving each its own pill (own radius, own color fill) instead
+/// of a shared frame — equal-width, with the color fill (primary-filled vs.
+/// tonal-container) carrying the hierarchy instead of unequal sizing, per
+/// user preference. "Squad" is deliberately not dropped even though the
+/// bottom nav already has a Squad tab: this is a one-tap shortcut from the
+/// dashboard, the nav tab is a destination: both are legitimate, common
+/// mobile patterns (e.g. a card's own "View all" beside a tab bar entry).
+/// No custom shadow was added even though a generic mobile-UI pass would
+/// suggest one — no other pill button in this app (Squad's Create/Join,
+/// Profile's Migrate-to-cloud, `_NextAlarmCard`'s View-alarms) uses a
+/// shadow, and matching the app's own established flat-pill language wins
+/// over a one-off treatment here.
 class _QuickActionsPill extends StatelessWidget {
   const _QuickActionsPill({
     required this.onOpenTerritory,
@@ -674,71 +697,73 @@ class _QuickActionsPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: scheme.outline),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Material(
-              color: scheme.primary,
-              child: InkWell(
-                onTap: onOpenTerritory,
-                child: SizedBox(
-                  height: 52,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.directions_run,
-                        size: 20,
+    return Row(
+      children: [
+        Expanded(
+          child: Material(
+            color: scheme.primary,
+            borderRadius: BorderRadius.circular(999),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onOpenTerritory,
+              child: SizedBox(
+                height: 56,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.directions_run,
+                      size: 22,
+                      color: scheme.onPrimary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Start run',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
                         color: scheme.onPrimary,
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Start run',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: scheme.onPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-          Container(width: 1, color: scheme.outline),
-          Expanded(
-            child: Material(
-              color: scheme.surface,
-              child: InkWell(
-                onTap: onOpenSquad,
-                child: SizedBox(
-                  height: 52,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.groups, size: 20, color: scheme.onSurface),
-                      const SizedBox(width: 8),
-                      Text(
-                        'View squad',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: scheme.onSurface,
-                        ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Material(
+            color: scheme.secondaryContainer,
+            borderRadius: BorderRadius.circular(999),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onOpenSquad,
+              child: SizedBox(
+                height: 56,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.groups,
+                      size: 20,
+                      color: scheme.onSecondaryContainer,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Squad',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: scheme.onSecondaryContainer,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

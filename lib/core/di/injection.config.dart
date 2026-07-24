@@ -92,6 +92,8 @@ import '../../features/squad/domain/usecases/watch_my_squad.dart' as _i871;
 import '../../features/squad/domain/usecases/watch_squad_presence.dart'
     as _i597;
 import '../../features/squad/presentation/bloc/squad_cubit.dart' as _i635;
+import '../../features/territory/data/datasources/location_provider_factory.dart'
+    as _i427;
 import '../../features/territory/data/datasources/run_foreground_service.dart'
     as _i862;
 import '../../features/territory/data/datasources/territory_remote_datasource.dart'
@@ -169,6 +171,9 @@ _i174.GetIt init(
   gh.lazySingleton<_i1036.ConnectivityWatcher>(
     () => _i1036.ConnectivityWatcher(),
   );
+  gh.lazySingleton<_i427.LocationProviderFactory>(
+    () => _i427.GeolocatorLocationProviderFactory(),
+  );
   gh.lazySingleton<_i666.SyncWorker>(
     () => _i666.SyncWorker(
       gh<_i90.AppDatabase>(),
@@ -219,6 +224,15 @@ _i174.GetIt init(
   );
   gh.lazySingleton<_i355.LocalWriter>(
     () => _i355.LocalWriter(gh<_i90.AppDatabase>()),
+  );
+  gh.lazySingleton<_i175.RunTrackingRepository>(
+    () => _i501.RunTrackingRepositoryImpl(
+      gh<_i862.RunForegroundService>(),
+      gh<_i355.LocalWriter>(),
+      gh<_i666.SyncWorker>(),
+      gh<_i90.AppDatabase>(),
+      gh<_i427.LocationProviderFactory>(),
+    ),
   );
   gh.lazySingleton<_i162.BatteryExemptionRepository>(
     () => _i694.BatteryExemptionRepositoryImpl(gh<_i703.SystemCapabilities>()),
@@ -284,14 +298,6 @@ _i174.GetIt init(
   );
   gh.factory<_i597.WatchSquadPresence>(
     () => _i597.WatchSquadPresence(gh<_i1051.SquadRepository>()),
-  );
-  gh.lazySingleton<_i175.RunTrackingRepository>(
-    () => _i501.RunTrackingRepositoryImpl(
-      gh<_i862.RunForegroundService>(),
-      gh<_i355.LocalWriter>(),
-      gh<_i666.SyncWorker>(),
-      gh<_i90.AppDatabase>(),
-    ),
   );
   gh.factory<_i81.HasSeenOnboarding>(
     () => _i81.HasSeenOnboarding(gh<_i430.OnboardingRepository>()),

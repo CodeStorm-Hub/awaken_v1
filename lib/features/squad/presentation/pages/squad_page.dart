@@ -332,72 +332,84 @@ class _SquadLoadedView extends StatelessWidget {
                                 outer: 20,
                               ),
                             ),
-                            child: Row(
-                              children: [
-                                Stack(
-                                  clipBehavior: Clip.none,
+                            child: Semantics(
+                              label:
+                                  '${m.displayName}, live now'
+                                  '${m.activity == null || m.activity!.isEmpty ? '' : ', ${m.activity}'}',
+                              child: ExcludeSemantics(
+                                child: Row(
                                   children: [
-                                    Container(
-                                      width: 44,
-                                      height: 44,
-                                      decoration: BoxDecoration(
-                                        color: scheme.tertiaryContainer,
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          m.displayName.isEmpty
-                                              ? '?'
-                                              : m.displayName[0].toUpperCase(),
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: scheme.onTertiaryContainer,
+                                    Stack(
+                                      clipBehavior: Clip.none,
+                                      children: [
+                                        Container(
+                                          width: 44,
+                                          height: 44,
+                                          decoration: BoxDecoration(
+                                            color: scheme.tertiaryContainer,
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              m.displayName.isEmpty
+                                                  ? '?'
+                                                  : m.displayName[0]
+                                                        .toUpperCase(),
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color:
+                                                    scheme.onTertiaryContainer,
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                      ),
+                                        Positioned(
+                                          bottom: -2,
+                                          right: -2,
+                                          child: Container(
+                                            width: 12,
+                                            height: 12,
+                                            decoration: BoxDecoration(
+                                              color: scheme.primary,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color:
+                                                    scheme.surfaceContainerHigh,
+                                                width: 2,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    Positioned(
-                                      bottom: -2,
-                                      right: -2,
-                                      child: Container(
-                                        width: 12,
-                                        height: 12,
-                                        decoration: BoxDecoration(
-                                          color: scheme.primary,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: scheme.surfaceContainerHigh,
-                                            width: 2,
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            m.displayName,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: scheme.onSurface,
+                                            ),
                                           ),
-                                        ),
+                                          Text(
+                                            m.activity ?? '',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: scheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        m.displayName,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: scheme.onSurface,
-                                        ),
-                                      ),
-                                      Text(
-                                        m.activity ?? '',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: scheme.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                         );
@@ -551,42 +563,66 @@ class _LeaderboardRow extends StatelessWidget {
         decoration: BoxDecoration(color: bg, borderRadius: radius),
         child: Row(
           children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(color: rankBg, shape: BoxShape.circle),
-              child: Center(
-                child: Text(
-                  '${row.rank}',
-                  style: TextStyle(fontWeight: FontWeight.w800, color: rankFg),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    row.displayName,
-                    style: TextStyle(fontWeight: FontWeight.bold, color: fg),
+              child: Semantics(
+                label:
+                    'Rank ${row.rank}, ${row.displayName}'
+                    '${row.isYou ? ', you' : ''}, '
+                    '${row.streakTier.label}, '
+                    '${(row.areaSqm / 1000000).toStringAsFixed(2)} square kilometers',
+                child: ExcludeSemantics(
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: rankBg,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${row.rank}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: rankFg,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              row.displayName,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: fg,
+                              ),
+                            ),
+                            Text(
+                              row.streakTier.label,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: fg.withValues(alpha: 0.75),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '${(row.areaSqm / 1000000).toStringAsFixed(2)} km²',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: fg,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    row.streakTier.label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: fg.withValues(alpha: 0.75),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              '${(row.areaSqm / 1000000).toStringAsFixed(2)} km²',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                color: fg,
-                fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ),
             if (!row.isYou) ...[
