@@ -77,6 +77,7 @@ class ExpressiveFlower extends StatelessWidget {
     required this.color,
     required this.child,
     this.animatePop = false,
+    this.borderColor,
     super.key,
   });
 
@@ -88,9 +89,21 @@ class ExpressiveFlower extends StatelessWidget {
   /// keyframe) — used for celebratory/confirming moments, not static badges.
   final bool animatePop;
 
+  /// Optional outline traced on both petal squares. Without a seed-derived
+  /// color, [color] alone can land on a near-surface-tone fill (e.g.
+  /// `surfaceContainerHigh` under some dynamic-color palettes is only ~6
+  /// tones off the page background, with no chroma to fall back on) where
+  /// the whole blob silhouette disappears — confirmed against a live
+  /// screenshot, not just theoretical. A border keeps the badge shape
+  /// legible regardless of how close the fill lands to the background.
+  final Color? borderColor;
+
   @override
   Widget build(BuildContext context) {
     final petalRadius = BorderRadius.circular(size * 0.32);
+    final border = borderColor == null
+        ? null
+        : Border.all(color: borderColor!, width: 1.5);
     final blob = SizedBox(
       width: size,
       height: size,
@@ -98,7 +111,11 @@ class ExpressiveFlower extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           DecoratedBox(
-            decoration: BoxDecoration(color: color, borderRadius: petalRadius),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: petalRadius,
+              border: border,
+            ),
             child: SizedBox(width: size, height: size),
           ),
           Transform.rotate(
@@ -107,6 +124,7 @@ class ExpressiveFlower extends StatelessWidget {
               decoration: BoxDecoration(
                 color: color,
                 borderRadius: petalRadius,
+                border: border,
               ),
               child: SizedBox(width: size, height: size),
             ),

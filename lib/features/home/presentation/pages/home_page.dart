@@ -433,6 +433,13 @@ class _AchievementsRow extends StatelessWidget {
                             color: a.unlocked
                                 ? scheme.tertiaryContainer
                                 : scheme.surfaceContainerHigh,
+                            // surfaceContainerHigh alone can render
+                            // near-invisible against the page background on
+                            // some dynamic-color palettes (confirmed live) —
+                            // an outline keeps the locked badge's shape
+                            // legible without implying "almost unlocked"
+                            // the way a chroma-bearing fill would.
+                            borderColor: a.unlocked ? null : scheme.outline,
                             child: Icon(
                               a.icon,
                               size: 26,
