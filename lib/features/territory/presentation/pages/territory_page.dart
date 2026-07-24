@@ -296,10 +296,39 @@ class _TerritoryPageState extends State<TerritoryPage> {
                                     ],
                                   ),
                                 ),
-                                _RoundIconButton(
-                                  icon: Icons.layers,
-                                  tooltip: 'Map layers',
-                                  onTap: () => _showLayersSheet(context),
+                                // A badge dot when a non-default filter is
+                                // active (rival territory hidden) — found in
+                                // design critique: the icon alone gave no
+                                // indication of the current layers state.
+                                Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    _RoundIconButton(
+                                      icon: Icons.layers,
+                                      tooltip: _showRivalTerritory
+                                          ? 'Map layers'
+                                          : 'Map layers (rival territory hidden)',
+                                      onTap: () => _showLayersSheet(context),
+                                    ),
+                                    if (!_showRivalTerritory)
+                                      Positioned(
+                                        top: 4,
+                                        right: 4,
+                                        child: Container(
+                                          width: 9,
+                                          height: 9,
+                                          decoration: BoxDecoration(
+                                            color: scheme.tertiary,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color:
+                                                  scheme.surfaceContainerHigh,
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -507,16 +536,24 @@ class _RoundIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Icon(icon, size: 22, color: scheme.onSurfaceVariant),
+    // The `tooltip` field was accepted but never actually used — no
+    // `Tooltip`, no `Semantics` label anywhere — so the locate/layers
+    // buttons had zero accessible name for TalkBack. Found in accessibility
+    // review. `Tooltip` both shows on long-press and supplies the
+    // Semantics label, so it fixes both the visual and a11y gap at once.
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(icon, size: 22, color: scheme.onSurfaceVariant),
+          ),
         ),
       ),
     );
