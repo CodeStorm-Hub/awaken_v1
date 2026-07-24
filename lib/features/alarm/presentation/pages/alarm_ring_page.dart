@@ -62,45 +62,66 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
     });
 
     final cubit = context.read<AlarmCubit>();
-    final result = await navigatorKey.currentState!.push<VerificationResult>(
-      MaterialPageRoute(
-        builder: (_) => VerificationPage(exercise: widget.alarm.exerciseMode, targetReps: effectiveReps),
-      ),
-    );
-    if (result == null) {
-      // `||` short-circuits, so `!mounted` must guard setState directly —
-      // checking it only as part of this condition still let setState fire
-      // unconditionally whenever `result == null`/`!result.completed` was
-      // true, even after the ring page had already been disposed (e.g. the
-      // native alarm's own ring cycle ended while verification was up).
-      if (mounted) setState(() => _workoutStarted = false);
-      _popIfPreview();
-      return;
-    }
-
-    await cubit.completeWorkout(
-      widget.alarm,
-      verified: result.completed,
-      repsCompleted: result.repsCompleted,
-    );
-    if (!result.completed) {
-      if (mounted) setState(() => _workoutStarted = false);
-      _popIfPreview();
-      return;
-    }
-    if (!mounted) return;
-
-    final navContext = navigatorKey.currentContext;
-    if (navContext != null && navContext.mounted) {
-      await showModalBottomSheet<void>(
-        context: navContext,
-        isDismissible: false,
-        enableDrag: false,
-        backgroundColor: Colors.transparent,
-        builder: (_) => WorkoutCelebrationSheet(alarm: widget.alarm, repsCompleted: result.repsCompleted),
+    // Real bug found live: while a real alarm rings, this page is painted
+    // by `_AlarmRingOverlay` on top of the Navigator, unconditionally, as
+    // long as `ringingAlarm != null`. Pushing `VerificationPage` below
+    // did nothing visible — the camera and ML Kit were confirmed running
+    // via logcat, but the overlay kept repainting itself over it forever,
+    // permanently trapping the user on "Opening camera…" with no way to
+    // ever reach the pushed screen. This flag tells the overlay to step
+    // aside for the duration of the push; the `try`/`finally` guarantees
+    // it's cleared even if the push itself throws, so the overlay can't
+    // get stuck deferring to a route that never actually appeared.
+    cubit.setVerificationInProgress(true);
+    try {
+      final result = await navigatorKey.currentState!.push<VerificationResult>(
+        MaterialPageRoute(
+          builder: (_) => VerificationPage(
+            exercise: widget.alarm.exerciseMode,
+            targetReps: effectiveReps,
+          ),
+        ),
       );
+      if (result == null) {
+        // `||` short-circuits, so `!mounted` must guard setState directly —
+        // checking it only as part of this condition still let setState fire
+        // unconditionally whenever `result == null`/`!result.completed` was
+        // true, even after the ring page had already been disposed (e.g. the
+        // native alarm's own ring cycle ended while verification was up).
+        if (mounted) setState(() => _workoutStarted = false);
+        _popIfPreview();
+        return;
+      }
+
+      await cubit.completeWorkout(
+        widget.alarm,
+        verified: result.completed,
+        repsCompleted: result.repsCompleted,
+      );
+      if (!result.completed) {
+        if (mounted) setState(() => _workoutStarted = false);
+        _popIfPreview();
+        return;
+      }
+      if (!mounted) return;
+
+      final navContext = navigatorKey.currentContext;
+      if (navContext != null && navContext.mounted) {
+        await showModalBottomSheet<void>(
+          context: navContext,
+          isDismissible: false,
+          enableDrag: false,
+          backgroundColor: Colors.transparent,
+          builder: (_) => WorkoutCelebrationSheet(
+            alarm: widget.alarm,
+            repsCompleted: result.repsCompleted,
+          ),
+        );
+      }
+      _popIfPreview();
+    } finally {
+      cubit.setVerificationInProgress(false);
     }
-    _popIfPreview();
   }
 
   /// Only the pushed preview instance owns a poppable route — see the
@@ -131,7 +152,10 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
               const SizedBox(height: 16),
               Text(
                 'Opening camera…',
-                style: TextStyle(color: scheme.onErrorContainer, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: scheme.onErrorContainer,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -141,7 +165,10 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
 
     // Wake-up tax is global/per-user, not per-alarm (plan discussion — a
     // per-alarm tax was gameable by deleting and recreating the alarm).
-    final taxMultiplier = context.watch<AlarmCubit>().state.currentTaxMultiplier;
+    final taxMultiplier = context
+        .watch<AlarmCubit>()
+        .state
+        .currentTaxMultiplier;
     final effectiveReps = (widget.alarm.requiredReps * taxMultiplier).round();
     final scheme = Theme.of(context).colorScheme;
     final timeStr =
@@ -223,7 +250,10 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
                     if (taxMultiplier > 1.0) ...[
                       const SizedBox(height: 18),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         color: scheme.error,
                         child: Text(
                           'Wake-up tax applied (×${taxMultiplier.toStringAsFixed(1)})',
@@ -264,7 +294,8 @@ class _RingingBell extends StatefulWidget {
   State<_RingingBell> createState() => _RingingBellState();
 }
 
-class _RingingBellState extends State<_RingingBell> with TickerProviderStateMixin {
+class _RingingBellState extends State<_RingingBell>
+    with TickerProviderStateMixin {
   late final AnimationController _controller;
   // Handoff's `m3x-wiggle`: -8deg..8deg, 0.5s ease-in-out infinite — a
   // 250ms repeat(reverse: true) cycle covers exactly that 0.5s round trip.
@@ -274,13 +305,21 @@ class _RingingBellState extends State<_RingingBell> with TickerProviderStateMixi
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))
-      ..repeat();
-    _wiggleController = AnimationController(vsync: this, duration: const Duration(milliseconds: 250))
-      ..repeat(reverse: true);
-    _wiggle = Tween<double>(begin: -8 * (3.14159 / 180), end: 8 * (3.14159 / 180)).animate(
-      CurvedAnimation(parent: _wiggleController, curve: Curves.easeInOut),
-    );
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat();
+    _wiggleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    )..repeat(reverse: true);
+    _wiggle =
+        Tween<double>(
+          begin: -8 * (3.14159 / 180),
+          end: 8 * (3.14159 / 180),
+        ).animate(
+          CurvedAnimation(parent: _wiggleController, curve: Curves.easeInOut),
+        );
   }
 
   @override
@@ -313,7 +352,8 @@ class _RingingBellState extends State<_RingingBell> with TickerProviderStateMixi
           color: scheme.error,
           child: AnimatedBuilder(
             animation: _wiggle,
-            builder: (context, child) => Transform.rotate(angle: _wiggle.value, child: child),
+            builder: (context, child) =>
+                Transform.rotate(angle: _wiggle.value, child: child),
             child: Icon(Icons.alarm, size: 52, color: scheme.onError),
           ),
         ),
@@ -331,7 +371,10 @@ class _RingingBellState extends State<_RingingBell> with TickerProviderStateMixi
         child: Container(
           width: 128,
           height: 128,
-          decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: color, width: 3)),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: color, width: 3),
+          ),
         ),
       ),
     );
@@ -358,46 +401,50 @@ class _StartWorkoutButtonState extends State<_StartWorkoutButton> {
       button: true,
       label: 'Start workout to dismiss',
       child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTap: widget.onPressed,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutBack,
-        height: 64,
-        decoration: BoxDecoration(
-          color: scheme.onErrorContainer,
-          borderRadius: BorderRadius.circular(_pressed ? 24 : 999),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.videocam, size: 24, color: scheme.errorContainer),
-              const SizedBox(width: 10),
-              Flexible(
-                child: Text(
-                  'Start workout to dismiss',
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: scheme.errorContainer,
-                  ),
-                ),
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutBack,
+          height: 64,
+          decoration: BoxDecoration(
+            color: scheme.onErrorContainer,
+            borderRadius: BorderRadius.circular(_pressed ? 24 : 999),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.videocam, size: 24, color: scheme.errorContainer),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    'Start workout to dismiss',
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: scheme.errorContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
       ),
     );
   }

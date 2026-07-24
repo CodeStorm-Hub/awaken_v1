@@ -130,9 +130,14 @@ class _AlarmListPageState extends State<AlarmListPage> {
                           // A single (or few) alarm card left ~70% of the
                           // screen blank below it with a plain ListView —
                           // found in design critique, read as unfinished
-                          // rather than intentional. A ConstrainedBox with
-                          // the viewport's own minHeight lets the column
-                          // center when short but still scroll normally
+                          // rather than intentional. Centering (an earlier
+                          // fix) traded that for blank space *above* the
+                          // card instead — flagged directly against a live
+                          // screenshot as looking just as wrong, since it
+                          // pushes the single card away from the header it
+                          // belongs with. Top-aligned (this Column's default
+                          // `start`) reads as a normal growing list instead;
+                          // the ConstrainedBox still lets it scroll normally
                           // once enough alarms are scheduled to overflow.
                           : Padding(
                               padding: const EdgeInsets.fromLTRB(
@@ -149,8 +154,6 @@ class _AlarmListPageState extends State<AlarmListPage> {
                                         minHeight: constraints.maxHeight,
                                       ),
                                       child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
                                         children: [
                                           for (
                                             var index = 0;
@@ -436,86 +439,96 @@ class _AlarmCard extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-          child: Column(
+          // Delete used to sit alone in its own full-width row below
+          // everything, floating with no visual relationship to the chip
+          // line it deletes — flagged directly against a live screenshot.
+          // A first attempt stretched the right column to the card's full
+          // height and pushed delete to the bottom via `spaceBetween`, but
+          // that overshot past the chips down to the card's bottom edge
+          // (flagged again against a second screenshot). Fixed with an
+          // explicit gap sized to land the icon's glyph center — not just
+          // its larger tap-target box — level with the chips' own center.
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // Was the default `center`, harmless while this row held only
+            // the time text — now that the chips moved in beside it (for
+            // the merged-semantics fix below), `center` would shift the
+            // switch down to align with the now-taller block. `start` keeps
+            // the switch pinned to the top, matching the original layout.
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                // Was the default `center`, harmless while this row held
-                // only the time text — now that the chips moved in beside
-                // it (for the merged-semantics fix below), `center` would
-                // shift the switch down to align with the now-taller block.
-                // `start` keeps the switch pinned to the top, matching the
-                // original layout.
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Time + exercise + recurrence previously read as three
-                  // separate swipe stops for TalkBack ("22:40" / "20 squats"
-                  // / "One-time") — found in accessibility review. Merged
-                  // into one node; the toggle stays outside this scope since
-                  // it's a separately actionable control, not part of the
-                  // static summary.
-                  Semantics(
-                    label:
-                        '$_timeLabel, ${alarm.requiredReps} '
-                        '${alarm.exerciseMode == ExerciseMode.squat ? 'squats' : 'push-ups'}, '
-                        '$_recurrenceLabel, alarm ${on ? 'on' : 'off'}',
-                    child: ExcludeSemantics(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              // Time + exercise + recurrence previously read as three
+              // separate swipe stops for TalkBack ("22:40" / "20 squats"
+              // / "One-time") — found in accessibility review. Merged
+              // into one node; the toggle stays outside this scope since
+              // it's a separately actionable control, not part of the
+              // static summary.
+              Semantics(
+                label:
+                    '$_timeLabel, ${alarm.requiredReps} '
+                    '${alarm.exerciseMode == ExerciseMode.squat ? 'squats' : 'push-ups'}, '
+                    '$_recurrenceLabel, alarm ${on ? 'on' : 'off'}',
+                child: ExcludeSemantics(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _timeLabel,
+                        style: TextStyle(
+                          fontSize: 44,
+                          height: 48 / 44,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -1,
+                          color: on
+                              ? scheme.onPrimaryContainer
+                              : scheme.onSurface,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Text(
-                            _timeLabel,
-                            style: TextStyle(
-                              fontSize: 44,
-                              height: 48 / 44,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: -1,
-                              color: on
-                                  ? scheme.onPrimaryContainer
-                                  : scheme.onSurface,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
+                          _Chip(
+                            bg: chipBg,
+                            fg: fg,
+                            icon: alarm.exerciseMode == ExerciseMode.squat
+                                ? Icons.accessibility_new
+                                : Icons.sports_gymnastics,
+                            label:
+                                '${alarm.requiredReps} ${alarm.exerciseMode == ExerciseMode.squat ? 'squats' : 'push-ups'}',
                           ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              _Chip(
-                                bg: chipBg,
-                                fg: fg,
-                                icon: alarm.exerciseMode == ExerciseMode.squat
-                                    ? Icons.accessibility_new
-                                    : Icons.sports_gymnastics,
-                                label:
-                                    '${alarm.requiredReps} ${alarm.exerciseMode == ExerciseMode.squat ? 'squats' : 'push-ups'}',
-                              ),
-                              _Chip(
-                                bg: chipBg,
-                                fg: fg,
-                                label: _recurrenceLabel,
-                              ),
-                            ],
-                          ),
+                          _Chip(bg: chipBg, fg: fg, label: _recurrenceLabel),
                         ],
                       ),
+                    ],
+                  ),
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  ExpressiveSwitch(value: on, onChanged: (_) => onToggle()),
+                  const SizedBox(height: 16),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    color: fg,
+                    onPressed: onDelete,
+                    tooltip: 'Delete alarm',
+                    // Default IconButton padding pads its box out past the
+                    // chip line even with the gap above tuned to land the
+                    // icon there — an explicit 44x44 box (WCAG 2.5.5's own
+                    // minimum, not shrunk below it) with zero extra
+                    // padding keeps the *visible glyph*, not a larger
+                    // padded box, level with the chips.
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(44, 44),
+                      padding: EdgeInsets.zero,
                     ),
                   ),
-                  ExpressiveSwitch(value: on, onChanged: (_) => onToggle()),
                 ],
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  color: fg,
-                  onPressed: onDelete,
-                  tooltip: 'Delete alarm',
-                ),
               ),
             ],
           ),

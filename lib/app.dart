@@ -54,7 +54,9 @@ class AwakenApp extends StatelessWidget {
                 // every route the Navigator ever shows, so this overlay always
                 // wins.
                 builder: (context, child) {
-                  return _AlarmRingOverlay(child: child ?? const SizedBox.shrink());
+                  return _AlarmRingOverlay(
+                    child: child ?? const SizedBox.shrink(),
+                  );
                 },
               );
             },
@@ -115,9 +117,24 @@ class _AlarmRingOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<AlarmCubit, AlarmState>(
-      buildWhen: (previous, current) => previous.ringingAlarm != current.ringingAlarm,
+      buildWhen: (previous, current) =>
+          previous.ringingAlarm != current.ringingAlarm ||
+          previous.verificationInProgress != current.verificationInProgress,
       builder: (context, state) {
         final ringing = state.ringingAlarm;
+        // Real bug found live: this overlay used to paint AlarmRingPage
+        // unconditionally whenever `ringing != null`, with no regard for
+        // what the Navigator underneath was doing. When AlarmRingPage's own
+        // "Start workout" pushed VerificationPage onto that Navigator, the
+        // pushed screen ran successfully (camera + ML Kit both confirmed
+        // active via logcat) but was permanently invisible — this overlay
+        // kept repainting itself on top forever, since `ringing` doesn't
+        // change just because a route got pushed below it. That trapped the
+        // user on a frozen "Opening camera…" placeholder with the real
+        // camera screen running, unreachable, right underneath. Stepping
+        // aside while `verificationInProgress` is true lets the pushed
+        // VerificationPage actually become visible and interactive.
+        final showOverlay = ringing != null && !state.verificationInProgress;
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -127,8 +144,11 @@ class _AlarmRingOverlay extends StatelessWidget {
             // to touch, since nothing else blocked it — while the ring
             // page is visually on top. The whole point of this overlay is
             // that nothing else is reachable while an alarm rings.
-            if (ringing != null) ExcludeSemantics(child: IgnorePointer(child: child)) else child,
-            if (ringing != null) AlarmRingPage(alarm: ringing),
+            if (showOverlay)
+              ExcludeSemantics(child: IgnorePointer(child: child))
+            else
+              child,
+            if (showOverlay) AlarmRingPage(alarm: ringing),
           ],
         );
       },

@@ -28,11 +28,15 @@ class AlarmCubit extends Cubit<AlarmState> {
     this._watchCurrentTaxMultiplier,
     this._setAlarmActive,
   ) : super(const AlarmState()) {
-    _alarmsSub = _watchAlarms().listen((alarms) => emit(state.copyWith(alarms: alarms)));
-    _ringingSub =
-        _watchRingingAlarm().listen((ringing) => emit(state.copyWith(ringingAlarm: ringing)));
-    _taxSub = _watchCurrentTaxMultiplier()
-        .listen((tax) => emit(state.copyWith(currentTaxMultiplier: tax)));
+    _alarmsSub = _watchAlarms().listen(
+      (alarms) => emit(state.copyWith(alarms: alarms)),
+    );
+    _ringingSub = _watchRingingAlarm().listen(
+      (ringing) => emit(state.copyWith(ringingAlarm: ringing)),
+    );
+    _taxSub = _watchCurrentTaxMultiplier().listen(
+      (tax) => emit(state.copyWith(currentTaxMultiplier: tax)),
+    );
   }
 
   final WatchAlarms _watchAlarms;
@@ -60,8 +64,17 @@ class AlarmCubit extends Cubit<AlarmState> {
     required bool verified,
     required int repsCompleted,
   }) => _completeWorkout(
-    CompleteAlarmWorkoutParams(alarm: alarm, verified: verified, repsCompleted: repsCompleted),
+    CompleteAlarmWorkoutParams(
+      alarm: alarm,
+      verified: verified,
+      repsCompleted: repsCompleted,
+    ),
   );
+
+  /// Lets `_AlarmRingOverlay` step aside while the ringing alarm's own
+  /// verification attempt is in flight — see `AlarmState.verificationInProgress`.
+  void setVerificationInProgress(bool value) =>
+      emit(state.copyWith(verificationInProgress: value));
 
   @override
   Future<void> close() async {
