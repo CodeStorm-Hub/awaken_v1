@@ -49,14 +49,23 @@ class ProfilePage extends StatelessWidget {
                       child: SizedBox(
                         width: 44,
                         height: 44,
-                        child: Icon(Icons.arrow_back, size: 22, color: scheme.onSurface),
+                        child: Icon(
+                          Icons.arrow_back,
+                          size: 22,
+                          color: scheme.onSurface,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Text(
                     'Profile',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.4, color: scheme.onSurface),
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.4,
+                      color: scheme.onSurface,
+                    ),
                   ),
                 ],
               ),
@@ -78,7 +87,10 @@ class ProfilePage extends StatelessWidget {
                             final isAnonymous = user?.isAnonymous ?? true;
                             return Container(
                               width: double.infinity,
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 22,
+                              ),
                               decoration: BoxDecoration(
                                 color: scheme.surfaceContainerHigh,
                                 borderRadius: BorderRadius.circular(28),
@@ -100,21 +112,33 @@ class ProfilePage extends StatelessWidget {
                                   const SizedBox(height: 8),
                                   Text(
                                     isAnonymous ? 'Guest' : 'Account linked',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: scheme.onSurface),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                      color: scheme.onSurface,
+                                    ),
                                   ),
                                   Text(
                                     isAnonymous
                                         ? 'Progress is saved on this device only'
                                         : 'Progress syncs across devices',
-                                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
                                   ),
                                   if (isAnonymous) ...[
                                     const SizedBox(height: 4),
                                     FilledButton(
                                       style: FilledButton.styleFrom(
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
+                                        ),
                                       ),
-                                      onPressed: () => _showMigrateToCloudDialog(context),
+                                      onPressed: () =>
+                                          _showMigrateToCloudDialog(context),
                                       child: const Text('Migrate to cloud'),
                                     ),
                                   ],
@@ -134,9 +158,12 @@ class ProfilePage extends StatelessWidget {
                                   return StatTile(
                                     bg: scheme.primaryContainer,
                                     fg: scheme.onPrimaryContainer,
-                                    value: '${(areaSqm / 1000000).toStringAsFixed(2)} km²',
+                                    value:
+                                        '${(areaSqm / 1000000).toStringAsFixed(2)} km²',
                                     label: 'Territory',
-                                    radius: const BorderRadius.horizontal(left: Radius.circular(24)),
+                                    radius: const BorderRadius.horizontal(
+                                      left: Radius.circular(24),
+                                    ),
                                   );
                                 },
                               ),
@@ -148,20 +175,33 @@ class ProfilePage extends StatelessWidget {
                                 fg: scheme.onTertiaryContainer,
                                 value: '$streak',
                                 label: 'Day streak',
-                                radius: const BorderRadius.horizontal(right: Radius.circular(24)),
+                                radius: const BorderRadius.horizontal(
+                                  right: Radius.circular(24),
+                                ),
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 18),
-                        Text('Settings', style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onSurface)),
+                        Text(
+                          'Settings',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: scheme.onSurface,
+                          ),
+                        ),
                         const SizedBox(height: 10),
                         _SettingsRow(
                           icon: Icons.bug_report,
                           label: 'Alarm reliability',
-                          radius: const BorderRadius.vertical(top: Radius.circular(20), bottom: Radius.circular(8)),
+                          radius: const BorderRadius.vertical(
+                            top: Radius.circular(20),
+                            bottom: Radius.circular(8),
+                          ),
                           onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const AlarmReliabilityTestPage()),
+                            MaterialPageRoute(
+                              builder: (_) => const AlarmReliabilityTestPage(),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 3),
@@ -169,27 +209,40 @@ class ProfilePage extends StatelessWidget {
                           icon: Icons.battery_charging_full,
                           label: 'Battery & location',
                           onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const BatteryExemptionPage()),
+                            MaterialPageRoute(
+                              builder: (_) => const BatteryExemptionPage(),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 3),
                         _SettingsRow(
                           icon: Icons.palette,
                           label: 'Appearance',
-                          radius: const BorderRadius.vertical(top: Radius.circular(8), bottom: Radius.circular(20)),
+                          radius: const BorderRadius.vertical(
+                            top: Radius.circular(8),
+                            bottom: Radius.circular(20),
+                          ),
                           onTap: () => _showAppearanceDialog(context),
                         ),
                         const SizedBox(height: 18),
+                        // Sign out is reversible (sign back in any time); Delete
+                        // account is not. Both previously used identical
+                        // red-text styling with no visual cue for the
+                        // difference in severity — found in design critique.
                         Center(
                           child: TextButton(
-                            style: TextButton.styleFrom(foregroundColor: scheme.error),
+                            style: TextButton.styleFrom(
+                              foregroundColor: scheme.onSurfaceVariant,
+                            ),
                             onPressed: () => _showSignOutDialog(context),
                             child: const Text('Sign out'),
                           ),
                         ),
                         Center(
                           child: TextButton(
-                            style: TextButton.styleFrom(foregroundColor: scheme.error),
+                            style: TextButton.styleFrom(
+                              foregroundColor: scheme.error,
+                            ),
                             onPressed: () => _showDeleteAccountDialog(context),
                             child: const Text('Delete account'),
                           ),
@@ -257,8 +310,14 @@ Future<void> _showSignOutDialog(BuildContext context) async {
         'account. Data already on this device stays put.',
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Sign out')),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Sign out'),
+        ),
       ],
     ),
   );
@@ -277,9 +336,14 @@ Future<void> _showDeleteAccountDialog(BuildContext context) async {
         'runs, territories, and squad membership. This cannot be undone.',
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: Theme.of(dialogContext).colorScheme.error),
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(dialogContext).colorScheme.error,
+          ),
           onPressed: () => Navigator.of(dialogContext).pop(true),
           child: const Text('Delete'),
         ),
@@ -291,7 +355,9 @@ Future<void> _showDeleteAccountDialog(BuildContext context) async {
   try {
     await getIt<DeleteAccount>()(const NoParams());
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account deleted.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Account deleted.')));
     }
   } catch (e) {
     if (context.mounted) {
@@ -333,15 +399,24 @@ Future<void> _showMigrateToCloudDialog(BuildContext context) async {
                   if (email.isEmpty || password.isEmpty) return;
                   Navigator.of(dialogContext).pop();
                   try {
-                    await getIt<LinkWithEmail>()(email: email, password: password);
+                    await getIt<LinkWithEmail>()(
+                      email: email,
+                      password: password,
+                    );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Check your email to confirm linking your account.')),
+                        const SnackBar(
+                          content: Text(
+                            'Check your email to confirm linking your account.',
+                          ),
+                        ),
                       );
                     }
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('$e')));
                     }
                   }
                 },
@@ -358,13 +433,17 @@ Future<void> _showMigrateToCloudDialog(BuildContext context) async {
                   try {
                     await getIt<LinkWithGoogle>()(const NoParams());
                     if (context.mounted) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(const SnackBar(content: Text('Account linked with Google.')));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Account linked with Google.'),
+                        ),
+                      );
                     }
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('$e')));
                     }
                   }
                 },
@@ -374,7 +453,10 @@ Future<void> _showMigrateToCloudDialog(BuildContext context) async {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
         ],
       );
     },
@@ -410,14 +492,27 @@ class _SettingsRow extends StatelessWidget {
               Container(
                 width: 38,
                 height: 38,
-                decoration: BoxDecoration(color: scheme.surfaceContainer, borderRadius: BorderRadius.circular(13)),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainer,
+                  borderRadius: BorderRadius.circular(13),
+                ),
                 child: Icon(icon, size: 20, color: scheme.onSurfaceVariant),
               ),
               const SizedBox(width: 14),
               Expanded(
-                child: Text(label, style: TextStyle(fontWeight: FontWeight.w500, color: scheme.onSurface)),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: scheme.onSurface,
+                  ),
+                ),
               ),
-              Icon(Icons.chevron_right, size: 20, color: scheme.onSurfaceVariant),
+              Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: scheme.onSurfaceVariant,
+              ),
             ],
           ),
         ),

@@ -72,7 +72,8 @@ class _AlarmListPageState extends State<AlarmListPage> {
                                 tooltip: 'Alarm reliability settings',
                                 onPressed: () => Navigator.of(context).push(
                                   MaterialPageRoute(
-                                    builder: (_) => const BatteryExemptionPage(),
+                                    builder: (_) =>
+                                        const BatteryExemptionPage(),
                                   ),
                                 ),
                               ),
@@ -81,17 +82,20 @@ class _AlarmListPageState extends State<AlarmListPage> {
                                 tooltip: 'Run alarm reliability self-test',
                                 onPressed: () => Navigator.of(context).push(
                                   MaterialPageRoute(
-                                    builder: (_) => const AlarmReliabilityTestPage(),
+                                    builder: (_) =>
+                                        const AlarmReliabilityTestPage(),
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                          _ProfileButton(
-                            scheme: scheme,
-                            onTap: () => Navigator.of(
-                              context,
-                            ).push(MaterialPageRoute(builder: (_) => const ProfilePage())),
+                          ProfileAvatarButton(
+                            initial: 'G',
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ProfilePage(),
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -123,26 +127,87 @@ class _AlarmListPageState extends State<AlarmListPage> {
                     Expanded(
                       child: n == 0
                           ? _EmptyState(scheme: scheme, theme: theme)
-                          : ListView.separated(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
-                              itemCount: n,
-                              separatorBuilder: (_, _) => const SizedBox(height: 3),
-                              itemBuilder: (context, index) {
-                                final alarm = alarms[index];
-                                return _RiseIn(
-                                  delay: Duration(milliseconds: index * 60),
-                                  child: _AlarmCard(
-                                    alarm: alarm,
-                                    on: alarm.isActive,
-                                    radius: groupedItemRadius(index: index, count: n),
-                                    onToggle: () => context.read<AlarmCubit>().setActive(alarm.id, !alarm.isActive),
-                                    onDelete: () => _confirmDelete(context, alarm),
-                                    onTap: () => Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => AlarmRingPage(alarm: alarm, isPreview: true)),
+                          // A single (or few) alarm card left ~70% of the
+                          // screen blank below it with a plain ListView —
+                          // found in design critique, read as unfinished
+                          // rather than intentional. A ConstrainedBox with
+                          // the viewport's own minHeight lets the column
+                          // center when short but still scroll normally
+                          // once enough alarms are scheduled to overflow.
+                          : Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                0,
+                                16,
+                                120,
+                              ),
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  return SingleChildScrollView(
+                                    child: ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        minHeight: constraints.maxHeight,
+                                      ),
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          for (
+                                            var index = 0;
+                                            index < n;
+                                            index++
+                                          ) ...[
+                                            if (index > 0)
+                                              const SizedBox(height: 3),
+                                            Builder(
+                                              builder: (context) {
+                                                final alarm = alarms[index];
+                                                return _RiseIn(
+                                                  delay: Duration(
+                                                    milliseconds: index * 60,
+                                                  ),
+                                                  child: _AlarmCard(
+                                                    alarm: alarm,
+                                                    on: alarm.isActive,
+                                                    radius: groupedItemRadius(
+                                                      index: index,
+                                                      count: n,
+                                                    ),
+                                                    onToggle: () => context
+                                                        .read<AlarmCubit>()
+                                                        .setActive(
+                                                          alarm.id,
+                                                          !alarm.isActive,
+                                                        ),
+                                                    onDelete: () =>
+                                                        _confirmDelete(
+                                                          context,
+                                                          alarm,
+                                                        ),
+                                                    onTap: () =>
+                                                        Navigator.of(
+                                                          context,
+                                                        ).push(
+                                                          MaterialPageRoute(
+                                                            builder: (_) =>
+                                                                AlarmRingPage(
+                                                                  alarm: alarm,
+                                                                  isPreview:
+                                                                      true,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ],
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                );
-                              },
+                                  );
+                                },
+                              ),
                             ),
                     ),
                   ],
@@ -150,7 +215,9 @@ class _AlarmListPageState extends State<AlarmListPage> {
                 Positioned(
                   right: 18,
                   bottom: 24,
-                  child: _ExpressiveFab(onPressed: () => _showScheduleSheet(context)),
+                  child: _ExpressiveFab(
+                    onPressed: () => _showScheduleSheet(context),
+                  ),
                 ),
               ],
             );
@@ -206,9 +273,14 @@ class _AlarmListPageState extends State<AlarmListPage> {
       barrierColor: scheme.scrim.withValues(alpha: 0.5),
       builder: (_) => AlertDialog(
         title: const Text('Delete alarm?'),
-        content: const Text('This alarm will be cancelled and removed from your schedule.'),
+        content: const Text(
+          'This alarm will be cancelled and removed from your schedule.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete'),
@@ -219,42 +291,6 @@ class _AlarmListPageState extends State<AlarmListPage> {
     if (confirmed != true) return;
     cubit.cancel(alarm.id);
     messenger.showSnackBar(const SnackBar(content: Text('Alarm deleted')));
-  }
-}
-
-class _ProfileButton extends StatelessWidget {
-  const _ProfileButton({required this.scheme, required this.onTap});
-
-  final ColorScheme scheme;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Profile',
-      child: Material(
-        color: scheme.secondaryContainer,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: SizedBox(
-            width: 40,
-            height: 40,
-            child: Center(
-              child: Text(
-                'G',
-                style: TextStyle(
-                  color: scheme.onSecondaryContainer,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -275,30 +311,38 @@ class _EmptyState extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: Padding(
-      padding: const EdgeInsets.only(top: 56),
-      child: Column(
-        children: [
-          ExpressiveFlower(
-            size: 108,
-            color: scheme.secondaryContainer,
-            child: Icon(Icons.alarm_add, size: 44, color: scheme.onSecondaryContainer),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No alarms scheduled',
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: 220,
-            child: Text(
-              'Schedule one and earn tomorrow morning.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+        padding: const EdgeInsets.only(top: 56),
+        child: Column(
+          children: [
+            ExpressiveFlower(
+              size: 108,
+              color: scheme.secondaryContainer,
+              child: Icon(
+                Icons.alarm_add,
+                size: 44,
+                color: scheme.onSecondaryContainer,
+              ),
             ),
-          ),
-        ],
-      ),
+            const SizedBox(height: 16),
+            Text(
+              'No alarms scheduled',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: 220,
+              child: Text(
+                'Schedule one and earn tomorrow morning.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -380,7 +424,9 @@ class _AlarmCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final bg = on ? scheme.primaryContainer : scheme.surfaceContainerHigh;
     final fg = on ? scheme.onPrimaryContainer : scheme.onSurfaceVariant;
-    final chipBg = on ? Colors.white.withValues(alpha: 0.55) : scheme.surfaceContainer;
+    final chipBg = on
+        ? Colors.white.withValues(alpha: 0.55)
+        : scheme.surfaceContainer;
 
     return Material(
       color: bg,
@@ -446,7 +492,12 @@ class _AlarmCard extends StatelessWidget {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip({required this.bg, required this.fg, required this.label, this.icon});
+  const _Chip({
+    required this.bg,
+    required this.fg,
+    required this.label,
+    this.icon,
+  });
 
   final Color bg;
   final Color fg;
@@ -457,14 +508,24 @@ class _Chip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null) ...[Icon(icon, size: 15, color: fg), const SizedBox(width: 5)],
+          if (icon != null) ...[
+            Icon(icon, size: 15, color: fg),
+            const SizedBox(width: 5),
+          ],
           Text(
             label,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: fg,
+            ),
           ),
         ],
       ),
@@ -501,13 +562,21 @@ class _ExpressiveFabState extends State<_ExpressiveFab> {
           curve: Curves.easeOutBack,
           width: 68,
           height: 68,
-          transform: Matrix4.diagonal3Values(_pressed ? 1.06 : 1, _pressed ? 1.06 : 1, 1),
+          transform: Matrix4.diagonal3Values(
+            _pressed ? 1.06 : 1,
+            _pressed ? 1.06 : 1,
+            1,
+          ),
           transformAlignment: Alignment.center,
           decoration: BoxDecoration(
             color: scheme.primary,
             borderRadius: BorderRadius.circular(_pressed ? 999 : 22),
             boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6, offset: const Offset(0, 2)),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
             ],
           ),
           child: Icon(Icons.add, size: 30, color: scheme.onPrimary),
@@ -520,7 +589,8 @@ class _ExpressiveFabState extends State<_ExpressiveFab> {
 class _ScheduleSheet extends StatefulWidget {
   const _ScheduleSheet({required this.onSchedule});
 
-  final void Function(ExerciseMode mode, int reps, int minutes, Set<int> days) onSchedule;
+  final void Function(ExerciseMode mode, int reps, int minutes, Set<int> days)
+  onSchedule;
 
   @override
   State<_ScheduleSheet> createState() => _ScheduleSheetState();
@@ -599,8 +669,10 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                 top: Radius.circular(18),
                 bottom: Radius.circular(8),
               ),
-              onDecrement: () => setState(() => _reps = (_reps - 5).clamp(5, 100)),
-              onIncrement: () => setState(() => _reps = (_reps + 5).clamp(5, 100)),
+              onDecrement: () =>
+                  setState(() => _reps = (_reps - 5).clamp(5, 100)),
+              onIncrement: () =>
+                  setState(() => _reps = (_reps + 5).clamp(5, 100)),
             ),
             const SizedBox(height: 3),
             _Stepper(
@@ -612,8 +684,10 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                 top: Radius.circular(8),
                 bottom: Radius.circular(18),
               ),
-              onDecrement: () => setState(() => _minutes = (_minutes - 1).clamp(1, 720)),
-              onIncrement: () => setState(() => _minutes = (_minutes + 1).clamp(1, 720)),
+              onDecrement: () =>
+                  setState(() => _minutes = (_minutes - 1).clamp(1, 720)),
+              onIncrement: () =>
+                  setState(() => _minutes = (_minutes + 1).clamp(1, 720)),
             ),
             const SizedBox(height: 16),
             Text(
@@ -657,7 +731,9 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                   child: FilledButton(
                     style: FilledButton.styleFrom(
                       minimumSize: const Size.fromHeight(52),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
                     ),
                     onPressed: () {
                       widget.onSchedule(_mode, _reps, _minutes, _days);
@@ -754,14 +830,21 @@ class _Stepper extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: radius),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh,
+        borderRadius: radius,
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(color: scheme.onSurface, fontSize: 16)),
           Row(
             children: [
-              _StepButton(icon: Icons.remove, label: decrementLabel, onTap: onDecrement),
+              _StepButton(
+                icon: Icons.remove,
+                label: decrementLabel,
+                onTap: onDecrement,
+              ),
               SizedBox(
                 width: 44,
                 child: Text(
@@ -775,7 +858,11 @@ class _Stepper extends StatelessWidget {
                   ),
                 ),
               ),
-              _StepButton(icon: Icons.add, label: incrementLabel, onTap: onIncrement),
+              _StepButton(
+                icon: Icons.add,
+                label: incrementLabel,
+                onTap: onIncrement,
+              ),
             ],
           ),
         ],
@@ -785,7 +872,11 @@ class _Stepper extends StatelessWidget {
 }
 
 class _StepButton extends StatefulWidget {
-  const _StepButton({required this.icon, required this.label, required this.onTap});
+  const _StepButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String label;
@@ -821,7 +912,11 @@ class _StepButtonState extends State<_StepButton> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(borderRadius: radius),
-              child: Icon(widget.icon, size: 20, color: scheme.onSecondaryContainer),
+              child: Icon(
+                widget.icon,
+                size: 20,
+                color: scheme.onSecondaryContainer,
+              ),
             ),
           ),
         ),
@@ -867,7 +962,9 @@ class _DayToggle extends StatelessWidget {
               label,
               style: TextStyle(
                 fontWeight: selected ? FontWeight.bold : FontWeight.w500,
-                color: selected ? scheme.onTertiaryContainer : scheme.onSurfaceVariant,
+                color: selected
+                    ? scheme.onTertiaryContainer
+                    : scheme.onSurfaceVariant,
               ),
             ),
           ),

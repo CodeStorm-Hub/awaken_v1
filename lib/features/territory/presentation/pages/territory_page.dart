@@ -6,6 +6,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../../core/config/env.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/theme/expressive_widgets.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
 import '../../domain/entities/geo_bounds.dart';
 import '../../domain/entities/territory.dart';
@@ -59,11 +60,14 @@ class _TerritoryPageState extends State<TerritoryPage> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
         return;
       }
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
       );
       if (!mounted) return;
       setState(() {
@@ -98,7 +102,10 @@ class _TerritoryPageState extends State<TerritoryPage> {
         ),
       );
     } else {
-      await controller.updateCircle(_positionMarker!, CircleOptions(geometry: _center));
+      await controller.updateCircle(
+        _positionMarker!,
+        CircleOptions(geometry: _center),
+      );
     }
   }
 
@@ -139,9 +146,13 @@ class _TerritoryPageState extends State<TerritoryPage> {
         final fill = await controller.addFill(
           FillOptions(
             geometry: [ring],
-            fillColor: _colorToHex(territory.isMine ? scheme.primary : scheme.tertiary),
+            fillColor: _colorToHex(
+              territory.isMine ? scheme.primary : scheme.tertiary,
+            ),
             fillOpacity: 0.45,
-            fillOutlineColor: _colorToHex(territory.isMine ? scheme.primary : scheme.tertiary),
+            fillOutlineColor: _colorToHex(
+              territory.isMine ? scheme.primary : scheme.tertiary,
+            ),
           ),
         );
         fills.add(fill);
@@ -188,28 +199,17 @@ class _TerritoryPageState extends State<TerritoryPage> {
                 children: [
                   Text(
                     'Territory',
-                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -0.5, color: scheme.onSurface),
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                      color: scheme.onSurface,
+                    ),
                   ),
-                  Tooltip(
-                    message: 'Profile',
-                    child: Material(
-                      color: scheme.secondaryContainer,
-                      shape: const CircleBorder(),
-                      child: InkWell(
-                        customBorder: const CircleBorder(),
-                        onTap: () =>
-                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfilePage())),
-                        child: SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: Center(
-                            child: Text(
-                              'G',
-                              style: TextStyle(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ),
-                      ),
+                  ProfileAvatarButton(
+                    initial: 'G',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const ProfilePage()),
                     ),
                   ),
                 ],
@@ -224,13 +224,17 @@ class _TerritoryPageState extends State<TerritoryPage> {
                     children: [
                       MapLibreMap(
                         styleString: Env.mapStyleUrl,
-                        initialCameraPosition: const CameraPosition(target: LatLng(20, 0), zoom: 2),
+                        initialCameraPosition: const CameraPosition(
+                          target: LatLng(20, 0),
+                          zoom: 2,
+                        ),
                         onMapCreated: _onMapCreated,
                         onStyleLoadedCallback: _onStyleLoaded,
                         onCameraIdle: () => unawaited(_refreshForCurrentView()),
                         myLocationEnabled: false,
                         logoEnabled: false,
-                        attributionButtonPosition: AttributionButtonPosition.bottomLeft,
+                        attributionButtonPosition:
+                            AttributionButtonPosition.bottomLeft,
                       ),
                       Positioned(
                         top: 14,
@@ -240,7 +244,10 @@ class _TerritoryPageState extends State<TerritoryPage> {
                           children: [
                             _OwnedAreaChip(scheme: scheme),
                             const Spacer(),
-                            _TerritoryLegend(scheme: scheme, showRivalTerritory: _showRivalTerritory),
+                            _TerritoryLegend(
+                              scheme: scheme,
+                              showRivalTerritory: _showRivalTerritory,
+                            ),
                           ],
                         ),
                       ),
@@ -254,7 +261,12 @@ class _TerritoryPageState extends State<TerritoryPage> {
                             decoration: BoxDecoration(
                               color: scheme.surfaceContainerHigh,
                               borderRadius: BorderRadius.circular(999),
-                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6)],
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: 6,
+                                ),
+                              ],
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -266,10 +278,14 @@ class _TerritoryPageState extends State<TerritoryPage> {
                                 ),
                                 FilledButton(
                                   style: FilledButton.styleFrom(
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
                                   ),
                                   onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => const ActiveRunPage()),
+                                    MaterialPageRoute(
+                                      builder: (_) => const ActiveRunPage(),
+                                    ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -306,7 +322,9 @@ class _TerritoryPageState extends State<TerritoryPage> {
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: scheme.surfaceContainerLow,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
@@ -323,10 +341,20 @@ class _TerritoryPageState extends State<TerritoryPage> {
                         width: 36,
                         height: 4,
                         margin: const EdgeInsets.only(bottom: 18),
-                        decoration: BoxDecoration(color: scheme.outlineVariant, borderRadius: BorderRadius.circular(999)),
+                        decoration: BoxDecoration(
+                          color: scheme.outlineVariant,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
                       ),
                     ),
-                    Text('Map layers', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: scheme.onSurface)),
+                    Text(
+                      'Map layers',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: scheme.onSurface,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
@@ -373,14 +401,25 @@ class _OwnedAreaChip extends StatelessWidget {
           decoration: BoxDecoration(
             color: scheme.primaryContainer,
             borderRadius: BorderRadius.circular(999),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2)],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 2,
+              ),
+            ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.landscape, size: 17, color: scheme.onPrimaryContainer),
               const SizedBox(width: 6),
-              Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onPrimaryContainer)),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: scheme.onPrimaryContainer,
+                ),
+              ),
             ],
           ),
         );
@@ -390,7 +429,10 @@ class _OwnedAreaChip extends StatelessWidget {
 }
 
 class _TerritoryLegend extends StatelessWidget {
-  const _TerritoryLegend({required this.scheme, required this.showRivalTerritory});
+  const _TerritoryLegend({
+    required this.scheme,
+    required this.showRivalTerritory,
+  });
 
   final ColorScheme scheme;
   final bool showRivalTerritory;
@@ -409,12 +451,26 @@ class _TerritoryLegend extends StatelessWidget {
         children: [
           _LegendDot(color: scheme.primary),
           const SizedBox(width: 5),
-          Text('You', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: scheme.onSurface)),
+          Text(
+            'You',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurface,
+            ),
+          ),
           if (showRivalTerritory) ...[
             const SizedBox(width: 10),
             _LegendDot(color: scheme.tertiary),
             const SizedBox(width: 5),
-            Text('Others', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: scheme.onSurface)),
+            Text(
+              'Others',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurface,
+              ),
+            ),
           ],
         ],
       ),
@@ -429,12 +485,20 @@ class _LegendDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(width: 9, height: 9, decoration: BoxDecoration(color: color, shape: BoxShape.circle));
+    return Container(
+      width: 9,
+      height: 9,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
   }
 }
 
 class _RoundIconButton extends StatelessWidget {
-  const _RoundIconButton({required this.icon, required this.tooltip, required this.onTap});
+  const _RoundIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String tooltip;

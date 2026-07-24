@@ -5,6 +5,67 @@ import 'package:flutter/material.dart';
 /// App" Claude Design handoff, `m3x.css`). Core Flutter ships none of this
 /// — same rationale as `motion_tokens.dart`/`shape_tokens.dart`.
 
+/// The "G" profile-avatar circle used in the top-right corner of Home,
+/// Territory, and Squad's app bars — previously duplicated three times as a
+/// 40x40 tappable `SizedBox`, under WCAG 2.5.5's 44x44 touch-target minimum.
+/// Extracted once so the fix (44x44 tap area, explicit `Semantics` label
+/// rather than relying on `Tooltip`'s message reaching TalkBack) lands
+/// everywhere at once instead of needing three separate edits.
+class ProfileAvatarButton extends StatelessWidget {
+  const ProfileAvatarButton({
+    required this.initial,
+    required this.onTap,
+    super.key,
+  });
+
+  final String initial;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      label: 'Profile',
+      button: true,
+      child: Tooltip(
+        message: 'Profile',
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Center(
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: scheme.secondaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      initial,
+                      style: TextStyle(
+                        color: scheme.onSecondaryContainer,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A colored "flower" badge with a centered icon/child — the handoff's
 /// `.m3x-flower` CSS shape: two stacked squares, each rounded 32%, the
 /// second rotated 45°, which reads as a soft four-petaled blob. Used for
@@ -43,7 +104,10 @@ class ExpressiveFlower extends StatelessWidget {
           Transform.rotate(
             angle: 0.785398, // 45deg
             child: DecoratedBox(
-              decoration: BoxDecoration(color: color, borderRadius: petalRadius),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: petalRadius,
+              ),
               child: SizedBox(width: size, height: size),
             ),
           ),
@@ -56,7 +120,8 @@ class ExpressiveFlower extends StatelessWidget {
       tween: Tween(begin: 0, end: 1),
       duration: const Duration(milliseconds: 500),
       curve: Curves.easeOutBack,
-      builder: (context, value, scaledChild) => Transform.scale(scale: value, child: scaledChild),
+      builder: (context, value, scaledChild) =>
+          Transform.scale(scale: value, child: scaledChild),
       child: blob,
     );
   }
@@ -76,7 +141,8 @@ class ExpressiveLoader extends StatefulWidget {
   State<ExpressiveLoader> createState() => _ExpressiveLoaderState();
 }
 
-class _ExpressiveLoaderState extends State<ExpressiveLoader> with SingleTickerProviderStateMixin {
+class _ExpressiveLoaderState extends State<ExpressiveLoader>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
   // Corner-radius keyframes approximating m3x.css's `m3x-morph` blob cycle.
@@ -85,8 +151,10 @@ class _ExpressiveLoaderState extends State<ExpressiveLoader> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 3200))
-      ..repeat();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3200),
+    )..repeat();
   }
 
   @override
@@ -102,11 +170,13 @@ class _ExpressiveLoaderState extends State<ExpressiveLoader> with SingleTickerPr
       animation: _controller,
       builder: (context, child) {
         final morphT = (_controller.value * 2) % 1.0;
-        final stopIndex = (_controller.value * (_shapeStops.length - 1)).floor();
+        final stopIndex = (_controller.value * (_shapeStops.length - 1))
+            .floor();
         final localT = _controller.value * (_shapeStops.length - 1) - stopIndex;
         final radiusFactor =
             _shapeStops[stopIndex] +
-            (_shapeStops[(stopIndex + 1).clamp(0, _shapeStops.length - 1)] - _shapeStops[stopIndex]) *
+            (_shapeStops[(stopIndex + 1).clamp(0, _shapeStops.length - 1)] -
+                    _shapeStops[stopIndex]) *
                 localT;
         return Transform.rotate(
           angle: morphT * 2 * 3.14159,
@@ -127,7 +197,11 @@ class _ExpressiveLoaderState extends State<ExpressiveLoader> with SingleTickerPr
 /// M3-Expressive pill switch: thumb grows and shows a check glyph when on
 /// (the handoff's `M3Switch`), rather than the standard M3 `Switch`.
 class ExpressiveSwitch extends StatelessWidget {
-  const ExpressiveSwitch({required this.value, required this.onChanged, super.key});
+  const ExpressiveSwitch({
+    required this.value,
+    required this.onChanged,
+    super.key,
+  });
 
   final bool value;
   final ValueChanged<bool> onChanged;
@@ -143,37 +217,40 @@ class ExpressiveSwitch extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: () => onChanged(!value),
         child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-        width: 56,
-        height: 32,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
-          color: value ? scheme.primary : scheme.surfaceContainerHigh,
-          border: Border.all(color: value ? scheme.primary : scheme.outline, width: 2),
-        ),
-        child: AnimatedAlign(
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOutBack,
-          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutBack,
-              width: value ? 24 : 18,
-              height: value ? 24 : 18,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: value ? scheme.onPrimary : scheme.outline,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          width: 56,
+          height: 32,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            color: value ? scheme.primary : scheme.surfaceContainerHigh,
+            border: Border.all(
+              color: value ? scheme.primary : scheme.outline,
+              width: 2,
+            ),
+          ),
+          child: AnimatedAlign(
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOutBack,
+            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.easeOutBack,
+                width: value ? 24 : 18,
+                height: value ? 24 : 18,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: value ? scheme.onPrimary : scheme.outline,
+                ),
+                child: value
+                    ? Icon(Icons.check, size: 15, color: scheme.primary)
+                    : null,
               ),
-              child: value
-                  ? Icon(Icons.check, size: 15, color: scheme.primary)
-                  : null,
             ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -190,7 +267,10 @@ BorderRadius groupedItemRadius({
 }) {
   final top = index == 0 ? outer : inner;
   final bottom = index == count - 1 ? outer : inner;
-  return BorderRadius.vertical(top: Radius.circular(top), bottom: Radius.circular(bottom));
+  return BorderRadius.vertical(
+    top: Radius.circular(top),
+    bottom: Radius.circular(bottom),
+  );
 }
 
 /// A single tile in a connected stat-row (streak/area/rank on Home, the
@@ -242,7 +322,11 @@ class StatTile extends StatelessWidget {
             Text(
               label,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: fg,
+              ),
             ),
           ],
         ),

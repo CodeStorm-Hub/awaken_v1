@@ -60,29 +60,18 @@ class _SquadView extends StatelessWidget {
                             state.squad == null
                                 ? 'Not in a squad yet'
                                 : '${state.squad!.name} · ${state.leaderboard.length} members',
-                            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: scheme.onSurfaceVariant,
+                            ),
                           ),
                         ],
                       ),
-                      Tooltip(
-                        message: 'Profile',
-                        child: Material(
-                          color: scheme.secondaryContainer,
-                          shape: const CircleBorder(),
-                          child: InkWell(
-                            customBorder: const CircleBorder(),
-                            onTap: () =>
-                                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfilePage())),
-                            child: SizedBox(
-                              width: 40,
-                              height: 40,
-                              child: Center(
-                                child: Text(
-                                  'G',
-                                  style: TextStyle(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ),
+                      ProfileAvatarButton(
+                        initial: 'G',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ProfilePage(),
                           ),
                         ),
                       ),
@@ -112,7 +101,9 @@ class _SquadBody extends StatelessWidget {
       case SquadStatus.noSquad:
         return const _NoSquadView();
       case SquadStatus.error:
-        return _SquadErrorView(message: state.errorMessage ?? 'Something went wrong.');
+        return _SquadErrorView(
+          message: state.errorMessage ?? 'Something went wrong.',
+        );
       case SquadStatus.loaded:
         return _SquadLoadedView(state: state);
     }
@@ -134,12 +125,20 @@ class _NoSquadView extends StatelessWidget {
             ExpressiveFlower(
               size: 84,
               color: scheme.secondaryContainer,
-              child: Icon(Icons.groups, size: 36, color: scheme.onSecondaryContainer),
+              child: Icon(
+                Icons.groups,
+                size: 36,
+                color: scheme.onSecondaryContainer,
+              ),
             ),
             const SizedBox(height: 20),
             Text(
               "You're not in a squad yet",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: scheme.onSurface),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: scheme.onSurface,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 6),
@@ -154,7 +153,9 @@ class _NoSquadView extends StatelessWidget {
               child: FilledButton(
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                 ),
                 onPressed: () => _showCreateSquadDialog(context),
                 child: const Text('Create a squad'),
@@ -166,7 +167,9 @@ class _NoSquadView extends StatelessWidget {
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                 ),
                 onPressed: () => _showJoinSquadDialog(context),
                 child: const Text('Join with invite code'),
@@ -193,9 +196,13 @@ Future<void> _showCreateSquadDialog(BuildContext context) async {
         decoration: const InputDecoration(hintText: 'Squad name'),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
-          onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+          onPressed: () =>
+              Navigator.of(dialogContext).pop(controller.text.trim()),
           child: const Text('Create'),
         ),
       ],
@@ -220,9 +227,13 @@ Future<void> _showJoinSquadDialog(BuildContext context) async {
         decoration: const InputDecoration(hintText: 'Invite code'),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
-          onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+          onPressed: () =>
+              Navigator.of(dialogContext).pop(controller.text.trim()),
           child: const Text('Join'),
         ),
       ],
@@ -249,7 +260,11 @@ class _SquadErrorView extends StatelessWidget {
           children: [
             Icon(Icons.error_outline, color: scheme.error, size: 40),
             const SizedBox(height: 12),
-            Text(message, style: TextStyle(color: scheme.onSurfaceVariant), textAlign: TextAlign.center),
+            Text(
+              message,
+              style: TextStyle(color: scheme.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 16),
             OutlinedButton(
               onPressed: () => _showCreateSquadDialog(context),
@@ -273,108 +288,168 @@ class _SquadLoadedView extends StatelessWidget {
     final squad = state.squad!;
     final live = state.presence.where((m) => m.activity != null).toList();
 
-    return SingleChildScrollView(
+    // A squad with one member and no live activity left ~65% of the screen
+    // blank below the invite-code card — found in design critique. Same
+    // fix as AlarmListPage: center the block vertically when it's short,
+    // but this still scrolls normally once there's enough content.
+    return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _InviteCodeCard(inviteCode: squad.inviteCode),
-          const SizedBox(height: 18),
-          if (live.isNotEmpty) ...[
-            Text('Live now', style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onSurface)),
-            const SizedBox(height: 10),
-            Column(
-              children: List.generate(live.length, (i) {
-                final m = live[i];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHigh,
-                      borderRadius: groupedItemRadius(index: i, count: live.length, outer: 20),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _InviteCodeCard(inviteCode: squad.inviteCode),
+                  const SizedBox(height: 18),
+                  if (live.isNotEmpty) ...[
+                    Text(
+                      'Live now',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: scheme.onSurface,
+                      ),
                     ),
-                    child: Row(
-                      children: [
-                        Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: scheme.tertiaryContainer,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  m.displayName.isEmpty ? '?' : m.displayName[0].toUpperCase(),
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onTertiaryContainer),
-                                ),
+                    const SizedBox(height: 10),
+                    Column(
+                      children: List.generate(live.length, (i) {
+                        final m = live[i];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 3),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            decoration: BoxDecoration(
+                              color: scheme.surfaceContainerHigh,
+                              borderRadius: groupedItemRadius(
+                                index: i,
+                                count: live.length,
+                                outer: 20,
                               ),
                             ),
-                            Positioned(
-                              bottom: -2,
-                              right: -2,
-                              child: Container(
-                                width: 12,
-                                height: 12,
-                                decoration: BoxDecoration(
-                                  color: scheme.primary,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: scheme.surfaceContainerHigh, width: 2),
+                            child: Row(
+                              children: [
+                                Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Container(
+                                      width: 44,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        color: scheme.tertiaryContainer,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          m.displayName.isEmpty
+                                              ? '?'
+                                              : m.displayName[0].toUpperCase(),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: scheme.onTertiaryContainer,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      bottom: -2,
+                                      right: -2,
+                                      child: Container(
+                                        width: 12,
+                                        height: 12,
+                                        decoration: BoxDecoration(
+                                          color: scheme.primary,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: scheme.surfaceContainerHigh,
+                                            width: 2,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        m.displayName,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: scheme.onSurface,
+                                        ),
+                                      ),
+                                      Text(
+                                        m.activity ?? '',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: scheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(m.displayName, style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onSurface)),
-                              Text(
-                                m.activity ?? '',
-                                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                              ),
-                            ],
                           ),
-                        ),
-                      ],
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 22),
+                  ],
+                  Text(
+                    'Leaderboard',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: scheme.onSurface,
                     ),
                   ),
-                );
-              }),
-            ),
-            const SizedBox(height: 22),
-          ],
-          Text('Leaderboard', style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onSurface)),
-          const SizedBox(height: 10),
-          if (state.leaderboard.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Text(
-                'No squad activity yet — capture territory to appear here.',
-                style: TextStyle(color: scheme.onSurfaceVariant),
+                  const SizedBox(height: 10),
+                  if (state.leaderboard.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      child: Text(
+                        'No squad activity yet — capture territory to appear here.',
+                        style: TextStyle(color: scheme.onSurfaceVariant),
+                      ),
+                    )
+                  else
+                    Column(
+                      children: List.generate(state.leaderboard.length, (i) {
+                        final row = state.leaderboard[i];
+                        return _LeaderboardRow(
+                          row: row,
+                          index: i,
+                          count: state.leaderboard.length,
+                        );
+                      }),
+                    ),
+                  const SizedBox(height: 22),
+                  Center(
+                    child: TextButton(
+                      // Reversible (rejoin with the invite code) — no longer
+                      // styled identically to Profile's irreversible
+                      // "Delete account".
+                      style: TextButton.styleFrom(
+                        foregroundColor: scheme.onSurfaceVariant,
+                      ),
+                      onPressed: () => context.read<SquadCubit>().leaveSquad(),
+                      child: const Text('Leave squad'),
+                    ),
+                  ),
+                ],
               ),
-            )
-          else
-            Column(
-              children: List.generate(state.leaderboard.length, (i) {
-                final row = state.leaderboard[i];
-                return _LeaderboardRow(row: row, index: i, count: state.leaderboard.length);
-              }),
             ),
-          const SizedBox(height: 22),
-          Center(
-            child: TextButton(
-              style: TextButton.styleFrom(foregroundColor: scheme.error),
-              onPressed: () => context.read<SquadCubit>().leaveSquad(),
-              child: const Text('Leave squad'),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -390,7 +465,10 @@ class _InviteCodeCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(20),
+      ),
       child: Row(
         children: [
           Icon(Icons.qr_code, color: scheme.onPrimaryContainer),
@@ -401,7 +479,10 @@ class _InviteCodeCard extends StatelessWidget {
               children: [
                 Text(
                   'Invite code',
-                  style: TextStyle(fontSize: 12, color: scheme.onPrimaryContainer.withValues(alpha: 0.75)),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onPrimaryContainer.withValues(alpha: 0.75),
+                  ),
                 ),
                 Text(
                   inviteCode,
@@ -421,7 +502,9 @@ class _InviteCodeCard extends StatelessWidget {
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: inviteCode));
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invite code copied')));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Invite code copied')),
+                );
               }
             },
           ),
@@ -432,7 +515,11 @@ class _InviteCodeCard extends StatelessWidget {
 }
 
 class _LeaderboardRow extends StatelessWidget {
-  const _LeaderboardRow({required this.row, required this.index, required this.count});
+  const _LeaderboardRow({
+    required this.row,
+    required this.index,
+    required this.count,
+  });
 
   final LeaderboardEntry row;
   final int index;
@@ -441,7 +528,9 @@ class _LeaderboardRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final radius = row.isYou ? BorderRadius.circular(999) : groupedItemRadius(index: index, count: count, outer: 20);
+    final radius = row.isYou
+        ? BorderRadius.circular(999)
+        : groupedItemRadius(index: index, count: count, outer: 20);
     final bg = row.isYou ? scheme.primaryContainer : scheme.surfaceContainerLow;
     final fg = row.isYou ? scheme.onPrimaryContainer : scheme.onSurface;
     final rankBg = row.rank == 1
@@ -467,7 +556,10 @@ class _LeaderboardRow extends StatelessWidget {
               height: 32,
               decoration: BoxDecoration(color: rankBg, shape: BoxShape.circle),
               child: Center(
-                child: Text('${row.rank}', style: TextStyle(fontWeight: FontWeight.w800, color: rankFg)),
+                child: Text(
+                  '${row.rank}',
+                  style: TextStyle(fontWeight: FontWeight.w800, color: rankFg),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -475,10 +567,16 @@ class _LeaderboardRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(row.displayName, style: TextStyle(fontWeight: FontWeight.bold, color: fg)),
+                  Text(
+                    row.displayName,
+                    style: TextStyle(fontWeight: FontWeight.bold, color: fg),
+                  ),
                   Text(
                     row.streakTier.label,
-                    style: TextStyle(fontSize: 12, color: fg.withValues(alpha: 0.75)),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: fg.withValues(alpha: 0.75),
+                    ),
                   ),
                 ],
               ),
@@ -495,8 +593,16 @@ class _LeaderboardRow extends StatelessWidget {
               const SizedBox(width: 4),
               IconButton(
                 tooltip: 'Report member',
-                icon: Icon(Icons.flag_outlined, size: 18, color: fg.withValues(alpha: 0.6)),
-                onPressed: () => _showReportMemberDialog(context, userId: row.userId, displayName: row.displayName),
+                icon: Icon(
+                  Icons.flag_outlined,
+                  size: 18,
+                  color: fg.withValues(alpha: 0.6),
+                ),
+                onPressed: () => _showReportMemberDialog(
+                  context,
+                  userId: row.userId,
+                  displayName: row.displayName,
+                ),
               ),
             ],
           ],
@@ -506,7 +612,11 @@ class _LeaderboardRow extends StatelessWidget {
   }
 }
 
-Future<void> _showReportMemberDialog(BuildContext context, {required String userId, required String displayName}) async {
+Future<void> _showReportMemberDialog(
+  BuildContext context, {
+  required String userId,
+  required String displayName,
+}) async {
   final cubit = context.read<SquadCubit>();
   final controller = TextEditingController();
   final reason = await showDialog<String>(
@@ -520,9 +630,13 @@ Future<void> _showReportMemberDialog(BuildContext context, {required String user
         decoration: const InputDecoration(hintText: 'What happened?'),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
-          onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+          onPressed: () =>
+              Navigator.of(dialogContext).pop(controller.text.trim()),
           child: const Text('Submit report'),
         ),
       ],
@@ -533,7 +647,9 @@ Future<void> _showReportMemberDialog(BuildContext context, {required String user
   try {
     await cubit.reportMember(reportedUserId: userId, reason: reason);
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report submitted. Thank you.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Report submitted. Thank you.')),
+      );
     }
   } catch (e) {
     if (context.mounted) {

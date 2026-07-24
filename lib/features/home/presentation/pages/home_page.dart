@@ -24,7 +24,12 @@ const _weekdayAbbrLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 /// 6). "Today's goal" remains the design prototype's placeholder — there's
 /// still no daily-goal domain concept.
 class HomePage extends StatelessWidget {
-  const HomePage({required this.onOpenAlarms, required this.onOpenTerritory, required this.onOpenSquad, super.key});
+  const HomePage({
+    required this.onOpenAlarms,
+    required this.onOpenTerritory,
+    required this.onOpenSquad,
+    super.key,
+  });
 
   final VoidCallback onOpenAlarms;
   final VoidCallback onOpenTerritory;
@@ -32,7 +37,8 @@ class HomePage extends StatelessWidget {
 
   AlarmSchedule? _nextAlarm(List<AlarmSchedule> alarms) {
     if (alarms.isEmpty) return null;
-    final sorted = [...alarms]..sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
+    final sorted = [...alarms]
+      ..sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
     return sorted.first;
   }
 
@@ -74,7 +80,8 @@ class HomePage extends StatelessWidget {
               stream: getIt<WatchCurrentStreak>()(),
               builder: (context, streakSnapshot) {
                 final streak = streakSnapshot.data ?? 0;
-                const goalPct = 70; // no daily-goal domain concept yet — placeholder, matches handoff mock
+                const goalPct =
+                    70; // no daily-goal domain concept yet — placeholder, matches handoff mock
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -89,7 +96,10 @@ class HomePage extends StatelessWidget {
                             children: [
                               Text(
                                 _greeting(),
-                                style: TextStyle(fontSize: 14, color: scheme.onSurfaceVariant),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: scheme.onSurfaceVariant,
+                                ),
                               ),
                               Text(
                                 'Awaken',
@@ -106,14 +116,20 @@ class HomePage extends StatelessWidget {
                             children: [
                               Container(
                                 height: 36,
-                                padding: const EdgeInsets.symmetric(horizontal: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                ),
                                 decoration: BoxDecoration(
                                   color: scheme.tertiaryContainer,
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Row(
                                   children: [
-                                    Icon(Icons.local_fire_department, size: 17, color: scheme.onTertiaryContainer),
+                                    Icon(
+                                      Icons.local_fire_department,
+                                      size: 17,
+                                      color: scheme.onTertiaryContainer,
+                                    ),
                                     const SizedBox(width: 5),
                                     Text(
                                       '$streak',
@@ -126,10 +142,13 @@ class HomePage extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              _ProfileAvatar(
-                                onTap: () => Navigator.of(
-                                  context,
-                                ).push(MaterialPageRoute(builder: (_) => const ProfilePage())),
+                              ProfileAvatarButton(
+                                initial: 'G',
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const ProfilePage(),
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -148,6 +167,31 @@ class HomePage extends StatelessWidget {
                               onViewAlarms: onOpenAlarms,
                             ),
                             const SizedBox(height: 18),
+                            StreamBuilder<double>(
+                              stream: getIt<WatchOwnedArea>()(),
+                              builder: (context, areaHintSnapshot) {
+                                final areaSqm = areaHintSnapshot.data ?? 0;
+                                // A brand-new account showing raw "0"/"0.00 km²"
+                                // stat tiles right next to a populated "#1"
+                                // squad rank read as broken rather than
+                                // "you haven't started yet" — found in design
+                                // critique. Only shown for the genuinely fresh
+                                // case; otherwise the tiles speak for themselves.
+                                if (streak != 0 || areaSqm != 0) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: Text(
+                                    "You haven't started yet — dismiss an alarm or capture territory to build your stats.",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                             Row(
                               children: [
                                 Expanded(
@@ -157,7 +201,9 @@ class HomePage extends StatelessWidget {
                                     icon: Icons.local_fire_department,
                                     value: '$streak',
                                     label: 'Day streak',
-                                    radius: const BorderRadius.horizontal(left: Radius.circular(24)),
+                                    radius: const BorderRadius.horizontal(
+                                      left: Radius.circular(24),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 3),
@@ -165,12 +211,14 @@ class HomePage extends StatelessWidget {
                                   child: StreamBuilder<double>(
                                     stream: getIt<WatchOwnedArea>()(),
                                     builder: (context, ownedAreaSnapshot) {
-                                      final areaSqm = ownedAreaSnapshot.data ?? 0;
+                                      final areaSqm =
+                                          ownedAreaSnapshot.data ?? 0;
                                       return StatTile(
                                         bg: scheme.secondaryContainer,
                                         fg: scheme.onSecondaryContainer,
                                         icon: Icons.landscape,
-                                        value: (areaSqm / 1000000).toStringAsFixed(2),
+                                        value: (areaSqm / 1000000)
+                                            .toStringAsFixed(2),
                                         label: 'km² owned',
                                       );
                                     },
@@ -188,7 +236,9 @@ class HomePage extends StatelessWidget {
                                         icon: Icons.emoji_events,
                                         value: rank == null ? '—' : '#$rank',
                                         label: 'Squad rank',
-                                        radius: const BorderRadius.horizontal(right: Radius.circular(24)),
+                                        radius: const BorderRadius.horizontal(
+                                          right: Radius.circular(24),
+                                        ),
                                       );
                                     },
                                   ),
@@ -229,7 +279,10 @@ class HomePage extends StatelessWidget {
                                           ),
                                           Text(
                                             '$goalPct%',
-                                            style: TextStyle(fontWeight: FontWeight.w800, color: scheme.onSurface),
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                              color: scheme.onSurface,
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -237,20 +290,30 @@ class HomePage extends StatelessWidget {
                                     const SizedBox(width: 16),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             "Today's goal",
-                                            style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onSurface),
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: scheme.onSurface,
+                                            ),
                                           ),
                                           Text(
                                             '14 / 20 squats completed',
-                                            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: scheme.onSurfaceVariant,
+                                            ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                    Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
                                   ],
                                 ),
                               ),
@@ -258,47 +321,25 @@ class HomePage extends StatelessWidget {
                             const SizedBox(height: 22),
                             Text(
                               'Achievements',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onSurface),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: scheme.onSurface,
+                              ),
                             ),
                             const SizedBox(height: 12),
                             _AchievementsRow(streak: streak),
                             const SizedBox(height: 22),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _QuickAction(
-                                    bg: scheme.secondaryContainer,
-                                    fg: scheme.onSecondaryContainer,
-                                    icon: Icons.directions_run,
-                                    label: 'Start run',
-                                    radius: const BorderRadius.horizontal(left: Radius.circular(999)),
-                                    onTap: onOpenTerritory,
-                                  ),
-                                ),
-                                const SizedBox(width: 3),
-                                Expanded(
-                                  child: _QuickAction(
-                                    bg: scheme.surfaceContainerHighest,
-                                    fg: scheme.onSurface,
-                                    // surfaceContainerHigh was nearly the same
-                                    // tone as the page's own surface, so this
-                                    // button all but disappeared. `outline`
-                                    // (not `outlineVariant`, ~1.6:1 here) gets
-                                    // this to WCAG 1.4.11's 3:1 for a
-                                    // functional button boundary.
-                                    border: Border.all(color: scheme.outline),
-                                    icon: Icons.groups,
-                                    label: 'View squad',
-                                    radius: const BorderRadius.horizontal(right: Radius.circular(999)),
-                                    onTap: onOpenSquad,
-                                  ),
-                                ),
-                              ],
+                            _QuickActionsPill(
+                              onOpenTerritory: onOpenTerritory,
+                              onOpenSquad: onOpenSquad,
                             ),
                             const SizedBox(height: 22),
                             Text(
                               'Recent activity',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onSurface),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: scheme.onSurface,
+                              ),
                             ),
                             const SizedBox(height: 10),
                             const _RecentActivitySection(),
@@ -311,38 +352,6 @@ class HomePage extends StatelessWidget {
               },
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileAvatar extends StatelessWidget {
-  const _ProfileAvatar({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: 'Profile',
-      child: Material(
-        color: scheme.secondaryContainer,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: SizedBox(
-            width: 40,
-            height: 40,
-            child: Center(
-              child: Text(
-                'G',
-                style: TextStyle(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600, fontSize: 15),
-              ),
-            ),
-          ),
         ),
       ),
     );
@@ -367,32 +376,80 @@ class _AchievementsRow extends StatelessWidget {
           builder: (context, squadSnapshot) {
             final scheme = Theme.of(context).colorScheme;
             final achievements = [
-              (icon: Icons.local_fire_department, label: '4-day streak', unlocked: streak >= 4),
-              (icon: Icons.landscape, label: 'First territory', unlocked: areaSqm > 0),
-              (icon: Icons.groups, label: 'Squad player', unlocked: squadSnapshot.data != null),
-              (icon: Icons.emoji_events, label: '30-day streak', unlocked: streak >= 30),
+              (
+                icon: Icons.local_fire_department,
+                label: '4-day streak',
+                unlocked: streak >= 4,
+                hint: streak >= 4
+                    ? null
+                    : '${4 - streak} more day${4 - streak == 1 ? '' : 's'}',
+              ),
+              (
+                icon: Icons.landscape,
+                label: 'First territory',
+                unlocked: areaSqm > 0,
+                hint: areaSqm > 0 ? null : 'Capture territory',
+              ),
+              (
+                icon: Icons.groups,
+                label: 'Squad player',
+                unlocked: squadSnapshot.data != null,
+                hint: squadSnapshot.data != null ? null : 'Join a squad',
+              ),
+              (
+                icon: Icons.emoji_events,
+                label: '30-day streak',
+                unlocked: streak >= 30,
+                hint: streak >= 30 ? null : '${30 - streak} more days',
+              ),
             ];
             return Row(
               children: achievements.map((a) {
                 return Expanded(
-                  child: Column(
-                    children: [
-                      ExpressiveFlower(
-                        size: 58,
-                        color: a.unlocked ? scheme.tertiaryContainer : scheme.surfaceContainerHigh,
-                        child: Icon(
-                          a.icon,
-                          size: 26,
-                          color: a.unlocked ? scheme.onTertiaryContainer : scheme.outline,
-                        ),
+                  child: Semantics(
+                    // Lock state was previously color-only (tertiaryContainer
+                    // vs. surfaceContainerHigh) — a screen-reader user had no
+                    // way to tell which achievements were earned. WCAG 1.3.1.
+                    label:
+                        '${a.label}, ${a.unlocked ? 'unlocked' : 'locked'}'
+                        '${a.hint == null ? '' : ', ${a.hint}'}',
+                    child: ExcludeSemantics(
+                      child: Column(
+                        children: [
+                          ExpressiveFlower(
+                            size: 58,
+                            color: a.unlocked
+                                ? scheme.tertiaryContainer
+                                : scheme.surfaceContainerHigh,
+                            child: Icon(
+                              a.icon,
+                              size: 26,
+                              color: a.unlocked
+                                  ? scheme.onTertiaryContainer
+                                  : scheme.outline,
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          Text(
+                            a.label,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                          if (a.hint != null)
+                            Text(
+                              a.hint!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: scheme.outline,
+                              ),
+                            ),
+                        ],
                       ),
-                      const SizedBox(height: 7),
-                      Text(
-                        a.label,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-                      ),
-                    ],
+                    ),
                   ),
                 );
               }).toList(),
@@ -437,16 +494,25 @@ class _RecentActivitySection extends StatelessWidget {
         return Column(
           children: List.generate(activity.length, (i) {
             final a = activity[i];
-            final icon = a.kind == RecentActivityKind.alarmDismissed ? Icons.check_circle : Icons.landscape;
+            final icon = a.kind == RecentActivityKind.alarmDismissed
+                ? Icons.check_circle
+                : Icons.landscape;
             return Padding(
               padding: const EdgeInsets.only(bottom: 3),
               child: Material(
                 color: scheme.surfaceContainerLow,
-                borderRadius: groupedItemRadius(index: i, count: activity.length, outer: 18),
+                borderRadius: groupedItemRadius(
+                  index: i,
+                  count: activity.length,
+                  outer: 18,
+                ),
                 elevation: 1,
                 shadowColor: scheme.shadow,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   child: Row(
                     children: [
                       Container(
@@ -460,11 +526,20 @@ class _RecentActivitySection extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(a.text, style: TextStyle(fontSize: 14, color: scheme.onSurface)),
+                        child: Text(
+                          a.text,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: scheme.onSurface,
+                          ),
+                        ),
                       ),
                       Text(
                         _relativeTime(a.occurredAt),
-                        style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -479,7 +554,11 @@ class _RecentActivitySection extends StatelessWidget {
 }
 
 class _NextAlarmCard extends StatelessWidget {
-  const _NextAlarmCard({required this.label, required this.subtitle, required this.onViewAlarms});
+  const _NextAlarmCard({
+    required this.label,
+    required this.subtitle,
+    required this.onViewAlarms,
+  });
 
   final String label;
   final String subtitle;
@@ -491,13 +570,20 @@ class _NextAlarmCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-      decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(32)),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(32),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.alarm, size: 17, color: scheme.onPrimaryContainer.withValues(alpha: 0.8)),
+              Icon(
+                Icons.alarm,
+                size: 17,
+                color: scheme.onPrimaryContainer.withValues(alpha: 0.8),
+              ),
               const SizedBox(width: 6),
               Text(
                 'Next alarm',
@@ -533,7 +619,9 @@ class _NextAlarmCard extends StatelessWidget {
                 style: FilledButton.styleFrom(
                   backgroundColor: scheme.onPrimaryContainer,
                   foregroundColor: scheme.primaryContainer,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                 ),
                 onPressed: onViewAlarms,
                 child: const Text('View alarms'),
@@ -548,7 +636,11 @@ class _NextAlarmCard extends StatelessWidget {
                   child: SizedBox(
                     width: 44,
                     height: 44,
-                    child: Icon(Icons.add, size: 22, color: scheme.onPrimaryContainer),
+                    child: Icon(
+                      Icons.add,
+                      size: 22,
+                      color: scheme.onPrimaryContainer,
+                    ),
                   ),
                 ),
               ),
@@ -560,47 +652,92 @@ class _NextAlarmCard extends StatelessWidget {
   }
 }
 
-class _QuickAction extends StatelessWidget {
-  const _QuickAction({
-    required this.bg,
-    required this.fg,
-    required this.icon,
-    required this.label,
-    required this.radius,
-    required this.onTap,
-    this.border,
+/// Single merged pill for "Start run"/"View squad" — previously two separate
+/// `Container`s, each with its own asymmetric `BorderRadius.horizontal` and
+/// (for the right half) its own `Border.all()`. That combination produced a
+/// stray line where the border failed to follow the curve at the seam
+/// between the rounded outer corner and the square inner one (an Impeller
+/// border/radius rendering quirk, found via a live-screenshot review). One
+/// shared outer border + one shared radius avoids the combination entirely.
+/// Also gives "Start run" the stronger filled treatment — it's the core
+/// gamification-loop entry point and previously read as visually weaker
+/// than "View alarms" above it for no deliberate reason.
+class _QuickActionsPill extends StatelessWidget {
+  const _QuickActionsPill({
+    required this.onOpenTerritory,
+    required this.onOpenSquad,
   });
 
-  final Color bg;
-  final Color fg;
-  final IconData icon;
-  final String label;
-  final BorderRadius radius;
-  final VoidCallback onTap;
-  final BoxBorder? border;
+  final VoidCallback onOpenTerritory;
+  final VoidCallback onOpenSquad;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(borderRadius: radius, border: border),
-      child: Material(
-        color: bg,
-        child: InkWell(
-          borderRadius: radius,
-          onTap: onTap,
-          child: SizedBox(
-            height: 52,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 20, color: fg),
-                const SizedBox(width: 8),
-                Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: fg)),
-              ],
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: scheme.outline),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Material(
+              color: scheme.primary,
+              child: InkWell(
+                onTap: onOpenTerritory,
+                child: SizedBox(
+                  height: 52,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.directions_run,
+                        size: 20,
+                        color: scheme.onPrimary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Start run',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: scheme.onPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
+          Container(width: 1, color: scheme.outline),
+          Expanded(
+            child: Material(
+              color: scheme.surface,
+              child: InkWell(
+                onTap: onOpenSquad,
+                child: SizedBox(
+                  height: 52,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.groups, size: 20, color: scheme.onSurface),
+                      const SizedBox(width: 8),
+                      Text(
+                        'View squad',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
