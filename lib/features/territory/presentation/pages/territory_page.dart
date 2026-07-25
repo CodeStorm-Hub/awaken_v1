@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-import '../../../../core/config/env.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
@@ -20,6 +19,8 @@ import '../../domain/usecases/get_territories_at_risk.dart';
 import '../../domain/usecases/refresh_territories.dart';
 import '../../domain/usecases/watch_owned_area.dart';
 import '../../domain/usecases/watch_territories.dart';
+import '../widgets/map_style_loader.dart';
+import '../widgets/map_style_overlays.dart';
 import '../widgets/osm_attribution.dart';
 import '../widgets/territory_map_style.dart';
 import 'active_run_page.dart';
@@ -50,15 +51,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
   bool _hasFix = false;
   bool _showRivalTerritory = true;
 
-  /// Set if `onStyleLoadedCallback` hasn't fired within [_styleLoadTimeout]
-  /// of the native map view being created — this plugin version exposes no
-  /// dedicated style-load-failure callback, so a timeout is the only signal
-  /// available for "the style never loaded" (typically no network / a
-  /// blocked/offline tile host), which previously looked identical to a
-  /// slow-but-working load: an indefinitely blank map with no explanation.
-  bool _mapLoadFailed = false;
-  Timer? _styleLoadTimer;
-  static const _styleLoadTimeout = Duration(seconds: 15);
+  late final _styleLoader = MapStyleLoader(onChange: () => setState(() {}));
 
   final _bountyFillsByZoneId = <String, List<Fill>>{};
   Rival? _currentRival;
@@ -93,7 +86,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
   @override
   void dispose() {
     unawaited(_territoriesSub?.cancel());
-    _styleLoadTimer?.cancel();
+    _styleLoader.dispose();
     super.dispose();
   }
 
@@ -141,21 +134,28 @@ class _TerritoryPageState extends State<TerritoryPage> {
   }
 
   Future<void> _onMapCreated(MapLibreMapController controller) async {
+    // A fallback-tier style swap tears down and recreates the native map
+    // view entirely (see MapStyleLoader) — any Fill handles from before the
+    // swap belong to a now-destroyed view, so they can't be passed to
+    // removeFills on the new controller. The new view starts with none.
+    _fillsByTerritoryId.clear();
+    _bountyFillsByZoneId.clear();
     _controller = controller;
-    _styleLoadTimer?.cancel();
-    _styleLoadTimer = Timer(_styleLoadTimeout, () {
-      if (mounted) setState(() => _mapLoadFailed = true);
-    });
+    _styleLoader.start();
   }
 
   Future<void> _onStyleLoaded() async {
-    _styleLoadTimer?.cancel();
-    if (mounted && _mapLoadFailed) setState(() => _mapLoadFailed = false);
+    _styleLoader.onStyleLoaded();
     if (_hasFix) {
       await _controller?.animateCamera(CameraUpdate.newLatLngZoom(_center, 15));
       await _syncCurrentPositionMarker();
     }
     await _refreshForCurrentView();
+    // A fallback-tier style swap tears down and recreates the native map
+    // view (see MapStyleLoader), so this can run more than once per page
+    // lifetime — cancel any previous subscription first to avoid piling up
+    // duplicate listeners.
+    await _territoriesSub?.cancel();
     _territoriesSub = getIt<WatchTerritories>()().listen(_onTerritoriesChanged);
     unawaited(_drawBountyZones());
   }
@@ -322,7 +322,8 @@ class _TerritoryPageState extends State<TerritoryPage> {
                   child: Stack(
                     children: [
                       MapLibreMap(
-                        styleString: Env.mapStyleUrl,
+                        key: _styleLoader.styleKey,
+                        styleString: _styleLoader.styleString,
                         initialCameraPosition: const CameraPosition(
                           target: LatLng(20, 0),
                           zoom: 2,
@@ -335,7 +336,10 @@ class _TerritoryPageState extends State<TerritoryPage> {
                         attributionButtonPosition:
                             AttributionButtonPosition.bottomLeft,
                       ),
-                      if (_mapLoadFailed) const _MapLoadErrorOverlay(),
+                      if (_styleLoader.status == MapStyleLoadStatus.retrying)
+                        const MapStyleRetryingBanner(),
+                      if (_styleLoader.status == MapStyleLoadStatus.failed)
+                        MapStyleFailureOverlay(onRetry: _styleLoader.retry),
                       // OSMF's attribution guidance allows a tap-to-reveal
                       // info button only for a startup splash/one-time
                       // interaction — the ongoing map view itself must show
@@ -531,41 +535,6 @@ class _TerritoryPageState extends State<TerritoryPage> {
           },
         );
       },
-    );
-  }
-}
-
-class _MapLoadErrorOverlay extends StatelessWidget {
-  const _MapLoadErrorOverlay();
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Positioned.fill(
-      child: ColoredBox(
-        color: scheme.surface,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.map_outlined,
-                  size: 40,
-                  color: scheme.onSurfaceVariant,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  "Couldn't load the map — check your connection.",
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

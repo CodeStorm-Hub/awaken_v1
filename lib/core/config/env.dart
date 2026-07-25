@@ -50,6 +50,19 @@ abstract final class Env {
     return (value == null || value.isEmpty) ? null : value;
   }
 
+  /// Base URL of the self-hosted PMTiles-backed tile Worker (see
+  /// `infra/tile-worker/`), e.g. `https://awaken-tile-fallback.example
+  /// .workers.dev`. Last-resort fallback tier, tried only after both
+  /// [mapStyleUrl] and [mapStyleFallbackUrl] fail to load — a bundled
+  /// local-asset style (`assets/map/fallback_style.json`) references it
+  /// directly, so this doesn't depend on any external style-hosting
+  /// endpoint being reachable, only the tile Worker itself. Optional: null
+  /// until the Worker in `infra/tile-worker/` is deployed.
+  static String? get tileWorkerUrl {
+    final value = dotenv.maybeGet('TILE_WORKER_BASE_URL');
+    return (value == null || value.isEmpty) ? null : value;
+  }
+
   /// Web/server OAuth client id (Google Cloud Console "Web application"
   /// type) — this is the audience `GoogleSignIn.instance.initialize`'s
   /// `serverClientId` needs so the resulting ID token is accepted by

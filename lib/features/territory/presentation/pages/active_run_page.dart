@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-import '../../../../core/config/env.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../domain/entities/gps_quality.dart';
 import '../../domain/entities/run_track_state.dart';
 import '../../domain/entities/track_point.dart';
 import '../bloc/run_tracking_cubit.dart';
+import '../widgets/map_style_loader.dart';
+import '../widgets/map_style_overlays.dart';
 import '../widgets/osm_attribution.dart';
 import '../widgets/territory_capture_sheet.dart';
 import '../widgets/territory_map_style.dart';
@@ -61,10 +62,18 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
   bool _busy = false;
   ColorScheme? _scheme;
 
+  late final _styleLoader = MapStyleLoader(onChange: () => setState(() {}));
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _scheme = Theme.of(context).colorScheme;
+  }
+
+  @override
+  void dispose() {
+    _styleLoader.dispose();
+    super.dispose();
   }
 
   String _fmtTime(int totalSec) {
@@ -74,11 +83,22 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
   }
 
   Future<void> _onMapCreated(MapLibreMapController controller) async {
+    // A fallback-tier style swap tears down and recreates the native map
+    // view entirely (see MapStyleLoader) — any Line/Circle handles and the
+    // synced-point count from before the swap belong to a now-destroyed
+    // view, so the whole route must be re-synced onto the fresh one.
+    _routeLine = null;
+    _startMarker = null;
+    _currentMarker = null;
+    _syncedPointCount = 0;
+    _styleLoaded = false;
     _controller = controller;
+    _styleLoader.start();
   }
 
   Future<void> _onStyleLoaded() async {
     _styleLoaded = true;
+    _styleLoader.onStyleLoaded();
     final cubit = context.read<RunTrackingCubit>();
     await _handleStateChange(cubit.state);
   }
@@ -294,7 +314,8 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                               // Built exactly once — see the class doc comment on why this
                               // must never sit inside a BlocBuilder scoped to RunTrackState.
                               MapLibreMap(
-                                styleString: Env.mapStyleUrl,
+                                key: _styleLoader.styleKey,
+                                styleString: _styleLoader.styleString,
                                 initialCameraPosition: const CameraPosition(
                                   target: LatLng(20, 0),
                                   zoom: 2,
@@ -324,6 +345,14 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                   onTap: _recenter,
                                 ),
                               ),
+                              if (_styleLoader.status ==
+                                  MapStyleLoadStatus.retrying)
+                                const MapStyleRetryingBanner(),
+                              if (_styleLoader.status ==
+                                  MapStyleLoadStatus.failed)
+                                MapStyleFailureOverlay(
+                                  onRetry: _styleLoader.retry,
+                                ),
                             ],
                           ),
                         ),

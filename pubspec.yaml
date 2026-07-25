@@ -83,3 +83,4 @@ flutter:
   assets:
     - .env.client
     - assets/e2e/scripted_run_fixture.json
+    - assets/map/fallback_style.json

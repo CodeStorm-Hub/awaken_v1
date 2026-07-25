@@ -4,6 +4,34 @@ import 'package:awaken/features/verification/domain/entities/body_pose.dart';
 import 'package:awaken/features/verification/domain/services/joint_angle.dart';
 import 'package:awaken/features/verification/domain/services/rep_counter.dart';
 
+BodyPose _twoSidedSquatPose({
+  required double leftKneeAngleHint,
+  required double rightKneeAngleHint,
+  double leftLikelihood = 1,
+  double rightLikelihood = 1,
+}) {
+  final leftKnee = JointPosition(
+    x: leftKneeAngleHint,
+    y: 1,
+    likelihood: leftLikelihood,
+  );
+  final rightKnee = JointPosition(
+    x: rightKneeAngleHint,
+    y: 1,
+    likelihood: rightLikelihood,
+  );
+  return BodyPose(
+    joints: {
+      BodyJoint.leftHip: JointPosition(x: 0, y: 0, likelihood: leftLikelihood),
+      BodyJoint.leftKnee: leftKnee,
+      BodyJoint.leftAnkle: JointPosition(x: 0, y: 2, likelihood: leftLikelihood),
+      BodyJoint.rightHip: JointPosition(x: 0, y: 0, likelihood: rightLikelihood),
+      BodyJoint.rightKnee: rightKnee,
+      BodyJoint.rightAnkle: JointPosition(x: 0, y: 2, likelihood: rightLikelihood),
+    },
+  );
+}
+
 BodyPose _squatPose({required double kneeAngleHint}) {
   // kneeAngleHint controls how far the knee is pushed forward of the
   // hip-ankle line: 0 = straight leg (~180°), 1 = deep bend (~90°).
@@ -24,6 +52,30 @@ int _feed(AngleRepCounter counter, double kneeAngleHint, int count) {
   var reps = 0;
   for (var i = 0; i < count; i++) {
     if (counter.update(_squatPose(kneeAngleHint: kneeAngleHint))) reps++;
+  }
+  return reps;
+}
+
+int _feed2(
+  AngleRepCounter counter,
+  int count, {
+  required double leftKneeAngleHint,
+  required double rightKneeAngleHint,
+  double leftLikelihood = 1,
+  double rightLikelihood = 1,
+}) {
+  var reps = 0;
+  for (var i = 0; i < count; i++) {
+    if (counter.update(
+      _twoSidedSquatPose(
+        leftKneeAngleHint: leftKneeAngleHint,
+        rightKneeAngleHint: rightKneeAngleHint,
+        leftLikelihood: leftLikelihood,
+        rightLikelihood: rightLikelihood,
+      ),
+    )) {
+      reps++;
+    }
   }
   return reps;
 }
@@ -119,6 +171,57 @@ void main() {
       counter.reset();
       expect(counter.phase, RepPhase.up);
     });
+
+    test(
+      'switching to a higher-confidence straight side mid-descent does not '
+      'complete a rep without the locked side also straightening',
+      () {
+        final counter = AngleRepCounter.squat();
+
+        // Descend on the left leg only; confirm the down phase.
+        expect(
+          _feed2(
+            counter,
+            2,
+            leftKneeAngleHint: 1,
+            rightKneeAngleHint: 0,
+          ),
+          0,
+        );
+        expect(counter.phase, RepPhase.down);
+
+        // Right leg (still straight, i.e. "up") now reports much higher
+        // confidence than the bent left leg. Without a side lock,
+        // `_bestSideAngle` would switch to the right leg's up-angle and
+        // could complete a rep despite the left leg (the one that actually
+        // went down) never having straightened back out.
+        expect(
+          _feed2(
+            counter,
+            2,
+            leftKneeAngleHint: 1,
+            rightKneeAngleHint: 0,
+            leftLikelihood: 0.3,
+            rightLikelihood: 1,
+          ),
+          0,
+        );
+        expect(counter.phase, RepPhase.down); // still down: left never rose
+
+        // Only once the locked (left) side actually straightens does the
+        // rep complete.
+        expect(
+          _feed2(
+            counter,
+            2,
+            leftKneeAngleHint: 0,
+            rightKneeAngleHint: 0,
+          ),
+          1,
+        );
+        expect(counter.phase, RepPhase.up);
+      },
+    );
 
     test('two full reps count twice, accounting for the post-rep cooldown', () {
       final counter = AngleRepCounter.squat();

@@ -16,6 +16,12 @@ class SquadRemoteDataSource {
   final _channels = <String, RealtimeChannel>{};
   final _channelRefCounts = <String, int>{};
 
+  /// Completes once a channel's `subscribe()` call reports `subscribed` —
+  /// awaited by `trackPresence`/`broadcastTelemetry` so a `.track()`/
+  /// `.sendBroadcastMessage()` call can't race the initial join and get
+  /// silently dropped before the channel is actually joined.
+  final _subscribed = <String, Completer<void>>{};
+
   /// Squad ids this device currently has Presence `.track()`ed on — a
   /// standing retain, released only on `closeAllChannels()`, since an
   /// active `track()` payload is live channel state that must survive
@@ -104,12 +110,24 @@ class SquadRemoteDataSource {
         opts: const RealtimeChannelConfig(private: true),
       );
       _channelRefCounts[squadId] = 0;
+      final completer = Completer<void>();
+      _subscribed[squadId] = completer;
       // `subscribe()` may only be called once per channel instance (it
       // throws on a second call) — do it exactly once here, at creation,
       // rather than at each call site that wants presence/broadcast.
-      channel.subscribe();
+      channel.subscribe((status, error) {
+        if (status == RealtimeSubscribeStatus.subscribed &&
+            !completer.isCompleted) {
+          completer.complete();
+        }
+      });
       return channel;
     });
+  }
+
+  Future<void> _awaitSubscribed(String squadId) {
+    _channelFor(squadId);
+    return _subscribed[squadId]!.future;
   }
 
   void _retain(String squadId) {
@@ -124,6 +142,7 @@ class SquadRemoteDataSource {
     }
     final channel = _channels.remove(squadId);
     _channelRefCounts.remove(squadId);
+    _subscribed.remove(squadId);
     if (channel != null) unawaited(_supabase.removeChannel(channel));
   }
 
@@ -154,17 +173,19 @@ class SquadRemoteDataSource {
     Map<String, dynamic> payload,
   ) async {
     if (_trackedSquadIds.add(squadId)) _retain(squadId);
+    await _awaitSubscribed(squadId);
     await _channelFor(squadId).track(payload);
   }
 
   static const _broadcastEvent = 'telemetry';
 
   void broadcastTelemetry(String squadId, Map<String, dynamic> payload) {
-    unawaited(
-      _channelFor(
+    unawaited(() async {
+      await _awaitSubscribed(squadId);
+      await _channelFor(
         squadId,
-      ).sendBroadcastMessage(event: _broadcastEvent, payload: payload),
-    );
+      ).sendBroadcastMessage(event: _broadcastEvent, payload: payload);
+    }());
   }
 
   /// Live telemetry from squadmates' `broadcastTelemetry` calls — each
@@ -197,6 +218,7 @@ class SquadRemoteDataSource {
     _channels.clear();
     _channelRefCounts.clear();
     _trackedSquadIds.clear();
+    _subscribed.clear();
     await Future.wait(channels.map(_supabase.removeChannel));
   }
 }

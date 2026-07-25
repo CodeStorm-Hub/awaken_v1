@@ -248,19 +248,27 @@ treat this document as thorough, not provably exhaustive.
 Organized by area, in rough priority order within each area.
 
 ### Map / tiles
-- [ ] **`Env.mapStyleFallbackUrl` is still completely unused.** Defined in `env.dart:48-51`,
-      documented in `.env.client.example` as a manual override, but no code path reads it anywhere.
-      The 15s style-load-timeout in `territory_page.dart` only shows an error overlay — it never
-      actually retries against the fallback URL.
-- [ ] **`active_run_page.dart` has zero map style-load failure handling** — no timeout, no failure
-      overlay. A run can start on an indefinitely blank map with no feedback if the style fails to
-      load (worse than the territory page's gap, since it's mid-workout).
-- [ ] **No self-hosted tile fallback exists.** The app now runs on OpenFreeMap's free hosted vector
-      style (`https://tiles.openfreemap.org/styles/liberty`) instead of the plan's originally
-      spec'd commercial provider or self-hosted PMTiles/Protomaps escape hatch (`awaken_app_refined_
-      plan.md` risk item C3). Fine for now, but there's no fallback if OpenFreeMap goes down or
-      rate-limits the app — no PMTiles package, no tile-server edge function, nothing in
-      `supabase/functions/` for this.
+- [x] **`Env.mapStyleFallbackUrl` now wired up + a third self-hosted tier added.** New
+      `MapStyleLoader` (`lib/features/territory/presentation/widgets/map_style_loader.dart`)
+      escalates: primary (`Env.mapStyleUrl`) → configured hosted fallback
+      (`Env.mapStyleFallbackUrl`) → bundled self-hosted tile Worker (`Env.tileWorkerUrl` +
+      `assets/map/fallback_style.json`) → failure overlay with a manual **Retry** button. Since
+      `maplibre_gl` 0.26.2 has no live style-swap API (`styleString` is creation-only), each
+      escalation gives the `MapLibreMap` a new `ValueKey` to force native-view recreation — both
+      `territory_page.dart` and `active_run_page.dart` reset their stale Fill/Line/Circle handles
+      and re-sync onto the fresh view when this happens (`_onMapCreated`).
+- [x] **`active_run_page.dart` now has full map style-load failure handling** — same
+      `MapStyleLoader`/timeout/retry/overlay treatment as the territory page (previously had none at
+      all).
+- [x] **Self-hosted tile fallback added** (`infra/tile-worker/`) — a vendored, adapted copy of
+      Protomaps' official Cloudflare Worker (byte-range reads over an R2-hosted `.pmtiles` file),
+      installed/type-checked/dry-run-built in-repo. Backing data: a global, maxzoom-6 Protomaps OSM
+      extract (~45MB, `generate_basemap.sh` regenerates it) — country/city-level detail, intended as
+      a last-resort tier only, **not** a replacement for OpenFreeMap as primary (street-level detail
+      globally would mean ~1TB+ storage, a real ongoing cost/maintenance commitment that was
+      deliberately declined). See `infra/tile-worker/README.md` for the deploy steps (require your
+      own Cloudflare login — not something that can be scripted end-to-end by an assistant).
+      Estimated cost at this app's scale: $0/month (well inside R2 + Workers free tiers).
 
 ### Territory / run tracking — genuinely hard, Appium/hardware-gated
 - [ ] **Foreground task handler is still empty.** `run_foreground_service.dart`'s
@@ -319,10 +327,8 @@ Organized by area, in rough priority order within each area.
       safe.sql:11-49`.)
 
 ### Alarm — small, no hardware needed
-- [ ] **`penaltyGraceWindow` constant still unused.** (`app_constants.dart:12`.) This was the
-      original small question that got sidetracked into the lockdown-feature discussion — never
-      resolved. Needs a decision on intended behavior (grace period before wake-up tax penalty
-      applies?) then wiring it in, or removing it if it's not wanted.
+- [x] **`penaltyGraceWindow` constant removed** (was unused, `app_constants.dart:12`) — user chose
+      removal over defining grace-period behavior.
 - [ ] **Reliability self-test can't survive a real task kill and doesn't clean up its test alarm.**
       `_phase`/`_testAlarmId`/`_measuredDelay` are plain in-memory `State` fields with no
       persistence; the scheduled test alarm is never cancelled on dispose/re-run/timeout.
@@ -339,9 +345,12 @@ Organized by area, in rough priority order within each area.
       (`20260725032045_lock_user_stats_and_add_tax_rpcs.sql:17-30`.)
 
 ### Verification — real gaps found in second pass, no hardware needed
-- [ ] **Left/right rep-counting chain isn't locked for the duration of a rep.** `_bestSideAngle`
-      recomputes the higher-confidence side on every single frame with no hysteresis — a user could
-      complete one rep using both sides across different frames. (`rep_counter.dart:141-147`.)
+- [x] **Left/right rep-counting chain now locked for the duration of a rep.** `_selectSide` picks
+      the higher-confidence side only while neutral; a `_lockedIsLeft` flag locks in whichever side
+      is driving a descent as soon as `_belowStreak` starts, and only unlocks back to neutral or on
+      rep completion — so a user can no longer complete a rep by switching sides mid-way. Added a
+      regression test (`rep_counter_test.dart` — "switching to a higher-confidence straight side
+      mid-descent...") that fails against the old always-recompute logic. (`rep_counter.dart`.)
 - [ ] **Entire camera stack still rebuilds on every pose-state change; no FPS throttle.** The whole
       widget tree including `CameraPreview` is inside one `BlocBuilder`; no `ValueNotifier`/
       `RepaintBoundary` isolation and no processing-FPS throttle exist anywhere in
@@ -421,8 +430,9 @@ Organized by area, in rough priority order within each area.
 - [ ] **`main_prod.dart` still points at the dev Supabase project.** Explicitly acknowledged with a
       TODO — blocked on you provisioning a separate prod project. Not something to silently fix;
       flag when that infra decision is made.
-- [ ] **`ThemeModeCubit` load/set race not fixed.** Constructor fires `unawaited(_load())` with no
-      guard against `setThemeMode()` being overwritten by a slower in-flight `_load()`.
+- [x] **`ThemeModeCubit` load/set race fixed** — `_userSet` flag set by `setThemeMode()` and checked
+      by `_load()` after its `getInstance()` await, so a user choice made during startup load can no
+      longer be clobbered. (`theme_mode_cubit.dart`.)
 - [ ] **`SystemCapabilities` class itself still has no `Platform.isAndroid` guard** — iOS-safety was
       patched at call sites (e.g. `battery_exemption_repository_impl.dart`) instead of the class,
       so any new caller that forgets the guard reintroduces the crash risk.
@@ -438,9 +448,11 @@ Organized by area, in rough priority order within each area.
       uncaught and unsurfaced.
 
 ### Squad — real security-relevant items
-- [ ] **Presence tracking doesn't wait for subscribe confirmation.** `channel.subscribe()` has no
-      status callback; `trackPresence()` calls `.track(payload)` immediately without waiting for
-      `RealtimeSubscribeStatus.subscribed`, so a track call can race the subscription.
+- [x] **Presence tracking now waits for subscribe confirmation.** `_channelFor()`'s `subscribe()`
+      call takes a status callback that completes a per-squad `Completer` on
+      `RealtimeSubscribeStatus.subscribed`; `trackPresence()`/`broadcastTelemetry()` await it before
+      calling `.track()`/`.sendBroadcastMessage()`. Completer cleaned up in `_release()`/
+      `closeAllChannels()`. (`squad_remote_datasource.dart`.)
 - [ ] **Presence identity is still client-asserted, not server-verified.** The `user_id` in the
       Presence payload comes from local state (`squad_repository_impl.dart:266-283`) with nothing
       server-side checking it against the channel's authenticated JWT — impersonation within a

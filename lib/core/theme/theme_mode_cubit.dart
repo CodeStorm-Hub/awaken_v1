@@ -19,8 +19,13 @@ class ThemeModeCubit extends Cubit<ThemeMode> {
 
   static const _key = 'theme_mode';
 
+  // Guards against the startup `_load()` overwriting a user choice made via
+  // `setThemeMode()` while `_load()` was still awaiting `getInstance()`.
+  bool _userSet = false;
+
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    if (_userSet) return;
     final stored = prefs.getString(_key);
     final mode = ThemeMode.values.firstWhere(
       (m) => m.name == stored,
@@ -30,6 +35,7 @@ class ThemeModeCubit extends Cubit<ThemeMode> {
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
+    _userSet = true;
     emit(mode);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, mode.name);

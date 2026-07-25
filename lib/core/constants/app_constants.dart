@@ -9,7 +9,6 @@ abstract final class AppConstants {
   // Alarm / wake-up tax (plan §2.3 — bounded, not unbounded exponential)
   static const double penaltyMultiplierStep = 1.5;
   static const double penaltyMultiplierCap = 4.0;
-  static const Duration penaltyGraceWindow = Duration(hours: 2);
 
   // Verification pipeline (plan §6 Phase 2 exit criterion)
   static const int targetPoseProcessingFps = 12; // 10-15 fps budget

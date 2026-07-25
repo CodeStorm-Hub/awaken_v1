@@ -1,0 +1,89 @@
+{
+  "version": 8,
+  "name": "Awaken Offline Fallback (Protomaps z0-6)",
+  "glyphs": "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
+  "sources": {
+    "awaken-fallback": {
+      "type": "vector",
+      "tiles": [
+        "{{TILE_WORKER_BASE_URL}}/awaken-fallback-basemap/{z}/{x}/{y}.pbf"
+      ],
+      "minzoom": 0,
+      "maxzoom": 6,
+      "attribution": "<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">&copy; OpenStreetMap</a> contributors, Protomaps"
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": { "background-color": "#a8cbe0" }
+    },
+    {
+      "id": "earth",
+      "type": "fill",
+      "source": "awaken-fallback",
+      "source-layer": "earth",
+      "paint": { "fill-color": "#f4efe6" }
+    },
+    {
+      "id": "landcover",
+      "type": "fill",
+      "source": "awaken-fallback",
+      "source-layer": "landcover",
+      "paint": { "fill-color": "#c8dcb4", "fill-opacity": 0.5 }
+    },
+    {
+      "id": "landuse",
+      "type": "fill",
+      "source": "awaken-fallback",
+      "source-layer": "landuse",
+      "paint": { "fill-color": "#e0dccb", "fill-opacity": 0.6 }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "awaken-fallback",
+      "source-layer": "water",
+      "paint": { "fill-color": "#8fb8d6" }
+    },
+    {
+      "id": "boundaries",
+      "type": "line",
+      "source": "awaken-fallback",
+      "source-layer": "boundaries",
+      "paint": {
+        "line-color": "#9a8f7a",
+        "line-width": 0.75,
+        "line-dasharray": [3, 2]
+      }
+    },
+    {
+      "id": "roads",
+      "type": "line",
+      "source": "awaken-fallback",
+      "source-layer": "roads",
+      "paint": {
+        "line-color": "#ffffff",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.3, 6, 1.2]
+      }
+    },
+    {
+      "id": "places",
+      "type": "symbol",
+      "source": "awaken-fallback",
+      "source-layer": "places",
+      "layout": {
+        "text-field": ["get", "name"],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 1, 9, 6, 13],
+        "symbol-sort-key": ["get", "sort_key"]
+      },
+      "paint": {
+        "text-color": "#4a4438",
+        "text-halo-color": "#f4efe6",
+        "text-halo-width": 1.2
+      }
+    }
+  ]
+}

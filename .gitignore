@@ -55,3 +55,9 @@ app.*.map.json
 
 # Claude Code local settings
 .claude/settings.local.json
+/infra/tile-worker/node_modules
+
+# Generated PMTiles basemap extract — large binary, regenerate via
+# infra/tile-worker/generate_basemap.sh instead of committing it.
+/infra/tile-worker/generated/*.pmtiles
+/infra/tile-worker/dist
