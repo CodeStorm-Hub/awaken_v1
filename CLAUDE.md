@@ -52,6 +52,8 @@ or Drift table, rerun the `build_runner build` command above — nothing will re
 
 CI (`.github/workflows/ci.yaml`) runs analyze/test/build on every push/PR, plus a best-effort
 16KB-page-size emulator smoke job (`continue-on-error`, don't treat its failures as blocking).
+`.github/workflows/build_ios.yml` builds the iOS target but is manually triggered, not run
+automatically on push/PR.
 
 ### Windows-specific build workaround
 
@@ -77,10 +79,14 @@ Linux CI runners if it matters there.
 `lib/core/` holds cross-cutting concerns: `di/` (get_it + injectable — `injection.config.dart` is
 **generated**, don't hand-edit it), `theme/` (hand-rolled M3-Expressive-style motion/shape tokens
 — core Flutter does not ship M3 Expressive, see refined plan C2), `platform/` (native
-MethodChannel wrappers), `error/` (`Failure` hierarchy), `usecase/`, `constants/`.
+MethodChannel wrappers), `error/` (`Failure` hierarchy), `usecase/`, `constants/`, `config/`
+(env loading), `router/`, `utils/`.
 
-`lib/sync/` is reserved for the offline-first Drift schema + outbox engine (Phase 3 per the
-roadmap) — empty/placeholder until then.
+`lib/sync/` holds the offline-first Drift schema + outbox engine (Phase 3, implemented per
+ADR-002): `local/database.dart` (Drift schema + DAOs), `outbox/local_writer.dart` +
+`sync_worker.dart` (transactional enqueue, connectivity-triggered drain, backoff),
+`pull/pull_down_sync.dart`, and `connectivity/connectivity_watcher.dart`. Every feature writes
+through the shared `LocalWriter`, never touches Supabase directly for user data.
 
 ### DI pattern
 
