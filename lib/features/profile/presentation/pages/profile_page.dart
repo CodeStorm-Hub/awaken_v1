@@ -462,6 +462,7 @@ class _AuthDialog extends StatefulWidget {
 
 class _AuthDialogState extends State<_AuthDialog> {
   late var _mode = widget.mode;
+  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   var _obscurePassword = true;
@@ -475,24 +476,23 @@ class _AuthDialogState extends State<_AuthDialog> {
     super.dispose();
   }
 
-  String? _validate() {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
+  String? _validateEmail(String? value) {
+    final email = (value ?? '').trim();
     if (email.isEmpty || !_emailPattern.hasMatch(email)) {
       return 'Enter a valid email address.';
     }
-    if (password.length < 6) {
+    return null;
+  }
+
+  String? _validatePassword(String? value) {
+    if ((value ?? '').length < 6) {
       return 'Password must be at least 6 characters.';
     }
     return null;
   }
 
   Future<void> _submitEmail() async {
-    final validationError = _validate();
-    if (validationError != null) {
-      setState(() => _error = validationError);
-      return;
-    }
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     setState(() {
@@ -590,100 +590,106 @@ class _AuthDialogState extends State<_AuthDialog> {
     final isLink = _mode == _AuthDialogMode.link;
     return AlertDialog(
       title: Text(isLink ? 'Migrate to cloud' : 'Sign in'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _emailController,
-            enabled: !_submitting,
-            keyboardType: TextInputType.emailAddress,
-            autofillHints: const [AutofillHints.email],
-            decoration: const InputDecoration(labelText: 'Email'),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _passwordController,
-            enabled: !_submitting,
-            obscureText: _obscurePassword,
-            autofillHints: [
-              isLink ? AutofillHints.newPassword : AutofillHints.password,
-            ],
-            decoration: InputDecoration(
-              labelText: 'Password',
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                ),
-                tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                onPressed: () =>
-                    setState(() => _obscurePassword = !_obscurePassword),
-              ),
+      content: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: _emailController,
+              enabled: !_submitting,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
+              decoration: const InputDecoration(labelText: 'Email'),
+              validator: _validateEmail,
             ),
-            onSubmitted: (_) => _submitEmail(),
-          ),
-          if (!isLink) ...[
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: _submitting ? null : _forgotPassword,
-                child: const Text('Forgot password?'),
-              ),
-            ),
-          ] else
             const SizedBox(height: 8),
-          if (_error != null) ...[
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                _error!,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                  fontSize: 13,
+            TextFormField(
+              controller: _passwordController,
+              enabled: !_submitting,
+              obscureText: _obscurePassword,
+              autofillHints: [
+                isLink ? AutofillHints.newPassword : AutofillHints.password,
+              ],
+              decoration: InputDecoration(
+                labelText: 'Password',
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
                 ),
+              ),
+              validator: _validatePassword,
+              onFieldSubmitted: (_) => _submitEmail(),
+            ),
+            if (!isLink) ...[
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _submitting ? null : _forgotPassword,
+                  child: const Text('Forgot password?'),
+                ),
+              ),
+            ] else
+              const SizedBox(height: 8),
+            if (_error != null) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  _error!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _submitting ? null : _submitEmail,
+                child: _submitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(isLink ? 'Continue with email' : 'Sign in'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const GoogleLogo(size: 18),
+                onPressed: _submitting ? null : _submitGoogle,
+                label: Text(
+                  isLink ? 'Continue with Google' : 'Sign in with Google',
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: _submitting
+                  ? null
+                  : () => setState(() {
+                      _mode = isLink
+                          ? _AuthDialogMode.signIn
+                          : _AuthDialogMode.link;
+                      _error = null;
+                    }),
+              child: Text(
+                isLink
+                    ? 'Already have an account? Sign in'
+                    : "Don't have an account? Migrate to cloud",
               ),
             ),
           ],
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _submitting ? null : _submitEmail,
-              child: _submitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(isLink ? 'Continue with email' : 'Sign in'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              icon: const GoogleLogo(size: 18),
-              onPressed: _submitting ? null : _submitGoogle,
-              label: Text(
-                isLink ? 'Continue with Google' : 'Sign in with Google',
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          TextButton(
-            onPressed: _submitting
-                ? null
-                : () => setState(() {
-                    _mode = isLink
-                        ? _AuthDialogMode.signIn
-                        : _AuthDialogMode.link;
-                    _error = null;
-                  }),
-            child: Text(
-              isLink
-                  ? 'Already have an account? Sign in'
-                  : "Don't have an account? Migrate to cloud",
-            ),
-          ),
-        ],
+        ),
       ),
       actions: [
         TextButton(

@@ -27,6 +27,7 @@ class BatteryExemptionPage extends StatefulWidget {
 class _BatteryExemptionPageState extends State<BatteryExemptionPage>
     with WidgetsBindingObserver {
   BatteryExemptionStatus? _status;
+  bool _requestingExemption = false;
 
   @override
   void initState() {
@@ -51,6 +52,26 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage>
   Future<void> _refreshStatus() async {
     final status = await getIt<CheckBatteryExemptionStatus>()(const NoParams());
     if (mounted) setState(() => _status = status);
+  }
+
+  Future<void> _requestExemption() async {
+    setState(() => _requestingExemption = true);
+    try {
+      await getIt<RequestBatteryExemption>()(const NoParams());
+      await _refreshStatus();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "Couldn't open battery settings — please try again.",
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _requestingExemption = false);
+    }
   }
 
   String _capitalize(String s) =>
@@ -159,12 +180,8 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage>
                               actionLabel: status.isExempt ? null : 'Allow',
                               onAction: status.isExempt
                                   ? null
-                                  : () async {
-                                      await getIt<RequestBatteryExemption>()(
-                                        const NoParams(),
-                                      );
-                                      await _refreshStatus();
-                                    },
+                                  : _requestExemption,
+                              busy: _requestingExemption,
                             ),
                             if (showOemStep) ...[
                               const SizedBox(height: 3),
@@ -242,6 +259,7 @@ class _StatusRow extends StatelessWidget {
     this.actionLabel,
     this.onAction,
     this.outlined = false,
+    this.busy = false,
   });
 
   final BorderRadius radius;
@@ -254,6 +272,7 @@ class _StatusRow extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
   final bool outlined;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -289,16 +308,32 @@ class _StatusRow extends StatelessWidget {
             ),
           ),
           if (actionLabel != null)
-            outlined
-                ? OutlinedButton(onPressed: onAction, child: Text(actionLabel!))
-                : FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: fg,
-                      foregroundColor: bg,
-                    ),
-                    onPressed: onAction,
-                    child: Text(actionLabel!),
+            if (busy)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: fg,
                   ),
+                ),
+              )
+            else
+              outlined
+                  ? OutlinedButton(
+                      onPressed: onAction,
+                      child: Text(actionLabel!),
+                    )
+                  : FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: fg,
+                        foregroundColor: bg,
+                      ),
+                      onPressed: onAction,
+                      child: Text(actionLabel!),
+                    ),
         ],
       ),
     );

@@ -318,9 +318,12 @@ Organized by area, in rough priority order within each area.
 - [ ] **Polygon interior rings (holes) still not modeled.** `territory.dart` explicitly documents
       "holes are not modeled in v1" — rival cutouts inside owned territory still render as solid
       fill rather than a true hole.
-- [ ] **No debounce on viewport bbox refresh** (`onCameraIdle` in `territory_page.dart:332`) — a
-      stale-response guard exists (`_refreshRequestId`), but rapid pan/zoom still fires a request
-      per camera-idle event rather than debouncing.
+- [x] **Debounce added to viewport bbox refresh.** `onCameraIdle` now calls
+      `_scheduleRefreshForCurrentView()` (400ms `Timer`, cancelled/reset per idle event) instead of
+      firing `_refreshForCurrentView()` directly — a rapid pan/zoom/pan sequence now fires one
+      network request after it settles rather than one per idle event. The existing
+      `_refreshRequestId` stale-response guard still handles out-of-order *results*; this handles
+      redundant *requests*. (`territory_page.dart`.)
 - [ ] **Generic pull sync still excludes `runs`** — `territories` has its own bbox-scoped
       refresh path and `sessions`/`alarms`/`user_stats` are pulled, but there's no equivalent
       incremental pull for `runs`.
@@ -448,19 +451,30 @@ Organized by area, in rough priority order within each area.
 - [x] **`ThemeModeCubit` load/set race fixed** — `_userSet` flag set by `setThemeMode()` and checked
       by `_load()` after its `getInstance()` await, so a user choice made during startup load can no
       longer be clobbered. (`theme_mode_cubit.dart`.)
-- [ ] **`SystemCapabilities` class itself still has no `Platform.isAndroid` guard** — iOS-safety was
-      patched at call sites (e.g. `battery_exemption_repository_impl.dart`) instead of the class,
-      so any new caller that forgets the guard reintroduces the crash risk.
+- [x] **`SystemCapabilities` now has a class-level `Platform.isAndroid` guard.** Every method routes
+      through a private `_invoke<T>(method, fallback)` helper that short-circuits to the method's
+      safe fallback (`false`/`'unknown'`) on non-Android platforms before ever touching the channel
+      — a new caller can no longer reintroduce the iOS `MissingPluginException` risk by forgetting
+      its own `Platform.isAndroid` check. Existing call-site checks (e.g.
+      `battery_exemption_repository_impl.dart`) are now redundant-but-harmless, left in place.
+      (`system_capabilities.dart`.)
 
 ### Profile — small
-- [ ] **Email/password linking form still uses plain `TextField`, not `Form`/`TextFormField` with
-      `validator`s.** Submission-locking and autofill hints were added, but there's no real
-      client-side format validation (e.g. malformed email accepted until the server rejects it).
+- [x] **Email/password linking form now uses `Form`/`TextFormField` with `validator`s.** Added a
+      `GlobalKey<FormState>`, split the old combined `_validate()` into per-field
+      `_validateEmail`/`_validatePassword`, wrapped both fields in a `Form` with
+      `AutovalidateMode.onUserInteraction`, and `_submitEmail()` now gates on
+      `_formKey.currentState.validate()` — malformed email/short password are now caught client-side
+      with inline per-field errors instead of only surfacing as a server rejection.
+      (`profile_page.dart`.)
 
 ### Onboarding — small
-- [ ] **Battery-exemption "Allow" action has no busy indicator or try/catch** around the permission
-      request itself — an exception from `Permission.ignoreBatteryOptimizations.request()` would be
-      uncaught and unsurfaced.
+- [x] **Battery-exemption "Allow" action now has a busy indicator and try/catch.** New
+      `_requestExemption()` sets `_requestingExemption` before/after the call, wraps it in
+      try/catch (a failure now shows a SnackBar instead of being silently swallowed), and the
+      `_StatusRow`'s action slot swaps to a small `CircularProgressIndicator` while in flight (new
+      `busy` param) instead of leaving the "Allow" button tappable mid-request.
+      (`battery_exemption_page.dart`.)
 
 ### Squad — real security-relevant items
 - [x] **Presence tracking now waits for subscribe confirmation.** `_channelFor()`'s `subscribe()`
@@ -496,15 +510,28 @@ list — worth a dedicated pass if/when you want deeper regression coverage, esp
 
 Cheapest, highest-value first (no hardware, no Appium, all in reach of a normal dev session):
 
-1. `penaltyGraceWindow` — resolve the original open question (define intended behavior or remove).
-2. `ThemeModeCubit` race — small, mechanical fix.
-3. Presence subscribe-status race in squad (`squad_remote_datasource.dart`) — real correctness bug.
-4. Left/right rep-counting chain lock in `rep_counter.dart` — real correctness/anti-cheat gap.
-5. `SkeletonPainter` crop/fit-aware scaling.
-6. Debounce viewport bbox refresh in `territory_page.dart`.
-7. `SystemCapabilities` class-level `Platform.isAndroid` guard.
-8. Battery-exemption "Allow" busy/error handling.
-9. Email-link `Form`/`TextFormField` validators.
+1. [x] `penaltyGraceWindow` — removed (user chose removal over defining grace-period behavior).
+2. [x] `ThemeModeCubit` race — fixed (`_userSet` guard).
+3. [x] Presence subscribe-status race in squad (`squad_remote_datasource.dart`) — fixed (awaits
+   `RealtimeSubscribeStatus.subscribed` before `.track()`/broadcast).
+4. [x] Left/right rep-counting chain lock in `rep_counter.dart` — fixed (`_lockedIsLeft`), plus a
+   regression test.
+5. [~] `SkeletonPainter` crop/fit-aware scaling — investigated, found to be a **false positive**:
+   the current stretch math already matches how `CameraPreview` renders in this app's actual
+   `StackFit.expand` layout (verified against Flutter SDK source). Left as-is; not fixed because
+   nothing was broken.
+6. [x] Debounce viewport bbox refresh in `territory_page.dart` — fixed (400ms debounce timer).
+7. [x] `SystemCapabilities` class-level `Platform.isAndroid` guard — fixed (`_invoke<T>` helper).
+8. [x] Battery-exemption "Allow" busy/error handling — fixed (`_requestingExemption` +
+   try/catch + `busy` spinner).
+9. [x] Email-link `Form`/`TextFormField` validators — fixed (per-field validators, `Form` wrapper).
+
+**Also done this session, outside this list:** the full map-tile self-hosted fallback tier
+(§"Map / tiles" above — `MapStyleLoader`, `infra/tile-worker/` deployed and live, camera-zoom-clamp
+bugfix found via live emulator testing) and manual zoom in/out buttons on both map pages.
+
+Remaining from the original order:
+
 10. Per-row try/catch in `pull_down_sync.dart` so one bad row doesn't wedge the whole pull forever.
 11. Alarm toggle switch: await `setActive()` and revert the UI on failure.
 12. Backend: fix `captured_area_sqm`/`v_delta_sqm` to be genuinely net-new area, not full-polygon
