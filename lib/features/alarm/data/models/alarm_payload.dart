@@ -48,8 +48,23 @@ class AlarmPayload {
         'recurringDays': recurringDays.toList(),
       });
 
-  /// Derives a stable 32-bit positive int from the UUID for the native
-  /// `alarm` package's id field (it doesn't accept string ids). Collision
-  /// risk is negligible for a single user's small alarm count.
-  static int nativeId(String uuid) => uuid.hashCode & 0x7FFFFFFF;
+  /// Derives a 32-bit positive int from the UUID for the native `alarm`
+  /// package's id field (it doesn't accept string ids), using a specified
+  /// algorithm (FNV-1a) rather than Dart's `String.hashCode` — the latter
+  /// is explicitly not guaranteed stable across Dart SDK versions, so an
+  /// app/SDK update could silently remap an already-scheduled alarm to a
+  /// different native id. Collision risk is negligible for a single user's
+  /// small alarm count.
+  ///
+  /// Only ever called once per alarm, at creation — see
+  /// `AlarmRepositoryImpl._nativeIdFor`, which persists the result to Drift
+  /// and reads it back for every later operation instead of recomputing.
+  static int deriveNativeId(String uuid) {
+    const fnvPrime = 0x01000193;
+    var hash = 0x811c9dc5;
+    for (final byte in utf8.encode(uuid)) {
+      hash = ((hash ^ byte) * fnvPrime) & 0xFFFFFFFF;
+    }
+    return hash & 0x7FFFFFFF;
+  }
 }

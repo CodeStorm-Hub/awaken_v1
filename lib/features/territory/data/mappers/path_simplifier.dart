@@ -62,4 +62,13 @@ abstract final class PathSimplifier {
       'coordinates': [for (final p in points) [p.longitude, p.latitude]],
     });
   }
+
+  /// Per-point capture timestamps, same order as [toGeoJsonLineString]'s
+  /// coordinates — carried separately since GeoJSON has no standard place
+  /// for per-vertex time. Sent to `submit_run()`'s `p_point_timestamps`
+  /// param so the server can validate per-segment speed (P0 anti-cheat
+  /// finding).
+  static String toTimestampsJson(List<TrackPoint> points) {
+    return jsonEncode([for (final p in points) p.timestamp.toIso8601String()]);
+  }
 }

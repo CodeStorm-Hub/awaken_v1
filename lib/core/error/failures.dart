@@ -39,3 +39,11 @@ class ValidationFailure extends Failure {
 class UnexpectedFailure extends Failure {
   const UnexpectedFailure([super.message = 'Unexpected error']);
 }
+
+/// The `alarm` package's `Alarm.set()`/`Alarm.stop()` returned `false`
+/// (native OS-level scheduling/cancellation failure) rather than throwing —
+/// previously ignored entirely, letting the app's cache/UI claim an alarm
+/// was armed or dismissed when the OS never actually did it.
+class AlarmOperationFailure extends Failure {
+  const AlarmOperationFailure([super.message = 'The device rejected this alarm operation']);
+}

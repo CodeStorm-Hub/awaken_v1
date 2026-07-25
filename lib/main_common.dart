@@ -148,13 +148,24 @@ Future<void> _bootstrapApp({LocationProviderFactory? locationProviderOverride}) 
     await getIt<RefreshAuthSession>()(const NoParams());
 
     // Reinstall/new-device hydration (plan §6 Phase 6.5) — no-ops if the
-    // local cache is already populated. Re-arms any alarm the pull
-    // hydrated that wasn't previously scheduled natively.
+    // local cache is already populated.
     await getIt<PullDownSync>().run();
-    await getIt<RearmAlarmsFromCache>()(const NoParams());
   } catch (_) {
     // TODO(Phase 3b): offline-first-launch fallback — local placeholder
     // UUID + re-key routine (plan §2.2 H8, kept only as a fallback).
+  }
+
+  // Deliberately outside the try/catch above and never skipped by an
+  // auth/pull failure — P0 fix: this only touches local Drift + the native
+  // alarm package (no network), so it must work identically offline. It
+  // was previously nested inside the same try block, meaning an offline
+  // first launch (or any auth/pull failure) silently skipped local alarm
+  // recovery too.
+  try {
+    await getIt<RearmAlarmsFromCache>()(const NoParams());
+  } catch (_) {
+    // Best-effort self-heal; ReconcileRecurringAlarms above and the next
+    // app launch provide further chances to recover.
   }
 
   // Connectivity-triggered outbox drain (plan §3, ADR-002) — safe to start

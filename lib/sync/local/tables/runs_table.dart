@@ -12,6 +12,14 @@ class Runs extends Table {
   DateTimeColumn get endedAt => dateTime().nullable()();
   IntColumn get pointCount => integer()();
   TextColumn get pathGeoJson => text()();
+
+  /// JSON array of per-point ISO8601 capture timestamps, same order as
+  /// `pathGeoJson`'s coordinates. Sent to `submit_run()`'s
+  /// `p_point_timestamps` param so the server can validate per-segment
+  /// speed (P0 anti-cheat finding — the RPC couldn't do this at all
+  /// without per-point timing, since `pathGeoJson` alone carries no time
+  /// information). Nullable for rows written before this column existed.
+  TextColumn get pointTimestampsJson => text().nullable()();
   BoolColumn get isClosedLoop => boolean().withDefault(const Constant(false))();
   /// This run's own captured polygon area — what `submit_run()` returns as
   /// `captured_area_sqm` (the celebration-UI "delta"), distinct from

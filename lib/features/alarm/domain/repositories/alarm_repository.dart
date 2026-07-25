@@ -27,7 +27,26 @@ abstract interface class AlarmRepository {
   /// wake-up tax (reset on a verified completion, stepped up on a skip —
   /// see `watchCurrentTaxMultiplier`), and re-arms recurring alarms for
   /// their next occurrence.
-  Future<void> completeWorkout(AlarmSchedule alarm, {required bool verified, required int repsCompleted});
+  ///
+  /// [isPreview] (P0 fix — "destructive preview"): when true, none of the
+  /// above production side effects happen — no native stop of a real
+  /// future alarm, no session logged, no tax mutation, no recurrence
+  /// advance. `AlarmListPage`'s "tap one to preview the wake-up flow" opens
+  /// a *real* alarm's `AlarmRingPage` to demo the ring→verify flow; without
+  /// this flag, finishing or skipping that preview silently cancelled the
+  /// real future occurrence, advanced its recurrence, logged a fake
+  /// streak-eligible session, and reset/bumped the user's actual wake-up
+  /// tax — all from what the user believed was a harmless demo.
+  /// [startedAt] is when the user tapped "start workout" (verification
+  /// began), not when it finished — recorded separately from the session's
+  /// completion time so session duration is actually measurable.
+  Future<void> completeWorkout(
+    AlarmSchedule alarm, {
+    required bool verified,
+    required int repsCompleted,
+    required DateTime startedAt,
+    bool isPreview = false,
+  });
 
   /// Consecutive days (ending today or yesterday) with at least one
   /// verified completion, computed from the local session log.

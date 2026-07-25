@@ -1,40 +1,21 @@
-import 'dart:convert';
-
 import 'package:injectable/injectable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/entities/geo_bounds.dart';
 
-/// Calls the server-authoritative `submit_run()` RPC (plan §3) directly —
-/// this is the one deliberate exception to "features never touch Supabase
-/// directly" (plan §3 amendment): `submit_run` is a compute call, not a
-/// table write, and its jsonb `path` parameter needs the raw GeoJSON decoded
-/// into a value the supabase-dart client can serialize, which a generic
-/// outbox table-upsert can't express (see `SyncWorker._pushRun`, which
-/// reuses this same call for the offline-retry path).
+/// Territory read-side Supabase access. The `submit_run()` write path is
+/// deliberately *not* here — `SyncWorker._pushRun` is the single call site
+/// for that RPC (both the online-immediate and offline-retry paths go
+/// through the same outbox-driven flow, so there's exactly one place that
+/// constructs the request and interprets the response). A duplicate
+/// `submitRun()` used to live on this class as a second, drifting
+/// implementation that no code ever called — removed rather than kept in
+/// sync with two copies of the same anti-cheat-sensitive RPC contract.
 @injectable
 class TerritoryRemoteDataSource {
   TerritoryRemoteDataSource(this._supabase);
 
   final SupabaseClient _supabase;
-
-  Future<Map<String, Object?>> submitRun({
-    required String runId,
-    required String pathGeoJson,
-    required DateTime startedAt,
-    required DateTime endedAt,
-  }) async {
-    final result = await _supabase.rpc<Object?>(
-      'submit_run',
-      params: {
-        'p_run_id': runId,
-        'p_path': jsonDecode(pathGeoJson),
-        'p_started_at': startedAt.toIso8601String(),
-        'p_ended_at': endedAt.toIso8601String(),
-      },
-    );
-    return Map<String, Object?>.from(result! as Map);
-  }
 
   /// Bbox/viewport spatial query (closes the territory review's flagged
   /// gap) via the `territories_in_bbox` RPC — `ST_MakeEnvelope` + `&&`

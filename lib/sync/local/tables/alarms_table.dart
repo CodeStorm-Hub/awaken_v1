@@ -7,6 +7,17 @@ import 'package:drift/drift.dart';
 @DataClassName('AlarmRow')
 class Alarms extends Table {
   TextColumn get id => text()(); // client-generated UUIDv4
+
+  /// The `alarm` package's native int id, computed once (via
+  /// `AlarmPayload.deriveNativeId` — a specified FNV-1a hash, not Dart's
+  /// `String.hashCode`, which isn't guaranteed stable across SDK versions)
+  /// and persisted here from that point on. Every later native operation
+  /// (reschedule/cancel/dismiss) reads this column rather than recomputing,
+  /// so the native-alarm mapping can't silently drift out from under an
+  /// already-scheduled alarm after an app/SDK update. Nullable only for
+  /// rows written before this column existed; backfilled on first touch.
+  IntColumn get nativeId => integer().nullable()();
+
   DateTimeColumn get scheduledTime => dateTime()();
   TextColumn get exerciseMode => text()();
   IntColumn get requiredReps => integer()();

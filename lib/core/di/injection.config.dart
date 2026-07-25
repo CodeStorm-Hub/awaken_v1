@@ -116,6 +116,8 @@ import '../../features/territory/domain/repositories/territory_repository.dart'
     as _i706;
 import '../../features/territory/domain/usecases/abandon_run.dart' as _i773;
 import '../../features/territory/domain/usecases/capture_run.dart' as _i125;
+import '../../features/territory/domain/usecases/get_current_position.dart'
+    as _i740;
 import '../../features/territory/domain/usecases/refresh_territories.dart'
     as _i490;
 import '../../features/territory/domain/usecases/start_run.dart' as _i592;
@@ -322,6 +324,9 @@ _i174.GetIt init(
   );
   gh.factory<_i125.CaptureRun>(
     () => _i125.CaptureRun(gh<_i175.RunTrackingRepository>()),
+  );
+  gh.factory<_i740.GetCurrentPosition>(
+    () => _i740.GetCurrentPosition(gh<_i175.RunTrackingRepository>()),
   );
   gh.factory<_i592.StartRun>(
     () => _i592.StartRun(gh<_i175.RunTrackingRepository>()),

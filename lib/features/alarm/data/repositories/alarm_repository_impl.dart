@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:alarm/alarm.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:injectable/injectable.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/error/failures.dart';
 import '../../../../sync/local/database.dart';
 import '../../../../sync/outbox/local_writer.dart';
 import '../../domain/entities/alarm_schedule.dart';
@@ -31,12 +34,68 @@ class AlarmRepositoryImpl implements AlarmRepository {
 
   final WakeUpTaxStore _taxStore;
 
+  /// `Alarm.set()`/`Alarm.stop()` return `bool`, not `void` — a `false`
+  /// result (native scheduling/cancellation actually failed on-device) was
+  /// previously discarded everywhere, so cache/UI state could silently
+  /// diverge from what the OS actually did. Every call site in this class
+  /// goes through these two instead of calling `_local` directly.
+  Future<void> _setNative(AlarmSettings settings) async {
+    final ok = await _local.set(settings);
+    if (!ok) {
+      throw const AlarmOperationFailure('The device could not schedule this alarm');
+    }
+  }
+
+  Future<void> _stopNative(int nativeId) async {
+    final ok = await _local.stop(nativeId);
+    if (!ok) {
+      throw const AlarmOperationFailure('The device could not stop this alarm');
+    }
+  }
+
+  /// Same native call as [_stopNative], but never throws. Used only from
+  /// [completeWorkout], whose own accessibility guarantee (the ring screen
+  /// "must never trap the user, verified or not" — see below) would be
+  /// violated if a native-level stop failure blocked session recording and
+  /// left the user stuck. The failure is still real and still worth
+  /// knowing about — it just can't be allowed to halt this particular flow.
+  Future<void> _stopNativeBestEffort(int nativeId) async {
+    final ok = await _local.stop(nativeId);
+    if (!ok) {
+      unawaited(
+        Sentry.captureMessage(
+          'Native Alarm.stop() returned false during completeWorkout',
+          level: SentryLevel.warning,
+          withScope: (scope) => scope.setTag('nativeAlarmId', nativeId.toString()),
+        ),
+      );
+    }
+  }
+
+  /// The stable, persisted native id for [alarmId] — computed once (via
+  /// `AlarmPayload.deriveNativeId`) and read back from Drift on every
+  /// subsequent call rather than recomputed, so it can never silently
+  /// drift after an app/SDK update (see the `nativeId` column doc comment
+  /// on `Alarms`). Backfills existing rows the first time they're touched
+  /// post-migration.
+  Future<int> _nativeIdFor(String alarmId) async {
+    final row = await (_db.select(_db.alarms)..where((t) => t.id.equals(alarmId))).getSingleOrNull();
+    if (row?.nativeId != null) return row!.nativeId!;
+    final computed = AlarmPayload.deriveNativeId(alarmId);
+    if (row != null) {
+      await (_db.update(_db.alarms)..where((t) => t.id.equals(alarmId))).write(
+        AlarmsCompanion(nativeId: Value(computed)),
+      );
+    }
+    return computed;
+  }
+
   String _titleFor(ExerciseMode mode) => switch (mode) {
         ExerciseMode.squat => 'Time to squat!',
         ExerciseMode.pushup => 'Time to push up!',
       };
 
-  AlarmSettings _toAlarmSettings(AlarmSchedule alarm) {
+  AlarmSettings _toAlarmSettings(AlarmSchedule alarm, int nativeId) {
     final payload = AlarmPayload(
       id: alarm.id,
       exerciseMode: alarm.exerciseMode,
@@ -46,7 +105,7 @@ class AlarmRepositoryImpl implements AlarmRepository {
     );
 
     return AlarmSettings(
-      id: AlarmPayload.nativeId(alarm.id),
+      id: nativeId,
       dateTime: alarm.scheduledTime,
       loopAudio: true,
       vibrate: true,
@@ -56,6 +115,9 @@ class AlarmRepositoryImpl implements AlarmRepository {
       androidStopAlarmOnTermination: false,
       warningNotificationOnKill: true,
       androidFullScreenIntent: true,
+      // Without this, two alarms scheduled for the same second can replace
+      // one another instead of both ringing (package default is false).
+      allowSameSecondScheduling: true,
       volumeSettings: VolumeSettings.fixed(volume: 1, volumeEnforced: true),
       notificationSettings: NotificationSettings(
         title: _titleFor(alarm.exerciseMode),
@@ -71,15 +133,26 @@ class AlarmRepositoryImpl implements AlarmRepository {
 
   AlarmSchedule? _toAlarmSchedule(AlarmSettings settings) {
     if (settings.payload == null) return null;
-    final payload = AlarmPayload.fromJson(settings.payload!);
-    return AlarmSchedule(
-      id: payload.id,
-      scheduledTime: settings.dateTime,
-      exerciseMode: payload.exerciseMode,
-      requiredReps: payload.requiredReps,
-      penaltyMultiplier: payload.penaltyMultiplier,
-      recurringDays: payload.recurringDays,
-    );
+    // AlarmPayload.fromJson uses unchecked casts/enum lookups and can throw
+    // on a malformed or legacy-format payload. This runs inside a stream
+    // `.map()` (watchAlarms()) — an uncaught throw here would kill the
+    // whole native-alarm stream listener rather than just skipping one bad
+    // row, taking down alarm scheduling/startup with it. Skip and report
+    // instead; the caller already filters nulls via `.whereType()`.
+    try {
+      final payload = AlarmPayload.fromJson(settings.payload!);
+      return AlarmSchedule(
+        id: payload.id,
+        scheduledTime: settings.dateTime,
+        exerciseMode: payload.exerciseMode,
+        requiredReps: payload.requiredReps,
+        penaltyMultiplier: payload.penaltyMultiplier,
+        recurringDays: payload.recurringDays,
+      );
+    } catch (e, st) {
+      unawaited(Sentry.captureException(e, stackTrace: st));
+      return null;
+    }
   }
 
   AlarmSchedule _toAlarmScheduleFromRow(AlarmRow row) {
@@ -119,7 +192,7 @@ class AlarmRepositoryImpl implements AlarmRepository {
       final merged = [
         ...latestNative.where((a) => !disabledIds.contains(a.id)),
         ...latestDisabled,
-      ];
+      ]..sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
       controller.add(merged);
     }
 
@@ -155,11 +228,13 @@ class AlarmRepositoryImpl implements AlarmRepository {
   @override
   Future<void> setActive(String id, bool isActive) async {
     if (!isActive) {
-      await _local.stop(AlarmPayload.nativeId(id));
+      final nativeId = await _nativeIdFor(id);
+      await _stopNative(nativeId);
       final row = await (_db.select(_db.alarms)..where((t) => t.id.equals(id))).getSingleOrNull();
       if (row == null) return;
       await _localWriter.upsertAlarm(
         id: row.id,
+        nativeId: nativeId,
         scheduledTime: row.scheduledTime,
         exerciseMode: row.exerciseMode,
         requiredReps: row.requiredReps,
@@ -193,9 +268,11 @@ class AlarmRepositoryImpl implements AlarmRepository {
 
   @override
   Future<void> scheduleAlarm(AlarmSchedule alarm) async {
-    await _local.set(_toAlarmSettings(alarm));
+    final nativeId = await _nativeIdFor(alarm.id);
+    await _setNative(_toAlarmSettings(alarm, nativeId));
     await _localWriter.upsertAlarm(
       id: alarm.id,
+      nativeId: nativeId,
       scheduledTime: alarm.scheduledTime,
       exerciseMode: alarm.exerciseMode.name,
       requiredReps: alarm.requiredReps,
@@ -207,13 +284,13 @@ class AlarmRepositoryImpl implements AlarmRepository {
 
   @override
   Future<void> cancelAlarm(String id) async {
-    await _local.stop(AlarmPayload.nativeId(id));
+    await _stopNative(await _nativeIdFor(id));
     await _localWriter.deleteAlarm(id);
   }
 
   @override
   Future<void> dismissAlarm(String id) async {
-    await _local.stop(AlarmPayload.nativeId(id));
+    await _stopNative(await _nativeIdFor(id));
   }
 
   @override
@@ -221,19 +298,30 @@ class AlarmRepositoryImpl implements AlarmRepository {
     AlarmSchedule alarm, {
     required bool verified,
     required int repsCompleted,
+    required DateTime startedAt,
+    bool isPreview = false,
   }) async {
+    // P0 fix ("destructive preview"): a preview must not touch the native
+    // alarm, local session log, wake-up tax, or recurrence — the alarm
+    // passed in is a real scheduled alarm, so stopping it natively here
+    // would cancel the user's actual future occurrence. See the interface
+    // doc comment on `AlarmRepository.completeWorkout`.
+    if (isPreview) return;
+
     final now = DateTime.now();
 
     // Stop the ring unconditionally — the accessibility escape hatch (plan
-    // §5 point 5) must never trap the user, verified or not.
-    await _local.stop(AlarmPayload.nativeId(alarm.id));
+    // §5 point 5) must never trap the user, verified or not. Best-effort:
+    // a native-level failure here is reported (see _stopNativeBestEffort)
+    // but must not block the rest of this method.
+    await _stopNativeBestEffort(await _nativeIdFor(alarm.id));
 
     await _localWriter.insertSession(
       id: const Uuid().v4(),
       alarmId: alarm.id,
       exerciseMode: alarm.exerciseMode.name,
       repsCompleted: repsCompleted,
-      startedAt: now,
+      startedAt: startedAt,
       completedAt: verified ? now : null,
     );
 
@@ -253,6 +341,24 @@ class AlarmRepositoryImpl implements AlarmRepository {
       if (next != null) {
         await scheduleAlarm(alarm.copyWith(scheduledTime: next));
       }
+    } else {
+      // A one-shot alarm has nothing left to reschedule to and was just
+      // stopped natively above — without this, its Drift row keeps
+      // `isActive: true` forever (native no longer has it, so it vanishes
+      // from `watchAlarms()`'s merged list, but the stale row lingers and
+      // would report itself active to any direct query, e.g. a future
+      // sync/backup read).
+      final nativeId = await _nativeIdFor(alarm.id);
+      await _localWriter.upsertAlarm(
+        id: alarm.id,
+        nativeId: nativeId,
+        scheduledTime: alarm.scheduledTime,
+        exerciseMode: alarm.exerciseMode.name,
+        requiredReps: alarm.requiredReps,
+        penaltyMultiplier: alarm.penaltyMultiplier,
+        isActive: false,
+        recurringDays: alarm.recurringDays,
+      );
     }
   }
 
@@ -262,8 +368,15 @@ class AlarmRepositoryImpl implements AlarmRepository {
   @override
   Future<void> reconcileRecurringAlarms() async {
     final now = DateTime.now();
+    // A currently-ringing recurring alarm's stored scheduledTime is
+    // necessarily in the past (that's why it's ringing) — without this
+    // exclusion, reconciliation would reschedule it out from under itself
+    // mid-ring instead of leaving that to completeWorkout's own
+    // post-completion reschedule.
+    final ringingId = (await watchRingingAlarm().first)?.id;
     final alarms = await watchAlarms().first;
     for (final alarm in alarms) {
+      if (alarm.id == ringingId) continue;
       if (!alarm.isRecurring || !alarm.scheduledTime.isBefore(now)) continue;
       final next = alarm.nextOccurrenceAfter(now);
       if (next != null) {

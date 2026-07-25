@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 
@@ -28,8 +30,15 @@ class RunTrackingCubit extends Cubit<RunTrackState> {
   /// identically for users outside a squad.
   final SquadRepository _squadRepository;
 
+  /// Never stored/cancelled before this fix — every `begin()` call (e.g. a
+  /// retry after a start failure) stacked another listener onto the
+  /// repository's broadcast stream, so a retried run would emit each state
+  /// update, and broadcast squad telemetry, once per accumulated listener.
+  StreamSubscription<RunTrackState>? _runStateSub;
+
   Future<void> begin() async {
-    _watchRunState().listen((state) {
+    await _runStateSub?.cancel();
+    _runStateSub = _watchRunState().listen((state) {
       emit(state);
       if (state.isTracking) {
         final km = (state.distanceMeters / 1000).toStringAsFixed(1);
@@ -45,6 +54,7 @@ class RunTrackingCubit extends Cubit<RunTrackState> {
 
   @override
   Future<void> close() async {
+    await _runStateSub?.cancel();
     if (state.isTracking) {
       await _abandonRun(const NoParams());
     }

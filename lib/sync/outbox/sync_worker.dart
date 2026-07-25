@@ -96,6 +96,14 @@ class SyncWorker {
       await _pushRun(entry);
       return;
     }
+    if (entry.entityTable == 'user_stats' && entry.operation == OutboxOperation.upsert.name) {
+      // `current_tax_multiplier` is no longer client-writable (P0 fix — it
+      // was previously client-authoritative). The server recomputes it via
+      // one of two RPCs instead of accepting a raw upsert; see
+      // `LocalWriter.upsertUserStats`.
+      await _pushUserStats(entry);
+      return;
+    }
     final table = _supabase.from(entry.entityTable);
     if (entry.operation == OutboxOperation.delete.name) {
       await table.update({'deleted_at': DateTime.now().toIso8601String()}).eq('id', entry.entityId);
@@ -108,6 +116,7 @@ class SyncWorker {
 
   Future<void> _pushRun(OutboxEntryRow entry) async {
     final payload = jsonDecode(entry.payload) as Map<String, Object?>;
+    final pointTimestampsJson = payload['point_timestamps'] as String?;
     final result = await _supabase.rpc<Object?>(
       'submit_run',
       params: {
@@ -115,6 +124,11 @@ class SyncWorker {
         'p_path': jsonDecode(payload['path'] as String),
         'p_started_at': payload['started_at'],
         'p_ended_at': payload['ended_at'] ?? payload['started_at'],
+        // Enables the server's per-segment speed/teleport check (P0
+        // anti-cheat finding) — null for rows queued before this field
+        // existed, which the RPC treats as "skip the per-segment check,
+        // aggregate speed gate still applies".
+        if (pointTimestampsJson != null) 'p_point_timestamps': jsonDecode(pointTimestampsJson),
       },
     );
     final response = Map<String, Object?>.from(result! as Map);
@@ -126,6 +140,19 @@ class SyncWorker {
         integrityVerdict: Value(response['accepted'] == true ? 'trusted' : 'rejected'),
         rejectedReason: Value(response['reason'] as String?),
       ),
+    );
+  }
+
+  Future<void> _pushUserStats(OutboxEntryRow entry) async {
+    final payload = jsonDecode(entry.payload) as Map<String, Object?>;
+    final rpc = payload['action'] == 'reset' ? 'reset_wake_up_tax' : 'bump_wake_up_tax';
+    final result = await _supabase.rpc<Object?>(rpc);
+    final authoritative = (result as num).toDouble();
+    // Reconcile the local cache with the server's authoritative value —
+    // this can legitimately differ from what was locally computed if
+    // another device pushed a bump/reset first.
+    await (_db.update(_db.userStats)..where((t) => t.id.equals(1))).write(
+      UserStatsCompanion(currentTaxMultiplier: Value(authoritative)),
     );
   }
 

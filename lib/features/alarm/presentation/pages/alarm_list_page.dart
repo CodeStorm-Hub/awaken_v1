@@ -233,17 +233,24 @@ class _AlarmListPageState extends State<AlarmListPage> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _ScheduleSheet(
-        onSchedule: (mode, reps, minutes, days) {
+        onSchedule: (mode, reps, minutes, days) async {
           final scheduledTime = DateTime.now().add(Duration(minutes: minutes));
-          cubit.schedule(
-            AlarmSchedule(
-              id: const Uuid().v4(),
-              scheduledTime: scheduledTime,
-              exerciseMode: mode,
-              requiredReps: reps,
-              recurringDays: days,
-            ),
-          );
+          try {
+            await cubit.schedule(
+              AlarmSchedule(
+                id: const Uuid().v4(),
+                scheduledTime: scheduledTime,
+                exerciseMode: mode,
+                requiredReps: reps,
+                recurringDays: days,
+              ),
+            );
+          } catch (e) {
+            messenger.showSnackBar(
+              SnackBar(content: Text('Could not schedule alarm: $e')),
+            );
+            return;
+          }
           messenger.showSnackBar(
             SnackBar(
               content: Text(
@@ -287,7 +294,12 @@ class _AlarmListPageState extends State<AlarmListPage> {
       ),
     );
     if (confirmed != true) return;
-    cubit.cancel(alarm.id);
+    try {
+      await cubit.cancel(alarm.id);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Could not delete alarm: $e')));
+      return;
+    }
     messenger.showSnackBar(const SnackBar(content: Text('Alarm deleted')));
   }
 }

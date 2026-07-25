@@ -51,7 +51,17 @@ class SquadRemoteDataSource {
   /// state — "Live now" only shows members who are actually online.
   RealtimeChannel _channelFor(String squadId) {
     return _channels.putIfAbsent(squadId, () {
-      final channel = _supabase.channel('squad:$squadId');
+      // Private (P0 fix): without this, the channel had no
+      // `realtime.messages` authorization at all — any client (including
+      // an unrelated squad's members) could subscribe and read/send
+      // Presence & Broadcast traffic. Gated server-side by the
+      // "squad members can use their squad's realtime channel" RLS policy
+      // on `realtime.messages` (migration
+      // `squad_realtime_authorization`), keyed off `profiles.squad_id`.
+      final channel = _supabase.channel(
+        'squad:$squadId',
+        opts: const RealtimeChannelConfig(private: true),
+      );
       _channelRefCounts[squadId] = 0;
       // `subscribe()` may only be called once per channel instance (it
       // throws on a second call) — do it exactly once here, at creation,

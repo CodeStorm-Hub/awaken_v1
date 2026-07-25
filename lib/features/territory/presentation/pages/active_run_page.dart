@@ -166,38 +166,48 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
   Future<void> _capture(RunTrackingCubit cubit) async {
     if (_busy) return;
     setState(() => _busy = true);
-    final result = await cubit.capture();
-    if (!mounted) return;
+    // Every early return below previously skipped resetting `_busy` on an
+    // exception from `cubit.capture()` or the modal sheet — the capture
+    // button would stay permanently disabled for the rest of this page's
+    // lifetime. `finally` guarantees it resets regardless of how this
+    // method exits (including the `Navigator.pop()` paths, which no-op
+    // harmlessly against a widget that's about to be disposed anyway).
+    try {
+      final result = await cubit.capture();
+      if (!mounted) return;
 
-    if (result.pending) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Run saved — will sync territory once back online.'),
-        ),
-      );
-      Navigator.of(context).pop();
-      return;
-    }
-    if (result.accepted != true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.rejectedReason ?? "Run couldn't be captured."),
-        ),
-      );
-      Navigator.of(context).pop();
-      return;
-    }
+      if (result.pending) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Run saved — will sync territory once back online.'),
+          ),
+        );
+        Navigator.of(context).pop();
+        return;
+      }
+      if (result.accepted != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.rejectedReason ?? "Run couldn't be captured."),
+          ),
+        );
+        Navigator.of(context).pop();
+        return;
+      }
 
-    final areaSqm = result.capturedAreaSqm ?? result.territoryAreaSqm ?? 0;
-    final areaLabel = '${(areaSqm / 1000000).toStringAsFixed(3)} km²';
-    await showModalBottomSheet<void>(
-      context: context,
-      isDismissible: false,
-      enableDrag: false,
-      backgroundColor: Colors.transparent,
-      builder: (_) => TerritoryCaptureSheet(areaLabel: areaLabel),
-    );
-    if (mounted) Navigator.of(context).pop();
+      final areaSqm = result.capturedAreaSqm ?? result.territoryAreaSqm ?? 0;
+      final areaLabel = '${(areaSqm / 1000000).toStringAsFixed(3)} km²';
+      await showModalBottomSheet<void>(
+        context: context,
+        isDismissible: false,
+        enableDrag: false,
+        backgroundColor: Colors.transparent,
+        builder: (_) => TerritoryCaptureSheet(areaLabel: areaLabel),
+      );
+      if (mounted) Navigator.of(context).pop();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _abandon(RunTrackingCubit cubit) async {
@@ -220,10 +230,17 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
         body: SafeArea(
           child: BlocBuilder<RunTrackingCubit, RunTrackState>(
             buildWhen: (previous, current) =>
-                previous.permissionDenied != current.permissionDenied,
+                previous.permissionDenied != current.permissionDenied ||
+                previous.startFailed != current.startFailed,
             builder: (context, gateState) {
               if (gateState.permissionDenied) {
                 return _PermissionDeniedView(
+                  onClose: () => Navigator.of(context).pop(),
+                );
+              }
+              if (gateState.startFailed) {
+                return _StartFailedView(
+                  onRetry: () => context.read<RunTrackingCubit>().begin(),
                   onClose: () => Navigator.of(context).pop(),
                 );
               }
@@ -609,6 +626,44 @@ class _PermissionDeniedView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             FilledButton(onPressed: onClose, child: const Text('Close')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StartFailedView extends StatelessWidget {
+  const _StartFailedView({required this.onRetry, required this.onClose});
+
+  final VoidCallback onRetry;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: scheme.onSurfaceVariant),
+            const SizedBox(height: 16),
+            Text(
+              "Couldn't start tracking this run. Please try again.",
+              style: TextStyle(color: scheme.onSurface),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton(onPressed: onClose, child: const Text('Close')),
+                const SizedBox(width: 8),
+                FilledButton(onPressed: onRetry, child: const Text('Retry')),
+              ],
+            ),
           ],
         ),
       ),

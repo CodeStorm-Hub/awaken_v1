@@ -96,6 +96,40 @@ Original ERD stands with these changes:
 4. Conflict: for each intersecting rival territory, `rival.geom = ST_Difference(rival.geom, new.geom)`; delete rivals whose area drops below a floor; insert/merge (`ST_Union`) the winner's polygon.
 5. Recompute `area_sqm` for all touched rows; single transaction; return the delta for client-side celebration UI.
 
+### Territory feature v2 — refined scope (2026-07-26)
+
+Merges the original MVP capture loop above with retention/competitive mechanics from an earlier prototype's spec (`old_awaken_project_details.md`), reconciled and simplified — redundant thresholds collapsed, ranges replaced with single values, Fog of War excluded entirely (out of scope). Supersedes nothing above; adds decay, bounty zones, lightweight rivalry, a real multi-scope leaderboard, and crash-resilient tracking on top of the existing capture pipeline.
+
+**Objective:** running a closed loop claims land, but that land now has real stakes — it decays if neglected, can be taken by rivals, and some zones are worth more — with a leaderboard and light rivalry-awareness to make it feel like an ongoing competitive game rather than a one-off log entry. Tracking itself must survive real-world interruptions (lost signal, backgrounded app, OS process death) without losing a run.
+
+**Functional requirements (condensed — full flows/user-story detail live in session notes, not duplicated here):**
+- Loop validation stays a single closure-radius + min-length + min-point-count check (no separate "exit distance" rule — redundant with min-length).
+- Server remains sole authority on validity/area; client checks are advisory pre-filters only.
+- Run tracking checkpoints to local storage on a fixed ~10s interval; an orphaned checkpoint is detected and offered for resume/finalize on next launch — bounds data loss to the checkpoint interval rather than promising an unachievable zero-loss guarantee.
+- Locally-queued unsent runs are encrypted at rest.
+- A territory decays after a fixed inactivity period (grace-period notification before reversion); re-capturing/defending it resets the clock.
+- A small number of live, map-visible bounty zones apply a flat capture-area multiplier when a capture overlaps one (flat multiplier, not a range — legibility over tunability).
+- A single "current rival" surfaces per user (the other party in their most recent contested capture, either direction) — not a persistent multi-rival system.
+- Leaderboard adds Global and Nearby (GPS-proximity) scopes alongside the existing Squad scope, and All-Time / Weekly time windows (Monthly dropped — two windows cover the meaningful cases), a Top-3 podium + "my neighborhood" (±5 ranks) view, and tap-to-jump from a rank row to that user's territory on the map.
+
+**Non-functional requirements (new/changed):**
+- Reliability: a run must survive screen-off, backgrounding, and — bounded by the checkpoint interval — process death. "Bounded data loss," not absolute zero-loss, is the accepted standard (matches this project's existing moderate-over-absolute posture elsewhere, e.g. §2.3).
+- Security: locally-queued run/session data is encrypted at rest (`drift/native`'s encrypted executor + `sqlcipher_flutter_libs`, key held in platform secure storage via `flutter_secure_storage` — never hardcoded, derived via a KDF).
+- Fairness: decay is deliberate — the map staying contested is a design goal, not a bug to fix by making ownership permanent.
+- Privacy: no new continuous-location requirement — "nearby" ranking and rivalry both derive from data already produced by active runs (run centroid, capture events), not a standing location subscription; still no `ACCESS_BACKGROUND_LOCATION` (H3 stands).
+
+#### Database changes required
+
+All additive (new tables/columns + new/modified RPCs); no breaking changes to the existing `runs`/`territories` pipeline above.
+
+1. **Decay tracking** — add `territories.last_defended_at timestamptz not null default now()` (distinct from `updated_at`, which the area-recompute trigger also touches for unrelated reasons); `submit_run()` sets it whenever a capture creates or touches the user's own territory. A `pg_cron` job (built into every Supabase project, no new extension install) runs daily, calling a `SECURITY DEFINER` function that soft-deletes (`deleted_at`) territories where `last_defended_at` is older than the grace period. No stored decay "state" column — "at risk" is computed on read (`last_defended_at + grace_period < now()`) rather than duplicated as a flag that could drift out of sync.
+2. **Bounty zones** — new `public.bounty_zones` table: `id uuid pk`, `center geography(Point,4326)`, `radius_m numeric`, `multiplier numeric default 2.0`, `active_from timestamptz`, `active_until timestamptz nullable` (null = indefinite), `created_at`. Public-read RLS (everyone sees active zones), no client write. `submit_run()` checks whether the new capture intersects an active zone and returns a separate `bonus_area_sqm` in its response for scoring/leaderboard purposes — the stored polygon/`area_sqm` always reflects the true captured shape; the multiplier boosts credited score, not literal geometry (scaling real map polygons by an arbitrary multiplier would falsify the map itself).
+3. **Rivalry** — new `public.territory_captures` event log: `id`, `winner_id`, `loser_id nullable` (null when capturing unclaimed land), `area_taken_sqm`, `created_at`. Populated by `submit_run()` whenever the rival-subtraction branch fires. New `current_rival()` RPC returns the other party in the caller's most recent row where they appear as either `winner_id` or `loser_id` with a non-null counterpart. This same log doubles as the source for the leaderboard's Weekly window (sum `area_taken_sqm` per user over the trailing 7 days) without needing a separate rolling-stats table.
+4. **Nearby leaderboard** — add `public.profiles.last_run_location geography(Point,4326) nullable` + GiST index; `submit_run()` sets it to the new run's centroid on every successful submission (reuses data a run already produces — no new tracking surface, consistent with the privacy NFR above). New `nearby_leaderboard(radius_m, time_window)` RPC using `ST_DWithin` against that column (per current PostGIS guidance: index the geography column directly and let `ST_DWithin` use it — do not compute a bounding box manually). Extend `squad_leaderboard`/add `global_leaderboard` with the same `time_window` param (`all_time` reads existing `territories.area_sqm` sums; `weekly` reads `territory_captures`).
+5. **Resilience (checkpointing + encrypted queue)** — client-only, no Supabase schema change. Local Drift schema gains a lightweight checkpoint table (run id, latest points/state, last-write timestamp) written every ~10s while a run is active and cleared on normal completion/abandon; the whole local database moves to an encrypted `NativeDatabase` executor (`sqlcipher_flutter_libs` via `drift/native`'s encrypted-executor support), with the passphrase generated once and stored via `flutter_secure_storage` (Android Keystore / iOS Keychain-backed) rather than derived from anything guessable.
+
+Each of the above ships as its own migration file (per this project's existing one-concern-per-migration convention), applied via the Supabase CLI (`supabase db query --linked` to iterate, hand-authored migration file + `supabase migration repair` to record — `apply_migration`-style tools that auto-stamp a version on every call make iteration and clean history impossible, confirmed the hard way earlier in this project).
+
 ---
 
 ## 4. Corrected Technology Matrix (verified July 2026)
@@ -210,3 +244,6 @@ Timeline assumes 1–2 experienced Flutter devs; treat as relative sequencing, n
 - Supabase Realtime limits: https://supabase.com/docs/guides/realtime/limits · PowerSync + Supabase: https://docs.powersync.com/integrations/supabase/guide
 - Offline-first outbox pattern reference: https://medium.com/@fintasys/offline-first-flutter-drift-as-the-source-of-truth-supabase-as-a-sync-target-eab7c43523ce
 - OEM battery-killer reference: https://dontkillmyapp.com
+- Drift encrypted executor: https://drift.simonbinder.eu/platforms/encryption/ · sqlcipher_flutter_libs: https://pub.dev/packages/sqlcipher_flutter_libs · sqflite_sqlcipher (alternative): https://pub.dev/packages/sqflite_sqlcipher
+- Supabase Cron / pg_cron: https://supabase.com/docs/guides/cron · https://supabase.com/docs/guides/database/extensions/pg_cron
+- PostGIS `ST_DWithin` + geography indexing guidance: https://postgis.net/docs/ST_DWithin.html · https://blog.cleverelephant.ca/2021/05/indexes-and-queries.html

@@ -57,6 +57,7 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
   }
 
   Future<void> _startWorkout(BuildContext context, int effectiveReps) async {
+    final startedAt = DateTime.now();
     setState(() {
       _workoutStarted = true;
     });
@@ -97,6 +98,8 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
         widget.alarm,
         verified: result.completed,
         repsCompleted: result.repsCompleted,
+        startedAt: startedAt,
+        isPreview: widget.isPreview,
       );
       if (!result.completed) {
         if (mounted) setState(() => _workoutStarted = false);

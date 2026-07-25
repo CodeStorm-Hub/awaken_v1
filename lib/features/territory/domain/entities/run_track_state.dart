@@ -16,6 +16,7 @@ class RunTrackState extends Equatable {
     this.distanceMeters = 0,
     this.gpsQuality = GpsQuality.none,
     this.permissionDenied = false,
+    this.startFailed = false,
   });
 
   final bool isTracking;
@@ -26,6 +27,12 @@ class RunTrackState extends Equatable {
 
   /// Location permission was denied when `startRun()` was called.
   final bool permissionDenied;
+
+  /// `startRun()` threw after permission was already granted — e.g. the
+  /// foreground service or wakelock failed to start. Distinct from
+  /// [permissionDenied]: this is a device/OS-level failure, not a user
+  /// choice, so the UI should offer retry rather than a settings deep-link.
+  final bool startFailed;
 
   /// A loop only counts as closed once the run has covered the plan's
   /// minimum length — otherwise the very first fix (start == "current
@@ -44,6 +51,7 @@ class RunTrackState extends Equatable {
     double? distanceMeters,
     GpsQuality? gpsQuality,
     bool? permissionDenied,
+    bool? startFailed,
   }) {
     return RunTrackState(
       isTracking: isTracking ?? this.isTracking,
@@ -52,11 +60,13 @@ class RunTrackState extends Equatable {
       distanceMeters: distanceMeters ?? this.distanceMeters,
       gpsQuality: gpsQuality ?? this.gpsQuality,
       permissionDenied: permissionDenied ?? this.permissionDenied,
+      startFailed: startFailed ?? this.startFailed,
     );
   }
 
   @override
-  List<Object?> get props => [isTracking, points, elapsed, distanceMeters, gpsQuality, permissionDenied];
+  List<Object?> get props =>
+      [isTracking, points, elapsed, distanceMeters, gpsQuality, permissionDenied, startFailed];
 }
 
 // Mirrors AppConstants.loopClosureRadiusMeters/minRunLengthMeters — kept as

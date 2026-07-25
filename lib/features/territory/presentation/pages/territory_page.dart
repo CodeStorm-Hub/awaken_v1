@@ -1,14 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../../core/config/env.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/usecase/usecase.dart';
 import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
 import '../../domain/entities/geo_bounds.dart';
 import '../../domain/entities/territory.dart';
+import '../../domain/usecases/get_current_position.dart';
 import '../../domain/usecases/refresh_territories.dart';
 import '../../domain/usecases/watch_owned_area.dart';
 import '../../domain/usecases/watch_territories.dart';
@@ -55,20 +56,8 @@ class _TerritoryPageState extends State<TerritoryPage> {
 
   Future<void> _locateSelf() async {
     try {
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        return;
-      }
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.medium,
-        ),
-      );
-      if (!mounted) return;
+      final position = await getIt<GetCurrentPosition>()(const NoParams());
+      if (position == null || !mounted) return;
       setState(() {
         _center = LatLng(position.latitude, position.longitude);
         _hasFix = true;

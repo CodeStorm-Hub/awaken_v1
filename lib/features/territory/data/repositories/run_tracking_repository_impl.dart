@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:geolocator/geolocator.dart' show Geolocator;
 import 'package:injectable/injectable.dart';
 import 'package:kalman_dr/kalman_dr.dart';
@@ -45,6 +47,16 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
   StreamSubscription<GeoPosition>? _positionSub;
   Timer? _ticker;
   DateTime? _startedAt;
+  String? _runId;
+  DateTime? _lastCheckpointAt;
+
+  /// Minimum gap between checkpoint writes — refined territory plan's
+  /// resilience requirement: bound data loss to roughly this interval if
+  /// the OS kills the app process mid-run, without needing GPS collection
+  /// to run in a separate background isolate (see plan doc "Territory
+  /// feature v2" §Resilience for why the lighter checkpoint approach was
+  /// chosen over full isolate-bridging).
+  static const _checkpointInterval = Duration(seconds: 10);
 
   @override
   Stream<RunTrackState> watchRunState() async* {
@@ -59,12 +71,53 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
 
   @override
   Future<void> startRun() async {
+    // Must read any existing checkpoint *before* teardown/reset — this is
+    // the only moment a prior session's orphaned checkpoint (app was
+    // killed mid-run) can be detected.
+    final checkpoint =
+        await (_db.select(_db.runCheckpoints)..where((t) => t.id.equals(1))).getSingleOrNull();
     await _teardown();
-    _startedAt = DateTime.now();
-    _emit(const RunTrackState(isTracking: true));
 
-    await _foregroundService.start();
-    await WakelockPlus.enable();
+    if (checkpoint != null) {
+      final points = (jsonDecode(checkpoint.pointsJson) as List)
+          .map((e) => TrackPoint.fromJson((e as Map).cast<String, Object?>()))
+          .toList();
+      await _beginTracking(
+        runId: checkpoint.runId,
+        startedAt: checkpoint.startedAt,
+        initialPoints: points,
+        initialDistance: checkpoint.distanceMeters,
+      );
+      return;
+    }
+
+    await _beginTracking(
+      runId: const Uuid().v4(),
+      startedAt: DateTime.now(),
+      initialPoints: const [],
+      initialDistance: 0,
+    );
+  }
+
+  /// Shared by a fresh `startRun()` and an automatic resume from a
+  /// checkpoint — everything past "what points/distance/id do we start
+  /// from" is identical either way.
+  Future<void> _beginTracking({
+    required String runId,
+    required DateTime startedAt,
+    required List<TrackPoint> initialPoints,
+    required double initialDistance,
+  }) async {
+    _runId = runId;
+    _startedAt = startedAt;
+    _emit(
+      RunTrackState(
+        isTracking: true,
+        points: initialPoints,
+        distanceMeters: initialDistance,
+        elapsed: DateTime.now().difference(startedAt),
+      ),
+    );
 
     final provider = DeadReckoningProvider(
       inner: _locationProviderFactory.create(),
@@ -72,10 +125,30 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     );
     _locationProvider = provider;
 
+    // Permission must be confirmed *before* starting the foreground service
+    // — Android 14+ can reject a location-type foreground service outright
+    // if runtime location permission isn't already granted, and starting
+    // the service (and its persistent notification) first left a stray
+    // "tracking" notification up with no permission and no actual tracking
+    // on denial.
     try {
       await provider.start();
     } on LocationPermissionDeniedException {
       _emit(_state.copyWith(isTracking: false, permissionDenied: true));
+      await _teardown();
+      return;
+    }
+
+    // Comprehensive start-failure cleanup: previously only the permission
+    // exception above was caught, so any other failure here (foreground
+    // service start, wakelock) propagated uncaught with `isTracking: true`
+    // already emitted and no teardown — leaking a running service/wakelock
+    // and leaving the UI stuck believing a run is active.
+    try {
+      await _foregroundService.start();
+      await WakelockPlus.enable();
+    } catch (_) {
+      _emit(_state.copyWith(isTracking: false, startFailed: true));
       await _teardown();
       return;
     }
@@ -118,6 +191,7 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     final points = _state.points;
     if (points.isEmpty) {
       _emit(_state.copyWith(points: [point], gpsQuality: quality));
+      unawaited(_maybeWriteCheckpoint());
       return;
     }
 
@@ -159,6 +233,7 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
         gpsQuality: quality,
       ),
     );
+    unawaited(_maybeWriteCheckpoint());
   }
 
   void _onPositionError(Object error) {
@@ -169,9 +244,41 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     _emit(_state.copyWith(gpsQuality: GpsQuality.poor));
   }
 
+  /// Throttled disk checkpoint — refined territory plan's resilience
+  /// requirement. Best-effort: a write failure here must never interrupt
+  /// live tracking, so errors are swallowed rather than surfaced.
+  Future<void> _maybeWriteCheckpoint() async {
+    final runId = _runId;
+    final startedAt = _startedAt;
+    if (runId == null || startedAt == null) return;
+    final now = DateTime.now();
+    final last = _lastCheckpointAt;
+    if (last != null && now.difference(last) < _checkpointInterval) return;
+    _lastCheckpointAt = now;
+    try {
+      await _db.into(_db.runCheckpoints).insertOnConflictUpdate(
+            RunCheckpointsCompanion.insert(
+              id: const Value(1),
+              runId: runId,
+              startedAt: startedAt,
+              pointsJson: jsonEncode(_state.points.map((p) => p.toJson()).toList()),
+              distanceMeters: _state.distanceMeters,
+              updatedAt: now,
+            ),
+          );
+    } catch (_) {
+      // Best-effort — see doc comment above.
+    }
+  }
+
+  Future<void> _clearCheckpoint() async {
+    await (_db.delete(_db.runCheckpoints)..where((t) => t.id.equals(1))).go();
+  }
+
   @override
   Future<void> abandonRun() async {
     await _teardown();
+    await _clearCheckpoint();
     _emit(const RunTrackState());
   }
 
@@ -179,7 +286,13 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
   Future<RunCaptureResult> captureRun() async {
     final points = _state.points;
     final startedAt = _startedAt;
+    // Falls back to a fresh id only in the defensive case where capture is
+    // somehow called with no active run (_runId null) — should not happen
+    // in practice since captureRun() is only reachable from an active
+    // tracking session.
+    final id = _runId ?? const Uuid().v4();
     await _teardown();
+    await _clearCheckpoint();
 
     if (points.length < 2 || startedAt == null) {
       _emit(const RunTrackState());
@@ -191,7 +304,6 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     }
 
     final simplified = PathSimplifier.simplify(points);
-    final id = const Uuid().v4();
     final endedAt = points.last.timestamp;
 
     await _localWriter.insertRun(
@@ -200,6 +312,7 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
       endedAt: endedAt,
       pointCount: simplified.length,
       pathGeoJson: PathSimplifier.toGeoJsonLineString(simplified),
+      pointTimestampsJson: PathSimplifier.toTimestampsJson(simplified),
     );
 
     // Best-effort immediate push (plan §3 — "return the delta for
@@ -227,12 +340,21 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     );
   }
 
+  @override
+  Future<({double latitude, double longitude})?> getCurrentPosition() async {
+    final position = await _locationProviderFactory.getCurrentPosition();
+    if (position == null) return null;
+    return (latitude: position.latitude, longitude: position.longitude);
+  }
+
   Future<void> _teardown() async {
     await _positionSub?.cancel();
     _positionSub = null;
     _ticker?.cancel();
     _ticker = null;
     _startedAt = null;
+    _runId = null;
+    _lastCheckpointAt = null;
     await _locationProvider?.dispose();
     _locationProvider = null;
     await _foregroundService.stop();
