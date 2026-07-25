@@ -86,6 +86,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
   @override
   void dispose() {
     unawaited(_territoriesSub?.cancel());
+    _bboxRefreshDebounceTimer?.cancel();
     _styleLoader.dispose();
     super.dispose();
   }
@@ -266,6 +267,21 @@ class _TerritoryPageState extends State<TerritoryPage> {
   /// order they were sent.
   int _refreshRequestId = 0;
 
+  /// Debounces `onCameraIdle` so a rapid pan/zoom/pan sequence (each leg
+  /// settling briefly before the next starts) fires one network request
+  /// after the dust settles, not one per idle event. The stale-response
+  /// guard above (`_refreshRequestId`) handles out-of-order *results*; this
+  /// handles redundant *requests* in the first place.
+  static const _bboxRefreshDebounce = Duration(milliseconds: 400);
+  Timer? _bboxRefreshDebounceTimer;
+
+  void _scheduleRefreshForCurrentView() {
+    _bboxRefreshDebounceTimer?.cancel();
+    _bboxRefreshDebounceTimer = Timer(_bboxRefreshDebounce, () {
+      unawaited(_refreshForCurrentView());
+    });
+  }
+
   Future<void> _refreshForCurrentView() async {
     final controller = _controller;
     if (controller == null) return;
@@ -350,7 +366,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
                         ),
                         onMapCreated: _onMapCreated,
                         onStyleLoadedCallback: _onStyleLoaded,
-                        onCameraIdle: () => unawaited(_refreshForCurrentView()),
+                        onCameraIdle: _scheduleRefreshForCurrentView,
                         myLocationEnabled: false,
                         logoEnabled: false,
                         attributionButtonPosition:
