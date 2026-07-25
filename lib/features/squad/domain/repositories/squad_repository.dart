@@ -40,4 +40,10 @@ abstract interface class SquadRepository {
   /// queue). Reports are reviewed by the operator directly, never surfaced
   /// back to any client.
   Future<void> reportMember({required String reportedUserId, required String reason});
+
+  /// Closes any open Realtime channels and clears cached squad state —
+  /// called only from account sign-out/switch/delete, immediately before
+  /// `AppDatabase.clearAllLocalData()`, so the outgoing identity's squad
+  /// membership/channel subscriptions can't leak into the next session.
+  Future<void> resetForAccountTransition();
 }

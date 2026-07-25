@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -15,7 +17,11 @@ import '../widgets/skeleton_painter.dart';
 /// — wiring this in as the alarm-dismiss gate (instead of `AlarmRingPage`'s
 /// direct dismiss button) is Phase 4 (see the TODO in `alarm_ring_page.dart`).
 class VerificationPage extends StatelessWidget {
-  const VerificationPage({required this.exercise, required this.targetReps, super.key});
+  const VerificationPage({
+    required this.exercise,
+    required this.targetReps,
+    super.key,
+  });
 
   final ExerciseMode exercise;
   final int targetReps;
@@ -23,14 +29,49 @@ class VerificationPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider<VerificationCubit>(
-      create: (_) => getIt<VerificationCubit>()..begin(exercise: exercise, targetReps: targetReps),
+      create: (_) =>
+          getIt<VerificationCubit>()
+            ..begin(exercise: exercise, targetReps: targetReps),
       child: const _VerificationView(),
     );
   }
 }
 
-class _VerificationView extends StatelessWidget {
+class _VerificationView extends StatefulWidget {
   const _VerificationView();
+
+  @override
+  State<_VerificationView> createState() => _VerificationViewState();
+}
+
+class _VerificationViewState extends State<_VerificationView>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final cubit = context.read<VerificationCubit>();
+    switch (state) {
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        unawaited(cubit.pause());
+      case AppLifecycleState.resumed:
+        unawaited(cubit.resume());
+      case AppLifecycleState.detached:
+        break;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,13 +80,86 @@ class _VerificationView extends StatelessWidget {
       body: BlocBuilder<VerificationCubit, VerificationState>(
         builder: (context, state) {
           return switch (state.status) {
-            VerificationStatus.permissionDenied => const _PermissionDeniedView(),
-            VerificationStatus.initializing => const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
+            VerificationStatus.permissionDenied =>
+              const _PermissionDeniedView(),
+            VerificationStatus.cameraError => const _CameraErrorView(),
+            VerificationStatus.initializing => const _InitializingView(),
             _ => _CameraView(state: state),
           };
         },
+      ),
+    );
+  }
+}
+
+class _InitializingView extends StatelessWidget {
+  const _InitializingView();
+
+  @override
+  Widget build(BuildContext context) {
+    // Never a bare indefinite spinner (plan §5 point 5) — a stuck
+    // initialization (camera taking unusually long, or silently hanging on
+    // some device/OS combination) still needs an escape hatch, same as
+    // every other state in this flow.
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: Colors.white),
+            const SizedBox(height: 24),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(
+                const VerificationResult(completed: false, repsCompleted: 0),
+              ),
+              child: const Text(
+                "I can't do this exercise today",
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CameraErrorView extends StatelessWidget {
+  const _CameraErrorView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.videocam_off, color: Colors.white70, size: 48),
+            const SizedBox(height: 16),
+            const Text(
+              "Couldn't start the camera. It may be in use by another app.",
+              style: TextStyle(color: Colors.white),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () => context.read<VerificationCubit>().retry(),
+              child: const Text('Try again'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(
+                const VerificationResult(completed: false, repsCompleted: 0),
+              ),
+              child: const Text(
+                "I can't do this exercise today",
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -60,7 +174,9 @@ class _CameraView extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = getIt<CameraDataSource>().controller;
     if (controller == null || !controller.value.isInitialized) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      );
     }
 
     // Camera frames come in landscape sensor orientation; portrait preview
@@ -80,7 +196,12 @@ class _CameraView extends StatelessWidget {
           transform: Matrix4.rotationY(3.14159),
           child: CameraPreview(controller),
         ),
-        CustomPaint(painter: SkeletonPainter(pose: state.currentPose, imageSize: imageSize)),
+        CustomPaint(
+          painter: SkeletonPainter(
+            pose: state.currentPose,
+            imageSize: imageSize,
+          ),
+        ),
         SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -113,14 +234,34 @@ class _StatusBanner extends StatefulWidget {
   State<_StatusBanner> createState() => _StatusBannerState();
 }
 
-class _StatusBannerState extends State<_StatusBanner> with SingleTickerProviderStateMixin {
+class _StatusBannerState extends State<_StatusBanner>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _pulse;
+  var _startedAnimating = false;
 
   @override
   void initState() {
     super.initState();
-    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat(reverse: true);
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // "Reduce motion" — the recording-indicator pulse is decorative; the
+    // dot itself (and the status text beside it) still communicates state
+    // without the animation.
+    //
+    // `MediaQuery.disableAnimationsOf` can't be called from `initState` —
+    // same crash and fix as `_RingingBellState` in `alarm_ring_page.dart`;
+    // see that doc comment for the full explanation.
+    if (!_startedAnimating && !MediaQuery.disableAnimationsOf(context)) {
+      _startedAnimating = true;
+      _pulse.repeat(reverse: true);
+    }
   }
 
   @override
@@ -146,36 +287,54 @@ class _StatusBannerState extends State<_StatusBanner> with SingleTickerProviderS
     // Longer real-app strings (e.g. the low-light message) can exceed a
     // single line at this font — the design's own mock strings are all
     // short, so the prototype never needed a max-width/wrap safety net.
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width - 40),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.54),
-          borderRadius: BorderRadius.circular(999),
+    //
+    // `liveRegion: true` (WCAG 4.1.3) — this banner's text changes
+    // repeatedly through a session (low-light warning ↔ calibrating ↔
+    // "Keep going!" ↔ complete) with no focus change to draw a screen
+    // reader's attention to it; without this, none of those updates were
+    // ever announced.
+    return Semantics(
+      liveRegion: true,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width - 40,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!state.isComplete) ...[
-              FadeTransition(
-                opacity: _pulse,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(color: Color(0xFFFF5449), shape: BoxShape.circle),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.54),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!state.isComplete) ...[
+                FadeTransition(
+                  opacity: _pulse,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFF5449),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
+              Flexible(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
-              const SizedBox(width: 10),
             ],
-            Flexible(
-              child: Text(
-                message,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -201,7 +360,9 @@ class _RepSegments extends StatelessWidget {
               duration: const Duration(milliseconds: 150),
               height: 5,
               decoration: BoxDecoration(
-                color: filled ? scheme.primaryContainer : Colors.white.withValues(alpha: 0.18),
+                color: filled
+                    ? scheme.primaryContainer
+                    : Colors.white.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(999),
               ),
             ),
@@ -247,57 +408,82 @@ class _RepCounterState extends State<_RepCounter> {
         ? 0.0
         : (state.completedReps / state.targetReps).clamp(0.0, 1.0);
 
+    // `liveRegion: true` (WCAG 4.1.3) — the rep count updates on every
+    // completed rep with no focus change, so a screen-reader user had no
+    // way to know a rep registered short of counting reps themselves.
+    // `ExcludeSemantics` on the visual ring/digits below this Semantics
+    // node avoids also announcing the raw "3" text node redundantly.
+    final repCountLabel = state.isComplete
+        ? 'Complete — alarm dismissed'
+        : '${state.completedReps} of ${state.targetReps} ${exerciseLabel(state.exerciseMode).toLowerCase()}';
     return Column(
       children: [
-        AnimatedScale(
-          scale: _bump ? 1.05 : 1.0,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutBack,
-          child: SizedBox(
-            width: 176,
-            height: 176,
-            child: CustomPaint(
-              painter: _RingPainter(progress: pct, color: scheme.primaryContainer),
-              child: Center(
-                child: Container(
-                  width: 152,
-                  height: 152,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    shape: BoxShape.circle,
+        Semantics(
+          liveRegion: true,
+          label: repCountLabel,
+          child: ExcludeSemantics(
+            child: AnimatedScale(
+              scale: _bump ? 1.05 : 1.0,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutBack,
+              child: SizedBox(
+                width: 176,
+                height: 176,
+                child: CustomPaint(
+                  painter: _RingPainter(
+                    progress: pct,
+                    color: scheme.primaryContainer,
                   ),
                   child: Center(
-                    child: state.isComplete
-                        ? ExpressiveFlower(
-                            size: 84,
-                            color: scheme.primaryContainer,
-                            animatePop: true,
-                            child: Icon(Icons.check, size: 40, color: scheme.onPrimaryContainer),
-                          )
-                        : Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '${state.completedReps}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 64,
-                                  height: 1,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -2,
-                                  fontFeatures: [FontFeature.tabularFigures()],
+                    child: Container(
+                      width: 152,
+                      height: 152,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: state.isComplete
+                            ? ExpressiveFlower(
+                                size: 84,
+                                color: scheme.primaryContainer,
+                                animatePop: true,
+                                child: Icon(
+                                  Icons.check,
+                                  size: 40,
+                                  color: scheme.onPrimaryContainer,
                                 ),
+                              )
+                            : Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${state.completedReps}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 64,
+                                      height: 1,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -2,
+                                      fontFeatures: [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                  Text(
+                                    'of ${state.targetReps} ${exerciseLabel(state.exerciseMode).toLowerCase()}',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.75,
+                                      ),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Text(
-                                'of ${state.targetReps} ${exerciseLabel(state.exerciseMode).toLowerCase()}',
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.75),
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -313,10 +499,15 @@ class _RepCounterState extends State<_RepCounter> {
                 backgroundColor: scheme.primaryContainer,
                 foregroundColor: scheme.onPrimaryContainer,
                 minimumSize: const Size.fromHeight(60),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                ),
               ),
               onPressed: () => Navigator.of(context).pop(
-                VerificationResult(completed: true, repsCompleted: state.completedReps),
+                VerificationResult(
+                  completed: true,
+                  repsCompleted: state.completedReps,
+                ),
               ),
               child: const Text('Done'),
             ),
@@ -329,10 +520,15 @@ class _RepCounterState extends State<_RepCounter> {
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.white.withValues(alpha: 0.8),
               side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
             ),
             onPressed: () => Navigator.of(context).pop(
-              VerificationResult(completed: false, repsCompleted: state.completedReps),
+              VerificationResult(
+                completed: false,
+                repsCompleted: state.completedReps,
+              ),
             ),
             child: const Text("I can't do this exercise today"),
           ),
@@ -397,7 +593,10 @@ class _PermissionDeniedView extends StatelessWidget {
               onPressed: () => Navigator.of(context).pop(
                 const VerificationResult(completed: false, repsCompleted: 0),
               ),
-              child: const Text("I can't do this exercise today", style: TextStyle(color: Colors.white70)),
+              child: const Text(
+                "I can't do this exercise today",
+                style: TextStyle(color: Colors.white70),
+              ),
             ),
           ],
         ),

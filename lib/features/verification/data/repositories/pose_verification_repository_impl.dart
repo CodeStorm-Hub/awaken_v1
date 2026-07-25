@@ -30,11 +30,20 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
   /// queuing up a backlog.
   bool _processingFrame = false;
 
+  /// Bumped on every `start()`/`stop()` — a frame captured just before a
+  /// stop/restart can still be mid-flight in `_poseDetector.process()` when
+  /// the next session's `start()` resets `_repCounter`/`_state`; without
+  /// this check, that straggler's result would land on the *new* session
+  /// (e.g. crediting a rep, or resetting calibration) instead of being
+  /// discarded as belonging to a session that no longer exists.
+  int _generation = 0;
+
   @override
   Stream<VerificationState> watchState() => _stateController.stream;
 
   @override
   Future<void> start({required ExerciseMode exercise, required int targetReps}) async {
+    _generation++;
     _repCounter = exercise == ExerciseMode.squat
         ? AngleRepCounter.squat()
         : AngleRepCounter.pushup();
@@ -46,11 +55,22 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
       ),
     );
 
-    await _camera.startFrontCameraStream(_onFrame);
+    try {
+      await _camera.startFrontCameraStream(_onFrame);
+    } catch (_) {
+      _emit(
+        VerificationState(
+          status: VerificationStatus.cameraError,
+          exerciseMode: exercise,
+          targetReps: targetReps,
+        ),
+      );
+    }
   }
 
   @override
   Future<void> stop() async {
+    _generation++;
     await _camera.stop();
     _repCounter = null;
     _emit(const VerificationState());
@@ -65,8 +85,10 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
     if (inputImage == null) return;
 
     _processingFrame = true;
+    final generation = _generation;
     try {
       final poses = await _poseDetector.process(inputImage);
+      if (generation != _generation) return;
       if (poses.isEmpty) {
         _emit(_state.copyWith(status: VerificationStatus.noPoseDetected, clearPose: true));
         return;

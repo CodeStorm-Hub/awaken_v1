@@ -16,12 +16,12 @@ class RunCaptureResult extends Equatable {
   });
 
   const RunCaptureResult.pending()
-      : pending = true,
-        accepted = null,
-        closedLoop = false,
-        capturedAreaSqm = null,
-        territoryAreaSqm = null,
-        rejectedReason = null;
+    : pending = true,
+      accepted = null,
+      closedLoop = false,
+      capturedAreaSqm = null,
+      territoryAreaSqm = null,
+      rejectedReason = null;
 
   final bool pending;
   final bool? accepted;
@@ -32,11 +32,11 @@ class RunCaptureResult extends Equatable {
 
   @override
   List<Object?> get props => [
-        pending,
-        accepted,
-        closedLoop,
-        capturedAreaSqm,
-        territoryAreaSqm,
-        rejectedReason,
-      ];
+    pending,
+    accepted,
+    closedLoop,
+    capturedAreaSqm,
+    territoryAreaSqm,
+    rejectedReason,
+  ];
 }

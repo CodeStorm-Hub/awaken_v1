@@ -66,10 +66,19 @@ class SquadRepositoryImpl implements SquadRepository {
   /// silent forever — a real bug found via live device testing (the Squad
   /// tab got stuck on its loading spinner indefinitely because a failed
   /// fetch here never called `_emitSquad`, so `SquadCubit` never left
-  /// `SquadStatus.loading`). Fails open to "no squad" on any error/timeout
-  /// rather than hanging; the create/join flow is always reachable from
-  /// that empty state, so failing open costs nothing but is far better
-  /// than an unrecoverable spinner.
+  /// `SquadStatus.loading`). Fails open to "no squad" only on the very
+  /// first fetch (nothing cached yet — the create/join flow is always
+  /// reachable from that empty state, so failing open there costs
+  /// nothing). A *later* refresh failing (e.g. a dropped connection) no
+  /// longer does this — it used to unconditionally fail open too, which
+  /// meant a genuine backend/network blip made an already-known squad
+  /// membership vanish and look exactly like "you're not in a squad",
+  /// misleadingly pushing the user toward create/join instead of just
+  /// retrying. Keeping the last-known-good `_cachedSquad` in that case is
+  /// strictly better UX even though this refresh has no direct way to
+  /// signal the failure back to the UI (no error banner) — surfacing that
+  /// is left to a future targeted fix if this proves confusing in
+  /// practice.
   Future<void> _refreshMySquad() async {
     try {
       final userId = _currentUserId;
@@ -96,7 +105,7 @@ class SquadRepositoryImpl implements SquadRepository {
           .timeout(const Duration(seconds: 10));
       _emitSquad(row == null ? null : _squadFromJson(row));
     } catch (_) {
-      _emitSquad(null);
+      if (!_hasEmittedOnce) _emitSquad(null);
     }
   }
 
@@ -156,11 +165,25 @@ class SquadRepositoryImpl implements SquadRepository {
     }
   }
 
+  /// Latest broadcast-telemetry label per user, per squad — kept as
+  /// repository-lifetime state (not per-listener) since it's meant to
+  /// cheaply refresh a presence member's `activity` label between full
+  /// Presence `.track()` calls (H6: Presence-for-status +
+  /// Broadcast-for-telemetry split), not something each new subscriber
+  /// starts blank.
+  final _latestActivityBySquad = <String, Map<String, String>>{};
+
   @override
   Stream<List<SquadPresenceMember>> watchPresence(String squadId) {
-    return _remote.watchPresenceState(squadId).map((states) {
+    late final StreamController<List<SquadPresenceMember>> controller;
+    List<SinglePresenceState> latestStates = const [];
+    var hasStates = false;
+
+    void emit() {
+      if (!hasStates) return;
+      final activityOverrides = _latestActivityBySquad[squadId] ?? const {};
       final members = <SquadPresenceMember>[];
-      for (final state in states) {
+      for (final state in latestStates) {
         for (final presence in state.presences) {
           final userId = presence.payload['user_id'] as String?;
           final displayName = presence.payload['display_name'] as String?;
@@ -169,13 +192,39 @@ class SquadRepositoryImpl implements SquadRepository {
             SquadPresenceMember(
               userId: userId,
               displayName: displayName,
-              activity: presence.payload['activity'] as String?,
+              activity: activityOverrides[userId] ?? presence.payload['activity'] as String?,
             ),
           );
         }
       }
-      return members;
-    });
+      controller.add(members);
+    }
+
+    late final StreamSubscription<List<SinglePresenceState>> presenceSub;
+    late final StreamSubscription<Map<String, dynamic>> broadcastSub;
+
+    controller = StreamController<List<SquadPresenceMember>>.broadcast(
+      onListen: () {
+        presenceSub = _remote.watchPresenceState(squadId).listen((states) {
+          latestStates = states;
+          hasStates = true;
+          emit();
+        });
+        broadcastSub = _remote.watchBroadcast(squadId).listen((payload) {
+          final userId = payload['user_id'] as String?;
+          final label = payload['label'] as String?;
+          if (userId == null || label == null) return;
+          (_latestActivityBySquad[squadId] ??= {})[userId] = label;
+          emit();
+        });
+      },
+      onCancel: () {
+        unawaited(presenceSub.cancel());
+        unawaited(broadcastSub.cancel());
+      },
+    );
+
+    return controller.stream;
   }
 
   @override
@@ -202,6 +251,21 @@ class SquadRepositoryImpl implements SquadRepository {
     _lastBroadcastAt = now;
 
     _remote.broadcastTelemetry(squad.id, {'user_id': userId, 'label': label});
+  }
+
+  /// Used only from account sign-out/switch/delete — see
+  /// `SquadRemoteDataSource.closeAllChannels`'s doc comment. Clears the
+  /// in-memory squad cache too, so a stale `_cachedSquad` (and the
+  /// `_fetchedOnce` guard that would otherwise prevent ever re-fetching)
+  /// can't leak the outgoing identity's squad into the incoming session.
+  @override
+  Future<void> resetForAccountTransition() async {
+    await _remote.closeAllChannels();
+    _cachedSquad = null;
+    _fetchedOnce = false;
+    _hasEmittedOnce = false;
+    _lastBroadcastAt = null;
+    _latestActivityBySquad.clear();
   }
 
   @override

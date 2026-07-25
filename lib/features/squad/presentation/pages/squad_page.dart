@@ -8,6 +8,7 @@ import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
 import '../../domain/entities/leaderboard_entry.dart';
 import '../bloc/squad_cubit.dart';
 import '../bloc/squad_state.dart';
+import '../squad_error_message.dart';
 
 /// Squad leaderboard (Claude Design handoff — `isSquad`), wired to real
 /// Supabase-backed squad state (plan §6 Phase 6) instead of the original
@@ -446,8 +447,14 @@ class _SquadLoadedView extends StatelessWidget {
                       style: TextButton.styleFrom(
                         foregroundColor: scheme.onSurfaceVariant,
                       ),
-                      onPressed: () => context.read<SquadCubit>().leaveSquad(),
-                      child: const Text('Leave squad'),
+                      onPressed: state.isLeavingSquad ? null : () => _confirmLeaveSquad(context),
+                      child: state.isLeavingSquad
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Leave squad'),
                     ),
                   ),
                 ],
@@ -641,6 +648,36 @@ class _LeaderboardRow extends StatelessWidget {
   }
 }
 
+Future<void> _confirmLeaveSquad(BuildContext context) async {
+  final cubit = context.read<SquadCubit>();
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Leave squad?'),
+      content: const Text("You'll need the invite code to rejoin later."),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Leave'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return;
+
+  try {
+    await cubit.leaveSquad();
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlySquadErrorMessage(e))));
+    }
+  }
+}
+
 Future<void> _showReportMemberDialog(
   BuildContext context, {
   required String userId,
@@ -682,7 +719,7 @@ Future<void> _showReportMemberDialog(
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlySquadErrorMessage(e))));
     }
   }
 }

@@ -11,6 +11,14 @@ abstract interface class AlarmRepository {
   Future<void> scheduleAlarm(AlarmSchedule alarm);
   Future<void> cancelAlarm(String id);
 
+  /// Stops every natively-scheduled alarm without touching the local Drift
+  /// cache — used only from account sign-out/switch/delete, immediately
+  /// before `AppDatabase.clearAllLocalData()` wipes the alarms table.
+  /// Without this, a stale scheduled alarm could still fire and reference
+  /// now-wiped local data (e.g. `completeWorkout`'s session insert racing a
+  /// wipe, or an alarm ringing for a session that's no longer this user's).
+  Future<void> cancelAllAlarms();
+
   /// Enable/disable an alarm without discarding its settings (unlike
   /// `cancelAlarm`, which deletes it outright). Disabling cancels the
   /// native schedule but keeps the alarm's config in the local cache so it

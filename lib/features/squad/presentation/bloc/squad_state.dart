@@ -24,6 +24,7 @@ class SquadState extends Equatable {
     this.leaderboard = const [],
     this.presence = const [],
     this.errorMessage,
+    this.isLeavingSquad = false,
   });
 
   final SquadStatus status;
@@ -32,6 +33,11 @@ class SquadState extends Equatable {
   final List<SquadPresenceMember> presence;
   final String? errorMessage;
 
+  /// True only while a "Leave squad" call is in flight — kept separate
+  /// from [status] so a failed leave attempt shows an inline SnackBar
+  /// instead of blowing away the still-current `loaded` squad view.
+  final bool isLeavingSquad;
+
   SquadState copyWith({
     SquadStatus? status,
     Squad? squad,
@@ -39,6 +45,7 @@ class SquadState extends Equatable {
     List<LeaderboardEntry>? leaderboard,
     List<SquadPresenceMember>? presence,
     String? errorMessage,
+    bool? isLeavingSquad,
   }) {
     return SquadState(
       status: status ?? this.status,
@@ -46,9 +53,10 @@ class SquadState extends Equatable {
       leaderboard: leaderboard ?? this.leaderboard,
       presence: presence ?? this.presence,
       errorMessage: errorMessage ?? this.errorMessage,
+      isLeavingSquad: isLeavingSquad ?? this.isLeavingSquad,
     );
   }
 
   @override
-  List<Object?> get props => [status, squad, leaderboard, presence, errorMessage];
+  List<Object?> get props => [status, squad, leaderboard, presence, errorMessage, isLeavingSquad];
 }

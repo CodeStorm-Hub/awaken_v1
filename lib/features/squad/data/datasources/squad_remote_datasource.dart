@@ -16,6 +16,15 @@ class SquadRemoteDataSource {
   final _channels = <String, RealtimeChannel>{};
   final _channelRefCounts = <String, int>{};
 
+  /// Squad ids this device currently has Presence `.track()`ed on — a
+  /// standing retain, released only on `closeAllChannels()`, since an
+  /// active `track()` payload is live channel state that must survive
+  /// regardless of whether anything is currently *watching* presence.
+  /// Without this, `watchPresenceState`'s own ref-count could drop to zero
+  /// and tear the channel down (silently untracking this device) while it
+  /// was still meant to show as present.
+  final _trackedSquadIds = <String>{};
+
   Future<Map<String, dynamic>> createSquad(String name) async {
     final result = await _supabase.rpc('create_squad', params: {'p_name': name});
     return Map<String, dynamic>.from(result as Map);
@@ -109,6 +118,7 @@ class SquadRemoteDataSource {
   }
 
   Future<void> trackPresence(String squadId, Map<String, dynamic> payload) async {
+    if (_trackedSquadIds.add(squadId)) _retain(squadId);
     await _channelFor(squadId).track(payload);
   }
 
@@ -116,5 +126,38 @@ class SquadRemoteDataSource {
 
   void broadcastTelemetry(String squadId, Map<String, dynamic> payload) {
     unawaited(_channelFor(squadId).sendBroadcastMessage(event: _broadcastEvent, payload: payload));
+  }
+
+  /// Live telemetry from squadmates' `broadcastTelemetry` calls — each
+  /// event's raw payload (`{user_id, label}`) is forwarded as-is; the
+  /// repository maps it onto presence members.
+  Stream<Map<String, dynamic>> watchBroadcast(String squadId) {
+    _retain(squadId);
+    final channel = _channelFor(squadId);
+    late final StreamController<Map<String, dynamic>> controller;
+    controller = StreamController<Map<String, dynamic>>.broadcast(
+      onCancel: () => _release(squadId),
+    );
+    channel.onBroadcast(
+      event: _broadcastEvent,
+      callback: (payload) => controller.add(Map<String, dynamic>.from(payload)),
+    );
+    return controller.stream;
+  }
+
+  /// Force-closes every open squad channel regardless of ref count — used
+  /// only from account sign-out/switch/delete, where the outgoing
+  /// identity's live Presence/Broadcast subscriptions must not survive
+  /// into the next session (private channels are authorized per-`auth.uid()`
+  /// via the `realtime.messages` RLS policy, so a stale subscription would
+  /// simply stop receiving traffic once the JWT changes — but leaving it
+  /// open leaks a connection and, worse, could still hold the *old* squad's
+  /// presence/track state client-side across the identity swap).
+  Future<void> closeAllChannels() async {
+    final channels = _channels.values.toList();
+    _channels.clear();
+    _channelRefCounts.clear();
+    _trackedSquadIds.clear();
+    await Future.wait(channels.map(_supabase.removeChannel));
   }
 }

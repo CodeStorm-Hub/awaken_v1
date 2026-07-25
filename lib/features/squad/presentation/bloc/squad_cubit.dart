@@ -14,6 +14,7 @@ import '../../domain/usecases/leave_squad.dart';
 import '../../domain/usecases/watch_leaderboard.dart';
 import '../../domain/usecases/watch_my_squad.dart';
 import '../../domain/usecases/watch_squad_presence.dart';
+import '../squad_error_message.dart';
 import 'squad_state.dart';
 
 /// Per-page Cubit (like `RunTrackingCubit`/`VerificationCubit`), created
@@ -66,7 +67,7 @@ class SquadCubit extends Cubit<SquadState> {
     try {
       await _createSquad(name);
     } catch (e) {
-      emit(state.copyWith(status: SquadStatus.error, errorMessage: e.toString()));
+      emit(state.copyWith(status: SquadStatus.error, errorMessage: friendlySquadErrorMessage(e)));
     }
   }
 
@@ -74,12 +75,24 @@ class SquadCubit extends Cubit<SquadState> {
     try {
       await _joinSquad(inviteCode);
     } catch (e) {
-      emit(state.copyWith(status: SquadStatus.error, errorMessage: e.toString()));
+      emit(state.copyWith(status: SquadStatus.error, errorMessage: friendlySquadErrorMessage(e)));
     }
   }
 
+  /// Previously fire-and-forget with no confirmation, loading, or error
+  /// handling — a failure here (e.g. a dropped connection mid-request)
+  /// silently left the button looking like it did nothing. Rethrows on
+  /// failure so the page can surface it as a SnackBar without disturbing
+  /// the still-current `loaded` squad view.
   Future<void> leaveSquad() async {
-    await _leaveSquad(const NoParams());
+    emit(state.copyWith(isLeavingSquad: true));
+    try {
+      await _leaveSquad(const NoParams());
+    } catch (e) {
+      emit(state.copyWith(isLeavingSquad: false));
+      rethrow;
+    }
+    emit(state.copyWith(isLeavingSquad: false));
   }
 
   Future<void> reportMember({required String reportedUserId, required String reason}) {

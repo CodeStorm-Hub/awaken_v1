@@ -17,8 +17,13 @@ import '../../domain/usecases/watch_run_state.dart';
 /// a run is scoped to one tracking session, not the app lifetime.
 @injectable
 class RunTrackingCubit extends Cubit<RunTrackState> {
-  RunTrackingCubit(this._startRun, this._abandonRun, this._captureRun, this._watchRunState, this._squadRepository)
-      : super(const RunTrackState());
+  RunTrackingCubit(
+    this._startRun,
+    this._abandonRun,
+    this._captureRun,
+    this._watchRunState,
+    this._squadRepository,
+  ) : super(const RunTrackState());
 
   final StartRun _startRun;
   final AbandonRun _abandonRun;
@@ -36,11 +41,21 @@ class RunTrackingCubit extends Cubit<RunTrackState> {
   /// update, and broadcast squad telemetry, once per accumulated listener.
   StreamSubscription<RunTrackState>? _runStateSub;
 
+  /// `trackPresence` does a real Realtime round-trip (unlike
+  /// `broadcastTelemetry`, which is already throttled) — call it once when
+  /// tracking starts, not on every state tick.
+  var _presenceTracked = false;
+
   Future<void> begin() async {
     await _runStateSub?.cancel();
+    _presenceTracked = false;
     _runStateSub = _watchRunState().listen((state) {
       emit(state);
       if (state.isTracking) {
+        if (!_presenceTracked) {
+          _presenceTracked = true;
+          unawaited(_squadRepository.trackPresence(activity: 'Running'));
+        }
         final km = (state.distanceMeters / 1000).toStringAsFixed(1);
         _squadRepository.broadcastTelemetry(label: 'Running · $km km');
       }

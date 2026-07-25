@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:injectable/injectable.dart';
@@ -8,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_constants.dart';
 import '../connectivity/connectivity_watcher.dart';
 import '../local/database.dart';
+import '../pull/pull_down_sync.dart';
 import '../sync_status.dart';
 import 'outbox_operation.dart';
 
@@ -17,17 +19,28 @@ import 'outbox_operation.dart';
 /// picks up whatever is still due.
 @lazySingleton
 class SyncWorker {
-  SyncWorker(this._db, this._supabase, this._connectivity);
+  SyncWorker(this._db, this._supabase, this._connectivity, this._pullDownSync);
 
   final AppDatabase _db;
   final SupabaseClient _supabase;
   final ConnectivityWatcher _connectivity;
+  final PullDownSync _pullDownSync;
 
   final _statusController = StreamController<SyncStatus>.broadcast();
   Stream<SyncStatus> get status => _statusController.stream;
 
   StreamSubscription<bool>? _connectivitySub;
+  Timer? _wakeTimer;
   bool _draining = false;
+  bool _paused = false;
+
+  /// Belt-and-suspenders wake-up for entries whose backoff `nextAttemptAt`
+  /// elapses with no connectivity *change* to trigger a drain (the previous
+  /// design only ever drained on a connectivity toggle or app start, so a
+  /// backed-off entry could sit past its due time indefinitely on a
+  /// connection that never flaps). A coarse period is fine — this is a
+  /// safety net, not the primary trigger.
+  static const _wakeInterval = Duration(seconds: 60);
 
   /// Starts listening for connectivity changes and attempts an initial
   /// drain. Call once from bootstrap after DI is configured.
@@ -39,16 +52,36 @@ class SyncWorker {
         _statusController.add(SyncStatus.offline);
       }
     });
+    _wakeTimer ??= Timer.periodic(_wakeInterval, (_) => unawaited(drainOutbox()));
     unawaited(drainOutbox());
   }
 
   Future<void> dispose() async {
     await _connectivitySub?.cancel();
+    _wakeTimer?.cancel();
     await _statusController.close();
   }
 
+  /// Runs [transition] with the outbox drain loop held off, so an
+  /// account sign-out/switch/delete's `clearAllLocalData()` wipe can't race
+  /// an in-flight `drainOutbox()` reading/writing the same tables. Any
+  /// drain already in progress when this is called is allowed to finish
+  /// first (it already holds `_draining`); no new drain can start until
+  /// [transition] completes.
+  Future<T> pauseFor<T>(Future<T> Function() transition) async {
+    _paused = true;
+    try {
+      while (_draining) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      return await transition();
+    } finally {
+      _paused = false;
+    }
+  }
+
   Future<void> drainOutbox() async {
-    if (_draining) return;
+    if (_draining || _paused) return;
     _draining = true;
     try {
       if (!await _connectivity.isOnline) {
@@ -59,10 +92,31 @@ class SyncWorker {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return; // no session yet — retried on the next trigger
 
+      // Incremental remote→local convergence (plan: "replace one-time pull
+      // hydration") — runs every drain cycle, not just once at bootstrap.
+      // Best-effort: a pull failure must not block the push half of this
+      // cycle, and vice versa.
+      try {
+        await _pullDownSync.run();
+      } catch (_) {
+        // Retried next cycle.
+      }
+
       final now = DateTime.now();
+      // Ordered by entity first: entries for the same (table, id) must push
+      // in creation order (an older upsert landing after a newer one would
+      // resurrect stale data), and once one of an entity's entries fails,
+      // every later entry for that same entity is skipped this pass rather
+      // than raced ahead of it out of order. `LIMIT` bounds one drain pass
+      // so a huge backlog can't block the loop for an unbounded time.
       final due = await (_db.select(_db.syncOutbox)
             ..where((t) => t.nextAttemptAt.isSmallerOrEqualValue(now))
-            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+            ..orderBy([
+              (t) => OrderingTerm.asc(t.entityTable),
+              (t) => OrderingTerm.asc(t.entityId),
+              (t) => OrderingTerm.asc(t.createdAt),
+            ])
+            ..limit(100))
           .get();
 
       if (due.isEmpty) {
@@ -72,13 +126,17 @@ class SyncWorker {
 
       _statusController.add(SyncStatus.syncing);
       var hadFailure = false;
+      final failedEntities = <String>{};
       for (final entry in due) {
+        final entityKey = '${entry.entityTable}:${entry.entityId}';
+        if (failedEntities.contains(entityKey)) continue;
         try {
           await _push(entry, userId);
           await (_db.delete(_db.syncOutbox)..where((t) => t.id.equals(entry.id))).go();
-        } catch (_) {
+        } catch (e) {
           hadFailure = true;
-          await _applyBackoff(entry);
+          failedEntities.add(entityKey);
+          await _applyFailure(entry, e);
         }
       }
       _statusController.add(hadFailure ? SyncStatus.error : SyncStatus.idle);
@@ -156,18 +214,53 @@ class SyncWorker {
     );
   }
 
-  Future<void> _applyBackoff(OutboxEntryRow entry) async {
+  /// `'permanent'` (a constraint violation, permission error, or malformed
+  /// request — the identical payload will fail identically forever) vs
+  /// `'transient'` (network/timeout — worth retrying). Postgres/PostgREST
+  /// error codes: `22xxx`/`23xxx` are data/integrity errors, `2565`/`42501`
+  /// permission errors, `PGRST` codes are PostgREST request-shape errors —
+  /// none of those change on retry. Anything else (including plain
+  /// `SocketException`/`TimeoutException` with no `.code` at all) is
+  /// treated as transient, the safe default when the cause is ambiguous.
+  String _classifyError(Object error) {
+    if (error is SocketException || error is TimeoutException) return 'transient';
+    final code = (error is PostgrestException) ? error.code : null;
+    if (code == null) return 'transient';
+    if (code.startsWith('22') ||
+        code.startsWith('23') ||
+        code == '42501' ||
+        code.startsWith('PGRST')) {
+      return 'permanent';
+    }
+    return 'transient';
+  }
+
+  Future<void> _applyFailure(OutboxEntryRow entry, Object error) async {
     final attempt = entry.attemptCount + 1;
+    final errorType = _classifyError(error);
+    final deadLettered = errorType == 'permanent' || attempt >= entry.maxAttempts;
     await (_db.update(_db.syncOutbox)..where((t) => t.id.equals(entry.id))).write(
       SyncOutboxCompanion(
         attemptCount: Value(attempt),
-        nextAttemptAt: Value(DateTime.now().add(_backoffDelay(attempt))),
+        errorType: Value(errorType),
+        lastError: Value(error.toString()),
+        // A dead-lettered entry is pushed far into the future rather than
+        // deleted — deleting would silently drop a real mutation with no
+        // record of it ever existing; this way it simply stops competing
+        // for retry slots until a future "review failed syncs" UI clears
+        // or resets it.
+        nextAttemptAt: Value(
+          deadLettered ? DateTime.now().add(const Duration(days: 3650)) : DateTime.now().add(_backoffDelay(attempt)),
+        ),
       ),
     );
   }
 
   Duration _backoffDelay(int attempt) {
-    final scaled = AppConstants.syncInitialBackoff * (1 << attempt.clamp(0, 10));
+    // `attempt` is 1-indexed (the first failure passes `attempt: 1`), so
+    // `1 << (attempt - 1)` gives 1x/2x/4x/... — the first retry waits
+    // exactly `syncInitialBackoff`, not double it.
+    final scaled = AppConstants.syncInitialBackoff * (1 << (attempt - 1).clamp(0, 10));
     return scaled > AppConstants.syncMaxBackoff ? AppConstants.syncMaxBackoff : scaled;
   }
 }

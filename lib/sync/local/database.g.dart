@@ -2054,6 +2054,17 @@ class $TerritoriesTable extends Territories
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2061,6 +2072,7 @@ class $TerritoriesTable extends Territories
     geoJson,
     areaSqm,
     updatedAt,
+    deletedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2111,6 +2123,12 @@ class $TerritoriesTable extends Territories
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
     return context;
   }
 
@@ -2140,6 +2158,10 @@ class $TerritoriesTable extends Territories
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
     );
   }
 
@@ -2155,12 +2177,21 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
   final String geoJson;
   final double areaSqm;
   final DateTime updatedAt;
+
+  /// Local-only tombstone (mirrors the backend's soft-delete column, but
+  /// this cache never round-trips it) — set when a refresh's bbox query no
+  /// longer returns a previously-cached row inside that same bbox
+  /// (decayed, captured to nothing, or otherwise removed server-side).
+  /// Kept rather than hard-deleting immediately so a row that reappears in
+  /// a later refresh (e.g. recaptured) can simply have this cleared.
+  final DateTime? deletedAt;
   const TerritoryRow({
     required this.id,
     required this.ownerId,
     required this.geoJson,
     required this.areaSqm,
     required this.updatedAt,
+    this.deletedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2170,6 +2201,9 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
     map['geo_json'] = Variable<String>(geoJson);
     map['area_sqm'] = Variable<double>(areaSqm);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
     return map;
   }
 
@@ -2180,6 +2214,9 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
       geoJson: Value(geoJson),
       areaSqm: Value(areaSqm),
       updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
     );
   }
 
@@ -2194,6 +2231,7 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
       geoJson: serializer.fromJson<String>(json['geoJson']),
       areaSqm: serializer.fromJson<double>(json['areaSqm']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
   }
   @override
@@ -2205,6 +2243,7 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
       'geoJson': serializer.toJson<String>(geoJson),
       'areaSqm': serializer.toJson<double>(areaSqm),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
   }
 
@@ -2214,12 +2253,14 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
     String? geoJson,
     double? areaSqm,
     DateTime? updatedAt,
+    Value<DateTime?> deletedAt = const Value.absent(),
   }) => TerritoryRow(
     id: id ?? this.id,
     ownerId: ownerId ?? this.ownerId,
     geoJson: geoJson ?? this.geoJson,
     areaSqm: areaSqm ?? this.areaSqm,
     updatedAt: updatedAt ?? this.updatedAt,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
   TerritoryRow copyWithCompanion(TerritoriesCompanion data) {
     return TerritoryRow(
@@ -2228,6 +2269,7 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
       geoJson: data.geoJson.present ? data.geoJson.value : this.geoJson,
       areaSqm: data.areaSqm.present ? data.areaSqm.value : this.areaSqm,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
   }
 
@@ -2238,13 +2280,15 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
           ..write('ownerId: $ownerId, ')
           ..write('geoJson: $geoJson, ')
           ..write('areaSqm: $areaSqm, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, ownerId, geoJson, areaSqm, updatedAt);
+  int get hashCode =>
+      Object.hash(id, ownerId, geoJson, areaSqm, updatedAt, deletedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2253,7 +2297,8 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
           other.ownerId == this.ownerId &&
           other.geoJson == this.geoJson &&
           other.areaSqm == this.areaSqm &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
 }
 
 class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
@@ -2262,6 +2307,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
   final Value<String> geoJson;
   final Value<double> areaSqm;
   final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
   final Value<int> rowid;
   const TerritoriesCompanion({
     this.id = const Value.absent(),
@@ -2269,6 +2315,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     this.geoJson = const Value.absent(),
     this.areaSqm = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TerritoriesCompanion.insert({
@@ -2277,6 +2324,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     required String geoJson,
     required double areaSqm,
     required DateTime updatedAt,
+    this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        ownerId = Value(ownerId),
@@ -2289,6 +2337,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     Expression<String>? geoJson,
     Expression<double>? areaSqm,
     Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2297,6 +2346,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
       if (geoJson != null) 'geo_json': geoJson,
       if (areaSqm != null) 'area_sqm': areaSqm,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2307,6 +2357,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     Value<String>? geoJson,
     Value<double>? areaSqm,
     Value<DateTime>? updatedAt,
+    Value<DateTime?>? deletedAt,
     Value<int>? rowid,
   }) {
     return TerritoriesCompanion(
@@ -2315,6 +2366,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
       geoJson: geoJson ?? this.geoJson,
       areaSqm: areaSqm ?? this.areaSqm,
       updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2337,6 +2389,9 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2351,6 +2406,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
           ..write('geoJson: $geoJson, ')
           ..write('areaSqm: $areaSqm, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2455,6 +2511,40 @@ class $SyncOutboxTable extends SyncOutbox
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _errorTypeMeta = const VerificationMeta(
+    'errorType',
+  );
+  @override
+  late final GeneratedColumn<String> errorType = GeneratedColumn<String>(
+    'error_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastErrorMeta = const VerificationMeta(
+    'lastError',
+  );
+  @override
+  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
+    'last_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _maxAttemptsMeta = const VerificationMeta(
+    'maxAttempts',
+  );
+  @override
+  late final GeneratedColumn<int> maxAttempts = GeneratedColumn<int>(
+    'max_attempts',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(10),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2465,6 +2555,9 @@ class $SyncOutboxTable extends SyncOutbox
     createdAt,
     nextAttemptAt,
     attemptCount,
+    errorType,
+    lastError,
+    maxAttempts,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2544,6 +2637,27 @@ class $SyncOutboxTable extends SyncOutbox
         ),
       );
     }
+    if (data.containsKey('error_type')) {
+      context.handle(
+        _errorTypeMeta,
+        errorType.isAcceptableOrUnknown(data['error_type']!, _errorTypeMeta),
+      );
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(
+        _lastErrorMeta,
+        lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
+      );
+    }
+    if (data.containsKey('max_attempts')) {
+      context.handle(
+        _maxAttemptsMeta,
+        maxAttempts.isAcceptableOrUnknown(
+          data['max_attempts']!,
+          _maxAttemptsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2585,6 +2699,18 @@ class $SyncOutboxTable extends SyncOutbox
         DriftSqlType.int,
         data['${effectivePrefix}attempt_count'],
       )!,
+      errorType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error_type'],
+      ),
+      lastError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_error'],
+      ),
+      maxAttempts: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}max_attempts'],
+      )!,
     );
   }
 
@@ -2603,6 +2729,15 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
   final DateTime createdAt;
   final DateTime nextAttemptAt;
   final int attemptCount;
+
+  /// Dead-letter classification: `'transient'` (network/timeout — keep
+  /// retrying with backoff) vs `'permanent'` (4xx/constraint violation —
+  /// the same payload will never succeed, so `SyncWorker` stops retrying
+  /// once `attemptCount` reaches [maxAttempts] and instead surfaces it via
+  /// `SyncStatus.error`). Null until the first failure.
+  final String? errorType;
+  final String? lastError;
+  final int maxAttempts;
   const OutboxEntryRow({
     required this.id,
     required this.entityTable,
@@ -2612,6 +2747,9 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
     required this.createdAt,
     required this.nextAttemptAt,
     required this.attemptCount,
+    this.errorType,
+    this.lastError,
+    required this.maxAttempts,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2624,6 +2762,13 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
     map['created_at'] = Variable<DateTime>(createdAt);
     map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
     map['attempt_count'] = Variable<int>(attemptCount);
+    if (!nullToAbsent || errorType != null) {
+      map['error_type'] = Variable<String>(errorType);
+    }
+    if (!nullToAbsent || lastError != null) {
+      map['last_error'] = Variable<String>(lastError);
+    }
+    map['max_attempts'] = Variable<int>(maxAttempts);
     return map;
   }
 
@@ -2637,6 +2782,13 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
       createdAt: Value(createdAt),
       nextAttemptAt: Value(nextAttemptAt),
       attemptCount: Value(attemptCount),
+      errorType: errorType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(errorType),
+      lastError: lastError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastError),
+      maxAttempts: Value(maxAttempts),
     );
   }
 
@@ -2654,6 +2806,9 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       nextAttemptAt: serializer.fromJson<DateTime>(json['nextAttemptAt']),
       attemptCount: serializer.fromJson<int>(json['attemptCount']),
+      errorType: serializer.fromJson<String?>(json['errorType']),
+      lastError: serializer.fromJson<String?>(json['lastError']),
+      maxAttempts: serializer.fromJson<int>(json['maxAttempts']),
     );
   }
   @override
@@ -2668,6 +2823,9 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'nextAttemptAt': serializer.toJson<DateTime>(nextAttemptAt),
       'attemptCount': serializer.toJson<int>(attemptCount),
+      'errorType': serializer.toJson<String?>(errorType),
+      'lastError': serializer.toJson<String?>(lastError),
+      'maxAttempts': serializer.toJson<int>(maxAttempts),
     };
   }
 
@@ -2680,6 +2838,9 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
     DateTime? createdAt,
     DateTime? nextAttemptAt,
     int? attemptCount,
+    Value<String?> errorType = const Value.absent(),
+    Value<String?> lastError = const Value.absent(),
+    int? maxAttempts,
   }) => OutboxEntryRow(
     id: id ?? this.id,
     entityTable: entityTable ?? this.entityTable,
@@ -2689,6 +2850,9 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
     createdAt: createdAt ?? this.createdAt,
     nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
     attemptCount: attemptCount ?? this.attemptCount,
+    errorType: errorType.present ? errorType.value : this.errorType,
+    lastError: lastError.present ? lastError.value : this.lastError,
+    maxAttempts: maxAttempts ?? this.maxAttempts,
   );
   OutboxEntryRow copyWithCompanion(SyncOutboxCompanion data) {
     return OutboxEntryRow(
@@ -2706,6 +2870,11 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
       attemptCount: data.attemptCount.present
           ? data.attemptCount.value
           : this.attemptCount,
+      errorType: data.errorType.present ? data.errorType.value : this.errorType,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      maxAttempts: data.maxAttempts.present
+          ? data.maxAttempts.value
+          : this.maxAttempts,
     );
   }
 
@@ -2719,7 +2888,10 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
           ..write('payload: $payload, ')
           ..write('createdAt: $createdAt, ')
           ..write('nextAttemptAt: $nextAttemptAt, ')
-          ..write('attemptCount: $attemptCount')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('errorType: $errorType, ')
+          ..write('lastError: $lastError, ')
+          ..write('maxAttempts: $maxAttempts')
           ..write(')'))
         .toString();
   }
@@ -2734,6 +2906,9 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
     createdAt,
     nextAttemptAt,
     attemptCount,
+    errorType,
+    lastError,
+    maxAttempts,
   );
   @override
   bool operator ==(Object other) =>
@@ -2746,7 +2921,10 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
           other.payload == this.payload &&
           other.createdAt == this.createdAt &&
           other.nextAttemptAt == this.nextAttemptAt &&
-          other.attemptCount == this.attemptCount);
+          other.attemptCount == this.attemptCount &&
+          other.errorType == this.errorType &&
+          other.lastError == this.lastError &&
+          other.maxAttempts == this.maxAttempts);
 }
 
 class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
@@ -2758,6 +2936,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
   final Value<DateTime> createdAt;
   final Value<DateTime> nextAttemptAt;
   final Value<int> attemptCount;
+  final Value<String?> errorType;
+  final Value<String?> lastError;
+  final Value<int> maxAttempts;
   const SyncOutboxCompanion({
     this.id = const Value.absent(),
     this.entityTable = const Value.absent(),
@@ -2767,6 +2948,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
     this.createdAt = const Value.absent(),
     this.nextAttemptAt = const Value.absent(),
     this.attemptCount = const Value.absent(),
+    this.errorType = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.maxAttempts = const Value.absent(),
   });
   SyncOutboxCompanion.insert({
     this.id = const Value.absent(),
@@ -2777,6 +2961,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
     required DateTime createdAt,
     required DateTime nextAttemptAt,
     this.attemptCount = const Value.absent(),
+    this.errorType = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.maxAttempts = const Value.absent(),
   }) : entityTable = Value(entityTable),
        entityId = Value(entityId),
        operation = Value(operation),
@@ -2792,6 +2979,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? nextAttemptAt,
     Expression<int>? attemptCount,
+    Expression<String>? errorType,
+    Expression<String>? lastError,
+    Expression<int>? maxAttempts,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2802,6 +2992,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
       if (createdAt != null) 'created_at': createdAt,
       if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
       if (attemptCount != null) 'attempt_count': attemptCount,
+      if (errorType != null) 'error_type': errorType,
+      if (lastError != null) 'last_error': lastError,
+      if (maxAttempts != null) 'max_attempts': maxAttempts,
     });
   }
 
@@ -2814,6 +3007,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
     Value<DateTime>? createdAt,
     Value<DateTime>? nextAttemptAt,
     Value<int>? attemptCount,
+    Value<String?>? errorType,
+    Value<String?>? lastError,
+    Value<int>? maxAttempts,
   }) {
     return SyncOutboxCompanion(
       id: id ?? this.id,
@@ -2824,6 +3020,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
       createdAt: createdAt ?? this.createdAt,
       nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
       attemptCount: attemptCount ?? this.attemptCount,
+      errorType: errorType ?? this.errorType,
+      lastError: lastError ?? this.lastError,
+      maxAttempts: maxAttempts ?? this.maxAttempts,
     );
   }
 
@@ -2854,6 +3053,15 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
     if (attemptCount.present) {
       map['attempt_count'] = Variable<int>(attemptCount.value);
     }
+    if (errorType.present) {
+      map['error_type'] = Variable<String>(errorType.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = Variable<String>(lastError.value);
+    }
+    if (maxAttempts.present) {
+      map['max_attempts'] = Variable<int>(maxAttempts.value);
+    }
     return map;
   }
 
@@ -2867,7 +3075,10 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
           ..write('payload: $payload, ')
           ..write('createdAt: $createdAt, ')
           ..write('nextAttemptAt: $nextAttemptAt, ')
-          ..write('attemptCount: $attemptCount')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('errorType: $errorType, ')
+          ..write('lastError: $lastError, ')
+          ..write('maxAttempts: $maxAttempts')
           ..write(')'))
         .toString();
   }
@@ -3539,6 +3750,234 @@ class RunCheckpointsCompanion extends UpdateCompanion<RunCheckpointRow> {
   }
 }
 
+class $SyncMetaTable extends SyncMeta
+    with TableInfo<$SyncMetaTable, SyncMetaRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncMetaTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _entityTableMeta = const VerificationMeta(
+    'entityTable',
+  );
+  @override
+  late final GeneratedColumn<String> entityTable = GeneratedColumn<String>(
+    'entity_table',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastPulledAtMeta = const VerificationMeta(
+    'lastPulledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastPulledAt = GeneratedColumn<DateTime>(
+    'last_pulled_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [entityTable, lastPulledAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_meta';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncMetaRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('entity_table')) {
+      context.handle(
+        _entityTableMeta,
+        entityTable.isAcceptableOrUnknown(
+          data['entity_table']!,
+          _entityTableMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_entityTableMeta);
+    }
+    if (data.containsKey('last_pulled_at')) {
+      context.handle(
+        _lastPulledAtMeta,
+        lastPulledAt.isAcceptableOrUnknown(
+          data['last_pulled_at']!,
+          _lastPulledAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_lastPulledAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {entityTable};
+  @override
+  SyncMetaRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncMetaRow(
+      entityTable: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_table'],
+      )!,
+      lastPulledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_pulled_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncMetaTable createAlias(String alias) {
+    return $SyncMetaTable(attachedDatabase, alias);
+  }
+}
+
+class SyncMetaRow extends DataClass implements Insertable<SyncMetaRow> {
+  final String entityTable;
+  final DateTime lastPulledAt;
+  const SyncMetaRow({required this.entityTable, required this.lastPulledAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['entity_table'] = Variable<String>(entityTable);
+    map['last_pulled_at'] = Variable<DateTime>(lastPulledAt);
+    return map;
+  }
+
+  SyncMetaCompanion toCompanion(bool nullToAbsent) {
+    return SyncMetaCompanion(
+      entityTable: Value(entityTable),
+      lastPulledAt: Value(lastPulledAt),
+    );
+  }
+
+  factory SyncMetaRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncMetaRow(
+      entityTable: serializer.fromJson<String>(json['entityTable']),
+      lastPulledAt: serializer.fromJson<DateTime>(json['lastPulledAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'entityTable': serializer.toJson<String>(entityTable),
+      'lastPulledAt': serializer.toJson<DateTime>(lastPulledAt),
+    };
+  }
+
+  SyncMetaRow copyWith({String? entityTable, DateTime? lastPulledAt}) =>
+      SyncMetaRow(
+        entityTable: entityTable ?? this.entityTable,
+        lastPulledAt: lastPulledAt ?? this.lastPulledAt,
+      );
+  SyncMetaRow copyWithCompanion(SyncMetaCompanion data) {
+    return SyncMetaRow(
+      entityTable: data.entityTable.present
+          ? data.entityTable.value
+          : this.entityTable,
+      lastPulledAt: data.lastPulledAt.present
+          ? data.lastPulledAt.value
+          : this.lastPulledAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncMetaRow(')
+          ..write('entityTable: $entityTable, ')
+          ..write('lastPulledAt: $lastPulledAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(entityTable, lastPulledAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncMetaRow &&
+          other.entityTable == this.entityTable &&
+          other.lastPulledAt == this.lastPulledAt);
+}
+
+class SyncMetaCompanion extends UpdateCompanion<SyncMetaRow> {
+  final Value<String> entityTable;
+  final Value<DateTime> lastPulledAt;
+  final Value<int> rowid;
+  const SyncMetaCompanion({
+    this.entityTable = const Value.absent(),
+    this.lastPulledAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncMetaCompanion.insert({
+    required String entityTable,
+    required DateTime lastPulledAt,
+    this.rowid = const Value.absent(),
+  }) : entityTable = Value(entityTable),
+       lastPulledAt = Value(lastPulledAt);
+  static Insertable<SyncMetaRow> custom({
+    Expression<String>? entityTable,
+    Expression<DateTime>? lastPulledAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (entityTable != null) 'entity_table': entityTable,
+      if (lastPulledAt != null) 'last_pulled_at': lastPulledAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncMetaCompanion copyWith({
+    Value<String>? entityTable,
+    Value<DateTime>? lastPulledAt,
+    Value<int>? rowid,
+  }) {
+    return SyncMetaCompanion(
+      entityTable: entityTable ?? this.entityTable,
+      lastPulledAt: lastPulledAt ?? this.lastPulledAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (entityTable.present) {
+      map['entity_table'] = Variable<String>(entityTable.value);
+    }
+    if (lastPulledAt.present) {
+      map['last_pulled_at'] = Variable<DateTime>(lastPulledAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncMetaCompanion(')
+          ..write('entityTable: $entityTable, ')
+          ..write('lastPulledAt: $lastPulledAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3549,6 +3988,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SyncOutboxTable syncOutbox = $SyncOutboxTable(this);
   late final $UserStatsTable userStats = $UserStatsTable(this);
   late final $RunCheckpointsTable runCheckpoints = $RunCheckpointsTable(this);
+  late final $SyncMetaTable syncMeta = $SyncMetaTable(this);
+  late final Index syncOutboxNextAttemptAtIdx = Index(
+    'sync_outbox_next_attempt_at_idx',
+    'CREATE INDEX sync_outbox_next_attempt_at_idx ON sync_outbox (next_attempt_at)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3561,6 +4005,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     syncOutbox,
     userStats,
     runCheckpoints,
+    syncMeta,
+    syncOutboxNextAttemptAtIdx,
   ];
 }
 
@@ -4488,6 +4934,7 @@ typedef $$TerritoriesTableCreateCompanionBuilder =
       required String geoJson,
       required double areaSqm,
       required DateTime updatedAt,
+      Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
 typedef $$TerritoriesTableUpdateCompanionBuilder =
@@ -4497,6 +4944,7 @@ typedef $$TerritoriesTableUpdateCompanionBuilder =
       Value<String> geoJson,
       Value<double> areaSqm,
       Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
 
@@ -4531,6 +4979,11 @@ class $$TerritoriesTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4568,6 +5021,11 @@ class $$TerritoriesTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$TerritoriesTableAnnotationComposer
@@ -4593,6 +5051,9 @@ class $$TerritoriesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
 }
 
 class $$TerritoriesTableTableManager
@@ -4631,6 +5092,7 @@ class $$TerritoriesTableTableManager
                 Value<String> geoJson = const Value.absent(),
                 Value<double> areaSqm = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TerritoriesCompanion(
                 id: id,
@@ -4638,6 +5100,7 @@ class $$TerritoriesTableTableManager
                 geoJson: geoJson,
                 areaSqm: areaSqm,
                 updatedAt: updatedAt,
+                deletedAt: deletedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -4647,6 +5110,7 @@ class $$TerritoriesTableTableManager
                 required String geoJson,
                 required double areaSqm,
                 required DateTime updatedAt,
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TerritoriesCompanion.insert(
                 id: id,
@@ -4654,6 +5118,7 @@ class $$TerritoriesTableTableManager
                 geoJson: geoJson,
                 areaSqm: areaSqm,
                 updatedAt: updatedAt,
+                deletedAt: deletedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -4691,6 +5156,9 @@ typedef $$SyncOutboxTableCreateCompanionBuilder =
       required DateTime createdAt,
       required DateTime nextAttemptAt,
       Value<int> attemptCount,
+      Value<String?> errorType,
+      Value<String?> lastError,
+      Value<int> maxAttempts,
     });
 typedef $$SyncOutboxTableUpdateCompanionBuilder =
     SyncOutboxCompanion Function({
@@ -4702,6 +5170,9 @@ typedef $$SyncOutboxTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> nextAttemptAt,
       Value<int> attemptCount,
+      Value<String?> errorType,
+      Value<String?> lastError,
+      Value<int> maxAttempts,
     });
 
 class $$SyncOutboxTableFilterComposer
@@ -4750,6 +5221,21 @@ class $$SyncOutboxTableFilterComposer
 
   ColumnFilters<int> get attemptCount => $composableBuilder(
     column: $table.attemptCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get errorType => $composableBuilder(
+    column: $table.errorType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get maxAttempts => $composableBuilder(
+    column: $table.maxAttempts,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4802,6 +5288,21 @@ class $$SyncOutboxTableOrderingComposer
     column: $table.attemptCount,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get errorType => $composableBuilder(
+    column: $table.errorType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get maxAttempts => $composableBuilder(
+    column: $table.maxAttempts,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncOutboxTableAnnotationComposer
@@ -4840,6 +5341,17 @@ class $$SyncOutboxTableAnnotationComposer
 
   GeneratedColumn<int> get attemptCount => $composableBuilder(
     column: $table.attemptCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get errorType =>
+      $composableBuilder(column: $table.errorType, builder: (column) => column);
+
+  GeneratedColumn<String> get lastError =>
+      $composableBuilder(column: $table.lastError, builder: (column) => column);
+
+  GeneratedColumn<int> get maxAttempts => $composableBuilder(
+    column: $table.maxAttempts,
     builder: (column) => column,
   );
 }
@@ -4883,6 +5395,9 @@ class $$SyncOutboxTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> nextAttemptAt = const Value.absent(),
                 Value<int> attemptCount = const Value.absent(),
+                Value<String?> errorType = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
+                Value<int> maxAttempts = const Value.absent(),
               }) => SyncOutboxCompanion(
                 id: id,
                 entityTable: entityTable,
@@ -4892,6 +5407,9 @@ class $$SyncOutboxTableTableManager
                 createdAt: createdAt,
                 nextAttemptAt: nextAttemptAt,
                 attemptCount: attemptCount,
+                errorType: errorType,
+                lastError: lastError,
+                maxAttempts: maxAttempts,
               ),
           createCompanionCallback:
               ({
@@ -4903,6 +5421,9 @@ class $$SyncOutboxTableTableManager
                 required DateTime createdAt,
                 required DateTime nextAttemptAt,
                 Value<int> attemptCount = const Value.absent(),
+                Value<String?> errorType = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
+                Value<int> maxAttempts = const Value.absent(),
               }) => SyncOutboxCompanion.insert(
                 id: id,
                 entityTable: entityTable,
@@ -4912,6 +5433,9 @@ class $$SyncOutboxTableTableManager
                 createdAt: createdAt,
                 nextAttemptAt: nextAttemptAt,
                 attemptCount: attemptCount,
+                errorType: errorType,
+                lastError: lastError,
+                maxAttempts: maxAttempts,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -5319,6 +5843,150 @@ typedef $$RunCheckpointsTableProcessedTableManager =
       RunCheckpointRow,
       PrefetchHooks Function()
     >;
+typedef $$SyncMetaTableCreateCompanionBuilder =
+    SyncMetaCompanion Function({
+      required String entityTable,
+      required DateTime lastPulledAt,
+      Value<int> rowid,
+    });
+typedef $$SyncMetaTableUpdateCompanionBuilder =
+    SyncMetaCompanion Function({
+      Value<String> entityTable,
+      Value<DateTime> lastPulledAt,
+      Value<int> rowid,
+    });
+
+class $$SyncMetaTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncMetaTable> {
+  $$SyncMetaTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get entityTable => $composableBuilder(
+    column: $table.entityTable,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastPulledAt => $composableBuilder(
+    column: $table.lastPulledAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncMetaTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncMetaTable> {
+  $$SyncMetaTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get entityTable => $composableBuilder(
+    column: $table.entityTable,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastPulledAt => $composableBuilder(
+    column: $table.lastPulledAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncMetaTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncMetaTable> {
+  $$SyncMetaTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get entityTable => $composableBuilder(
+    column: $table.entityTable,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastPulledAt => $composableBuilder(
+    column: $table.lastPulledAt,
+    builder: (column) => column,
+  );
+}
+
+class $$SyncMetaTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncMetaTable,
+          SyncMetaRow,
+          $$SyncMetaTableFilterComposer,
+          $$SyncMetaTableOrderingComposer,
+          $$SyncMetaTableAnnotationComposer,
+          $$SyncMetaTableCreateCompanionBuilder,
+          $$SyncMetaTableUpdateCompanionBuilder,
+          (
+            SyncMetaRow,
+            BaseReferences<_$AppDatabase, $SyncMetaTable, SyncMetaRow>,
+          ),
+          SyncMetaRow,
+          PrefetchHooks Function()
+        > {
+  $$SyncMetaTableTableManager(_$AppDatabase db, $SyncMetaTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncMetaTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncMetaTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncMetaTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> entityTable = const Value.absent(),
+                Value<DateTime> lastPulledAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncMetaCompanion(
+                entityTable: entityTable,
+                lastPulledAt: lastPulledAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String entityTable,
+                required DateTime lastPulledAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SyncMetaCompanion.insert(
+                entityTable: entityTable,
+                lastPulledAt: lastPulledAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncMetaTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncMetaTable,
+      SyncMetaRow,
+      $$SyncMetaTableFilterComposer,
+      $$SyncMetaTableOrderingComposer,
+      $$SyncMetaTableAnnotationComposer,
+      $$SyncMetaTableCreateCompanionBuilder,
+      $$SyncMetaTableUpdateCompanionBuilder,
+      (SyncMetaRow, BaseReferences<_$AppDatabase, $SyncMetaTable, SyncMetaRow>),
+      SyncMetaRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5336,4 +6004,6 @@ class $AppDatabaseManager {
       $$UserStatsTableTableManager(_db, _db.userStats);
   $$RunCheckpointsTableTableManager get runCheckpoints =>
       $$RunCheckpointsTableTableManager(_db, _db.runCheckpoints);
+  $$SyncMetaTableTableManager get syncMeta =>
+      $$SyncMetaTableTableManager(_db, _db.syncMeta);
 }

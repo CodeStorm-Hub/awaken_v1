@@ -305,17 +305,19 @@ class _RingingBellState extends State<_RingingBell>
   late final AnimationController _wiggleController;
   late final Animation<double> _wiggle;
 
+  var _startedAnimating = false;
+
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1600),
-    )..repeat();
+    );
     _wiggleController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
-    )..repeat(reverse: true);
+    );
     _wiggle =
         Tween<double>(
           begin: -8 * (3.14159 / 180),
@@ -323,6 +325,31 @@ class _RingingBellState extends State<_RingingBell>
         ).animate(
           CurvedAnimation(parent: _wiggleController, curve: Curves.easeInOut),
         );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // "Reduce motion" — the ring/wiggle loops are purely decorative flair
+    // on top of the bell icon, which alone already conveys "alarm ringing"
+    // (plus the ringtone/vibration, entirely unaffected by this). Leaving
+    // both controllers at rest (frame 0) skips the continuous motion
+    // without losing the actual alert.
+    //
+    // `MediaQuery.disableAnimationsOf` can't be called from `initState` —
+    // it establishes an inherited-widget dependency, which Flutter requires
+    // to happen no earlier than `didChangeDependencies` (the element isn't
+    // fully mounted into the tree yet during `initState`). Found live: this
+    // crashed every real ring with "dependOnInheritedWidgetOfExactType...
+    // was called before _RingingBellState.initState() completed."
+    // `didChangeDependencies` can re-run later (e.g. the OS setting
+    // toggles while this is on screen), so guard the actual `.repeat()`
+    // call with `_startedAnimating` — it should only ever start once.
+    if (!_startedAnimating && !MediaQuery.disableAnimationsOf(context)) {
+      _startedAnimating = true;
+      _controller.repeat();
+      _wiggleController.repeat(reverse: true);
+    }
   }
 
   @override

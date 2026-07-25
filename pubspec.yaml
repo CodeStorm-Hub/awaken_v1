@@ -39,9 +39,10 @@ dependencies:
   # Territory / geospatial
   flutter_foreground_task: ^10.0.0
   geolocator: ^14.0.3
-  kalman_dr: ^0.4.4
+  # Pinned exact (no caret) — the plan's stated requirement for this
+  # package specifically, not a general policy for this file.
+  kalman_dr: 0.4.4
   latlong2: ^0.9.1
-  turf: ^0.0.12
   # Vector-tile map rendering (replaces flutter_map's raster TileLayer —
   # OpenFreeMap and most modern free tile hosts serve vector-only tiles, a
   # MapLibre style.json, not raster XYZ).
@@ -54,7 +55,6 @@ dependencies:
   wakelock_plus: ^1.2.8
   connectivity_plus: ^6.1.0
   sentry_flutter: ^9.0.0
-  motor: ^1.1.0
 
   # Type (UI/UX plan "Emphatic Typography" — Roboto Flex/Google Sans Flex
   # variable font; Google Sans Flex isn't publicly distributed, so this
@@ -83,6 +83,3 @@ flutter:
   assets:
     - .env.client
     - assets/e2e/scripted_run_fixture.json
-
-dependency_overrides:
-  flutter_fgbg: 0.7.1

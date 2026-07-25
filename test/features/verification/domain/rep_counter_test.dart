@@ -17,6 +17,17 @@ BodyPose _squatPose({required double kneeAngleHint}) {
   );
 }
 
+/// Feeds [count] identical frames and returns how many counted as a
+/// completed rep — the rep counter now requires several consecutive
+/// confirming frames (noise rejection), not a single threshold crossing.
+int _feed(AngleRepCounter counter, double kneeAngleHint, int count) {
+  var reps = 0;
+  for (var i = 0; i < count; i++) {
+    if (counter.update(_squatPose(kneeAngleHint: kneeAngleHint))) reps++;
+  }
+  return reps;
+}
+
 void main() {
   group('jointAngleDegrees', () {
     test('straight line is ~180 degrees', () {
@@ -40,25 +51,57 @@ void main() {
   });
 
   group('AngleRepCounter.squat', () {
-    test('down-then-up transition counts exactly one rep', () {
+    test('down-then-up transition counts exactly one rep once confirmed', () {
       final counter = AngleRepCounter.squat();
 
-      expect(counter.update(_squatPose(kneeAngleHint: 0)), isFalse); // stays up
+      expect(_feed(counter, 0, 1), 0); // stays up
       expect(counter.phase, RepPhase.up);
 
-      expect(counter.update(_squatPose(kneeAngleHint: 1)), isFalse); // goes down
+      expect(_feed(counter, 1, 2), 0); // 2 confirming down frames
       expect(counter.phase, RepPhase.down);
 
-      expect(counter.update(_squatPose(kneeAngleHint: 0)), isTrue); // back up: 1 rep
+      expect(_feed(counter, 0, 2), 1); // 2 confirming up frames: 1 rep
       expect(counter.phase, RepPhase.up);
+    });
+
+    test('a single noisy frame below the down threshold does not flip the phase', () {
+      final counter = AngleRepCounter.squat();
+      expect(counter.update(_squatPose(kneeAngleHint: 1)), isFalse); // only 1 confirming frame
+      expect(counter.phase, RepPhase.up); // needs 2 to confirm
+    });
+
+    test('a single above-threshold frame after going down does not immediately complete the rep', () {
+      final counter = AngleRepCounter.squat();
+      expect(_feed(counter, 1, 2), 0); // confirm down
+      expect(counter.phase, RepPhase.down);
+      expect(counter.update(_squatPose(kneeAngleHint: 0)), isFalse); // only 1 confirming up frame
+      expect(counter.phase, RepPhase.down); // needs 2 to confirm
+    });
+
+    test('cooldown after a rep delays the next down-transition beyond confirmFrames alone', () {
+      final counter = AngleRepCounter.squat();
+      expect(_feed(counter, 1, 2), 0);
+      expect(_feed(counter, 0, 2), 1); // 1 rep, 3-frame cooldown now active
+
+      // Below-threshold streak alone would confirm after 2 frames
+      // (confirmFrames), but the 3-frame cooldown blocks the transition
+      // until the 3rd.
+      expect(counter.update(_squatPose(kneeAngleHint: 1)), isFalse);
+      expect(counter.phase, RepPhase.up);
+      expect(counter.update(_squatPose(kneeAngleHint: 1)), isFalse);
+      expect(counter.phase, RepPhase.up); // still blocked
+      expect(counter.update(_squatPose(kneeAngleHint: 1)), isFalse);
+      expect(counter.phase, RepPhase.down); // cooldown elapsed — now transitions
+
+      expect(_feed(counter, 0, 2), 1); // and a second rep counts normally
     });
 
     test('does not count a rep that never reaches the down threshold', () {
       final counter = AngleRepCounter.squat();
 
       // A shallow partial bend that never crosses the 100° down threshold.
-      expect(counter.update(_squatPose(kneeAngleHint: 0.3)), isFalse);
-      expect(counter.update(_squatPose(kneeAngleHint: 0)), isFalse);
+      expect(_feed(counter, 0.3, 2), 0);
+      expect(_feed(counter, 0, 2), 0);
       expect(counter.phase, RepPhase.up);
     });
 
@@ -71,16 +114,20 @@ void main() {
 
     test('reset returns to the up phase', () {
       final counter = AngleRepCounter.squat();
-      counter.update(_squatPose(kneeAngleHint: 1));
+      _feed(counter, 1, 2);
       expect(counter.phase, RepPhase.down);
       counter.reset();
       expect(counter.phase, RepPhase.up);
     });
 
-    test('two full reps count twice', () {
+    test('two full reps count twice, accounting for the post-rep cooldown', () {
       final counter = AngleRepCounter.squat();
       var reps = 0;
-      for (final hint in [1, 0, 1, 0]) {
+      // down x2, up x2 (rep 1) — then the 3-frame cooldown eats the first 3
+      // "down" frames of the second attempt before it's allowed to
+      // transition, so 3 down frames (not 2) are needed before the second
+      // down x2/up x2 confirms rep 2.
+      for (final hint in [1, 1, 0, 0, 1, 1, 1, 0, 0]) {
         if (counter.update(_squatPose(kneeAngleHint: hint.toDouble()))) reps++;
       }
       expect(reps, 2);
@@ -88,7 +135,7 @@ void main() {
   });
 
   group('AngleRepCounter.pushup', () {
-    test('down-then-up transition counts exactly one rep', () {
+    test('down-then-up transition counts exactly one rep once confirmed', () {
       final counter = AngleRepCounter.pushup();
       BodyPose elbowPose(double hint) => BodyPose(
         joints: {
@@ -100,8 +147,10 @@ void main() {
 
       expect(counter.update(elbowPose(0)), isFalse);
       expect(counter.update(elbowPose(1.2)), isFalse);
+      expect(counter.update(elbowPose(1.2)), isFalse); // 2nd confirming down frame
       expect(counter.phase, RepPhase.down);
-      expect(counter.update(elbowPose(0)), isTrue);
+      expect(counter.update(elbowPose(0)), isFalse);
+      expect(counter.update(elbowPose(0)), isTrue); // 2nd confirming up frame
     });
   });
 }

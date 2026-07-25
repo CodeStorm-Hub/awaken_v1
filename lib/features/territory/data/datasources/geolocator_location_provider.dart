@@ -22,14 +22,18 @@ class GeolocatorLocationProvider implements LocationProvider {
   @override
   Future<void> start() async {
     final permission = await _ensurePermission();
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
       throw const LocationPermissionDeniedException();
     }
 
     await _positionSub?.cancel();
     _controller ??= StreamController<GeoPosition>.broadcast();
     _positionSub = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.best, distanceFilter: 2),
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.best,
+        distanceFilter: 2,
+      ),
     ).listen(_onPosition, onError: (Object e) => _controller?.addError(e));
   }
 

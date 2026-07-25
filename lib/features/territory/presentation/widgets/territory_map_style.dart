@@ -13,10 +13,15 @@ abstract final class TerritoryMapStyle {
   static maplibre.LatLng trackPointToLatLng(TrackPoint point) =>
       maplibre.LatLng(point.latitude, point.longitude);
 
-  static List<List<maplibre.LatLng>> territoryRingsToLatLng(Territory territory) {
+  static List<List<maplibre.LatLng>> territoryRingsToLatLng(
+    Territory territory,
+  ) {
     return [
       for (final ring in territory.rings)
-        [for (final point in ring) maplibre.LatLng(point.latitude, point.longitude)],
+        [
+          for (final point in ring)
+            maplibre.LatLng(point.latitude, point.longitude),
+        ],
     ];
   }
 }

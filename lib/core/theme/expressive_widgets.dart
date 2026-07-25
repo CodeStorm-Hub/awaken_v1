@@ -71,7 +71,8 @@ class ProfileAvatarButton extends StatelessWidget {
                           width: 40,
                           height: 40,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => fallback,
+                          errorBuilder: (context, error, stackTrace) =>
+                              fallback,
                           loadingBuilder: (context, child, progress) =>
                               progress == null ? child : fallback,
                         ),
@@ -152,7 +153,9 @@ class ExpressiveFlower extends StatelessWidget {
         ],
       ),
     );
-    if (!animatePop) return blob;
+    // "Reduce motion" accessibility setting — a purely decorative pop-in
+    // shouldn't play for a user who has asked the OS to minimize animation.
+    if (!animatePop || MediaQuery.disableAnimationsOf(context)) return blob;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: const Duration(milliseconds: 500),

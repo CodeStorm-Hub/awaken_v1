@@ -74,8 +74,9 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     // Must read any existing checkpoint *before* teardown/reset — this is
     // the only moment a prior session's orphaned checkpoint (app was
     // killed mid-run) can be detected.
-    final checkpoint =
-        await (_db.select(_db.runCheckpoints)..where((t) => t.id.equals(1))).getSingleOrNull();
+    final checkpoint = await (_db.select(
+      _db.runCheckpoints,
+    )..where((t) => t.id.equals(1))).getSingleOrNull();
     await _teardown();
 
     if (checkpoint != null) {
@@ -256,12 +257,16 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     if (last != null && now.difference(last) < _checkpointInterval) return;
     _lastCheckpointAt = now;
     try {
-      await _db.into(_db.runCheckpoints).insertOnConflictUpdate(
+      await _db
+          .into(_db.runCheckpoints)
+          .insertOnConflictUpdate(
             RunCheckpointsCompanion.insert(
               id: const Value(1),
               runId: runId,
               startedAt: startedAt,
-              pointsJson: jsonEncode(_state.points.map((p) => p.toJson()).toList()),
+              pointsJson: jsonEncode(
+                _state.points.map((p) => p.toJson()).toList(),
+              ),
               distanceMeters: _state.distanceMeters,
               updatedAt: now,
             ),

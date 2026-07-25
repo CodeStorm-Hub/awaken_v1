@@ -29,12 +29,10 @@ abstract final class TerritoryMapper {
     if (coordinates == null) return const [];
 
     List<LatLng> ringToLatLng(Object? ring) {
-      return (ring! as List<Object?>)
-          .map((point) {
-            final p = point! as List<Object?>;
-            return LatLng((p[1]! as num).toDouble(), (p[0]! as num).toDouble());
-          })
-          .toList();
+      return (ring! as List<Object?>).map((point) {
+        final p = point! as List<Object?>;
+        return LatLng((p[1]! as num).toDouble(), (p[0]! as num).toDouble());
+      }).toList();
     }
 
     if (type == 'MultiPolygon') {
@@ -48,5 +46,33 @@ abstract final class TerritoryMapper {
       return [ringToLatLng(outerRing)];
     }
     return const [];
+  }
+
+  /// The lat/lng bounding box enclosing every ring's point — used by the
+  /// local territory cache to decide whether a row falls inside a given
+  /// viewport query, since the cache stores full geometry but no separate
+  /// bbox column.
+  static ({double minLat, double minLng, double maxLat, double maxLng})?
+  boundsOf(String geoJson) {
+    final rings = ringsFromMultiPolygonGeoJson(geoJson);
+    double? minLat, minLng, maxLat, maxLng;
+    for (final ring in rings) {
+      for (final point in ring) {
+        minLat = minLat == null
+            ? point.latitude
+            : (point.latitude < minLat ? point.latitude : minLat);
+        maxLat = maxLat == null
+            ? point.latitude
+            : (point.latitude > maxLat ? point.latitude : maxLat);
+        minLng = minLng == null
+            ? point.longitude
+            : (point.longitude < minLng ? point.longitude : minLng);
+        maxLng = maxLng == null
+            ? point.longitude
+            : (point.longitude > maxLng ? point.longitude : maxLng);
+      }
+    }
+    if (minLat == null) return null;
+    return (minLat: minLat, minLng: minLng!, maxLat: maxLat!, maxLng: maxLng!);
   }
 }

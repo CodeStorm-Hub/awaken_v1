@@ -38,7 +38,8 @@ class RunForegroundService {
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'awaken_run_tracking',
         channelName: 'Run tracking',
-        channelDescription: 'Keeps GPS active while a territory run is in progress.',
+        channelDescription:
+            'Keeps GPS active while a territory run is in progress.',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.LOW,
       ),

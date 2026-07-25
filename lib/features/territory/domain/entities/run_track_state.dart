@@ -38,7 +38,9 @@ class RunTrackState extends Equatable {
   /// minimum length — otherwise the very first fix (start == "current
   /// position") would trivially satisfy the closure radius check.
   bool get isLoopClosed {
-    if (points.length < 2 || distanceMeters < _minLoopLengthMeters) return false;
+    if (points.length < 2 || distanceMeters < _minLoopLengthMeters) {
+      return false;
+    }
     final start = points.first;
     final current = points.last;
     return _haversineMeters(start, current) <= _loopClosureRadiusMeters;
@@ -65,8 +67,15 @@ class RunTrackState extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [isTracking, points, elapsed, distanceMeters, gpsQuality, permissionDenied, startFailed];
+  List<Object?> get props => [
+    isTracking,
+    points,
+    elapsed,
+    distanceMeters,
+    gpsQuality,
+    permissionDenied,
+    startFailed,
+  ];
 }
 
 // Mirrors AppConstants.loopClosureRadiusMeters/minRunLengthMeters — kept as

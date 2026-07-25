@@ -19,4 +19,6 @@ class AlarmLocalDataSource {
   Future<bool> set(AlarmSettings settings) => Alarm.set(alarmSettings: settings);
 
   Future<bool> stop(int id) => Alarm.stop(id);
+
+  Future<void> stopAll() => Alarm.stopAll();
 }

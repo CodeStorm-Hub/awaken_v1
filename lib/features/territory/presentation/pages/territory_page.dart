@@ -13,6 +13,7 @@ import '../../domain/usecases/get_current_position.dart';
 import '../../domain/usecases/refresh_territories.dart';
 import '../../domain/usecases/watch_owned_area.dart';
 import '../../domain/usecases/watch_territories.dart';
+import '../widgets/osm_attribution.dart';
 import '../widgets/territory_map_style.dart';
 import 'active_run_page.dart';
 
@@ -42,6 +43,16 @@ class _TerritoryPageState extends State<TerritoryPage> {
   bool _hasFix = false;
   bool _showRivalTerritory = true;
 
+  /// Set if `onStyleLoadedCallback` hasn't fired within [_styleLoadTimeout]
+  /// of the native map view being created — this plugin version exposes no
+  /// dedicated style-load-failure callback, so a timeout is the only signal
+  /// available for "the style never loaded" (typically no network / a
+  /// blocked/offline tile host), which previously looked identical to a
+  /// slow-but-working load: an indefinitely blank map with no explanation.
+  bool _mapLoadFailed = false;
+  Timer? _styleLoadTimer;
+  static const _styleLoadTimeout = Duration(seconds: 15);
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +62,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
   @override
   void dispose() {
     unawaited(_territoriesSub?.cancel());
+    _styleLoadTimer?.cancel();
     super.dispose();
   }
 
@@ -99,9 +111,15 @@ class _TerritoryPageState extends State<TerritoryPage> {
 
   Future<void> _onMapCreated(MapLibreMapController controller) async {
     _controller = controller;
+    _styleLoadTimer?.cancel();
+    _styleLoadTimer = Timer(_styleLoadTimeout, () {
+      if (mounted) setState(() => _mapLoadFailed = true);
+    });
   }
 
   Future<void> _onStyleLoaded() async {
+    _styleLoadTimer?.cancel();
+    if (mounted && _mapLoadFailed) setState(() => _mapLoadFailed = false);
     if (_hasFix) {
       await _controller?.animateCamera(CameraUpdate.newLatLngZoom(_center, 15));
       await _syncCurrentPositionMarker();
@@ -149,18 +167,29 @@ class _TerritoryPageState extends State<TerritoryPage> {
     }
   }
 
+  /// Monotonically-increasing request id — guards against an in-flight
+  /// `refreshTerritories` call from a *previous* viewport completing after
+  /// a *newer* one and overwriting its (more current) result. `onCameraIdle`
+  /// can fire in quick succession (fling-then-settle, or rapid
+  /// pan/zoom/pan), and network responses don't necessarily arrive in the
+  /// order they were sent.
+  int _refreshRequestId = 0;
+
   Future<void> _refreshForCurrentView() async {
     final controller = _controller;
     if (controller == null) return;
+    final requestId = ++_refreshRequestId;
     final bounds = await controller.getVisibleRegion();
-    unawaited(
-      getIt<RefreshTerritories>()(
-        GeoBounds(
-          minLat: bounds.southwest.latitude,
-          minLng: bounds.southwest.longitude,
-          maxLat: bounds.northeast.latitude,
-          maxLng: bounds.northeast.longitude,
-        ),
+    if (requestId != _refreshRequestId) {
+      return; // superseded while awaiting the region
+    }
+
+    await getIt<RefreshTerritories>()(
+      GeoBounds(
+        minLat: bounds.southwest.latitude,
+        minLng: bounds.southwest.longitude,
+        maxLat: bounds.northeast.latitude,
+        maxLng: bounds.northeast.longitude,
       ),
     );
   }
@@ -218,6 +247,19 @@ class _TerritoryPageState extends State<TerritoryPage> {
                         logoEnabled: false,
                         attributionButtonPosition:
                             AttributionButtonPosition.bottomLeft,
+                      ),
+                      if (_mapLoadFailed) const _MapLoadErrorOverlay(),
+                      // OSMF's attribution guidance allows a tap-to-reveal
+                      // info button only for a startup splash/one-time
+                      // interaction — the ongoing map view itself must show
+                      // attribution continuously. `attributionButtonPosition`
+                      // above is MapLibre's own tap-behind-an-info-icon
+                      // control, which doesn't satisfy that on its own; this
+                      // is the always-on text it needed alongside it.
+                      const Positioned(
+                        bottom: 4,
+                        right: 8,
+                        child: OsmAttribution(),
                       ),
                       Positioned(
                         top: 14,
@@ -386,6 +428,41 @@ class _TerritoryPageState extends State<TerritoryPage> {
           },
         );
       },
+    );
+  }
+}
+
+class _MapLoadErrorOverlay extends StatelessWidget {
+  const _MapLoadErrorOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Positioned.fill(
+      child: ColoredBox(
+        color: scheme.surface,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.map_outlined,
+                  size: 40,
+                  color: scheme.onSurfaceVariant,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "Couldn't load the map — check your connection.",
+                  style: TextStyle(color: scheme.onSurfaceVariant),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -68,23 +68,68 @@ class AngleRepCounter implements RepCounter {
   final double downThresholdDegrees;
   final double upThresholdDegrees;
 
+  /// Frames a threshold crossing must hold before the phase actually
+  /// transitions — a single noisy frame (a bad landmark estimate spiking
+  /// the angle for one sample) no longer flips the phase by itself.
+  static const _confirmFrames = 2;
+
+  /// Minimum frames spent in [RepPhase.down] before an up-crossing is
+  /// allowed to count as a completed rep — rejects a fast bounce that dips
+  /// past the down threshold and springs straight back up in the same
+  /// couple of frames, which isn't a real rep at depth.
+  static const _minDownFrames = 2;
+
+  /// Frames to ignore a fresh down-crossing immediately after counting a
+  /// rep — guards against angle jitter right at the up threshold
+  /// oscillating back below the down threshold and starting a spurious
+  /// second rep a frame or two later.
+  static const _cooldownFrames = 3;
+
   @override
   RepPhase phase = RepPhase.up;
 
+  int _belowStreak = 0;
+  int _aboveStreak = 0;
+  int _downHoldFrames = 0;
+  int _cooldownRemaining = 0;
+
   @override
-  void reset() => phase = RepPhase.up;
+  void reset() {
+    phase = RepPhase.up;
+    _belowStreak = 0;
+    _aboveStreak = 0;
+    _downHoldFrames = 0;
+    _cooldownRemaining = 0;
+  }
 
   @override
   bool update(BodyPose pose) {
     final angle = _bestSideAngle(pose);
+    // A single frame with unusable landmarks shouldn't reset streaks
+    // already in progress — occlusion/motion blur on one frame is normal
+    // and the next good frame should be able to continue the count.
     if (angle == null) return false;
 
-    if (phase == RepPhase.up && angle < downThresholdDegrees) {
-      phase = RepPhase.down;
+    if (_cooldownRemaining > 0) _cooldownRemaining--;
+
+    _belowStreak = angle < downThresholdDegrees ? _belowStreak + 1 : 0;
+    _aboveStreak = angle > upThresholdDegrees ? _aboveStreak + 1 : 0;
+
+    if (phase == RepPhase.up) {
+      if (_belowStreak >= _confirmFrames && _cooldownRemaining == 0) {
+        phase = RepPhase.down;
+        _downHoldFrames = 0;
+      }
       return false;
     }
-    if (phase == RepPhase.down && angle > upThresholdDegrees) {
+
+    // phase == RepPhase.down
+    _downHoldFrames++;
+    if (_aboveStreak >= _confirmFrames && _downHoldFrames >= _minDownFrames) {
       phase = RepPhase.up;
+      _cooldownRemaining = _cooldownFrames;
+      _belowStreak = 0;
+      _aboveStreak = 0;
       return true;
     }
     return false;

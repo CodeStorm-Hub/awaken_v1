@@ -29,18 +29,30 @@ class TerritoryCaptureSheet extends StatelessWidget {
               width: 36,
               height: 4,
               margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(color: scheme.outlineVariant, borderRadius: BorderRadius.circular(999)),
+              decoration: BoxDecoration(
+                color: scheme.outlineVariant,
+                borderRadius: BorderRadius.circular(999),
+              ),
             ),
             ExpressiveFlower(
               size: 110,
               color: scheme.primaryContainer,
               animatePop: true,
-              child: Icon(Icons.landscape, size: 48, color: scheme.onPrimaryContainer),
+              child: Icon(
+                Icons.landscape,
+                size: 48,
+                color: scheme.onPrimaryContainer,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
               'Territory captured!',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.4, color: scheme.onSurface),
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                letterSpacing: -0.4,
+                color: scheme.onSurface,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
@@ -57,11 +69,19 @@ class TerritoryCaptureSheet extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.shield, size: 15, color: scheme.onTertiaryContainer),
+                  Icon(
+                    Icons.shield,
+                    size: 15,
+                    color: scheme.onTertiaryContainer,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     'Land is yours until a rival captures it',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: scheme.onTertiaryContainer),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onTertiaryContainer,
+                    ),
                   ),
                 ],
               ),
@@ -72,7 +92,9 @@ class TerritoryCaptureSheet extends StatelessWidget {
               child: FilledButton(
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(56),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                 ),
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text('Nice!'),

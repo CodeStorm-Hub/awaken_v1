@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -28,7 +30,29 @@ class VerificationCubit extends Cubit<VerificationState> {
   /// no-op internally when the user has no squad.
   final SquadRepository _squadRepository;
 
+  /// Never stored/cancelled before this fix — a retried `begin()` (e.g.
+  /// after `permissionDenied`) would stack another listener onto the
+  /// repository's state stream, same class of bug as
+  /// `RunTrackingCubit._runStateSub` (see that fix's doc comment).
+  StreamSubscription<VerificationState>? _stateSub;
+
+  /// `trackPresence` does a real Realtime round-trip — call it once per
+  /// session, not on every state tick.
+  var _presenceTracked = false;
+
+  ExerciseMode? _lastExercise;
+  int? _lastTargetReps;
+
+  /// Set while the camera session has been torn down for an app
+  /// backgrounding (`pause()`), not a real failure or user exit — `resume()`
+  /// only re-starts the camera when this is true, so foregrounding the app
+  /// on an already-`permissionDenied`/`complete` screen doesn't spuriously
+  /// restart anything.
+  var _pausedForLifecycle = false;
+
   Future<void> begin({required ExerciseMode exercise, required int targetReps}) async {
+    _lastExercise = exercise;
+    _lastTargetReps = targetReps;
     final status = await Permission.camera.request();
     if (!status.isGranted) {
       emit(state.copyWith(status: VerificationStatus.permissionDenied));
@@ -36,9 +60,15 @@ class VerificationCubit extends Cubit<VerificationState> {
     }
 
     await WakelockPlus.enable();
-    _watchState().listen((state) {
+    await _stateSub?.cancel();
+    _presenceTracked = false;
+    _stateSub = _watchState().listen((state) {
       emit(state);
       if (state.status == VerificationStatus.counting || state.status == VerificationStatus.calibrating) {
+        if (!_presenceTracked) {
+          _presenceTracked = true;
+          unawaited(_squadRepository.trackPresence(activity: 'Working out'));
+        }
         final label = state.exerciseMode == ExerciseMode.squat ? 'squats' : 'push-ups';
         _squadRepository.broadcastTelemetry(label: 'Workout · ${state.completedReps}/${state.targetReps} $label');
       }
@@ -46,8 +76,38 @@ class VerificationCubit extends Cubit<VerificationState> {
     await _startSession(StartVerificationParams(exercise: exercise, targetReps: targetReps));
   }
 
+  /// Retries after a [VerificationStatus.cameraError] with the same
+  /// exercise/target-reps this session was opened with.
+  Future<void> retry() async {
+    final exercise = _lastExercise;
+    final targetReps = _lastTargetReps;
+    if (exercise == null || targetReps == null) return;
+    await begin(exercise: exercise, targetReps: targetReps);
+  }
+
+  /// Releases the camera when the app is backgrounded (`AppLifecycleState
+  /// .inactive`/`.paused`) — holding an active `CameraController` while
+  /// backgrounded is a known crash/resource-conflict risk on Android per
+  /// `package:camera`'s own guidance, and iOS can kill a backgrounded
+  /// camera session outright. Only acts on a genuinely active session —
+  /// `permissionDenied`/`cameraError`/`complete` have nothing to release.
+  Future<void> pause() async {
+    if (!state.status.isActiveCameraSession) return;
+    _pausedForLifecycle = true;
+    await _stopSession(const NoParams());
+  }
+
+  /// Counterpart to [pause] — restarts the camera session with the same
+  /// parameters once the app is foregrounded again.
+  Future<void> resume() async {
+    if (!_pausedForLifecycle) return;
+    _pausedForLifecycle = false;
+    await retry();
+  }
+
   @override
   Future<void> close() async {
+    await _stateSub?.cancel();
     await _stopSession(const NoParams());
     await WakelockPlus.disable();
     return super.close();

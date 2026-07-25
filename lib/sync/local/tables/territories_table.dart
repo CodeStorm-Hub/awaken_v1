@@ -12,6 +12,14 @@ class Territories extends Table {
   RealColumn get areaSqm => real()();
   DateTimeColumn get updatedAt => dateTime()();
 
+  /// Local-only tombstone (mirrors the backend's soft-delete column, but
+  /// this cache never round-trips it) — set when a refresh's bbox query no
+  /// longer returns a previously-cached row inside that same bbox
+  /// (decayed, captured to nothing, or otherwise removed server-side).
+  /// Kept rather than hard-deleting immediately so a row that reappears in
+  /// a later refresh (e.g. recaptured) can simply have this cleared.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

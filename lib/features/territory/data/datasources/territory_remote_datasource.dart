@@ -23,7 +23,10 @@ class TerritoryRemoteDataSource {
   /// current map view are pulled, instead of an unbounded most-recent-N scan
   /// that silently misses data once real usage grows past the old flat
   /// limit.
-  Future<List<Map<String, Object?>>> fetchTerritoriesInBbox(GeoBounds bounds, {int limit = 500}) async {
+  Future<List<Map<String, Object?>>> fetchTerritoriesInBbox(
+    GeoBounds bounds, {
+    int limit = 500,
+  }) async {
     final result = await _supabase.rpc<Object?>(
       'territories_in_bbox',
       params: {

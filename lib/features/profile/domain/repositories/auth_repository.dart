@@ -46,9 +46,10 @@ abstract interface class AuthRepository {
   /// previously missing.
   Future<void> signInWithGoogle();
 
-  /// Ends the remote session. Local Drift data is never touched — this
-  /// only signs out of Supabase; the point of the offline-first design is
-  /// that local data survives regardless of auth state.
+  /// Ends the remote session and clears the local Drift cache — the local
+  /// store has no per-user scoping (single-identity cache, not a
+  /// multi-tenant store), so leaving it in place would let the next
+  /// session on this device see the outgoing identity's data.
   Future<void> signOut();
 
   /// Permanently deletes the signed-in user's account and all associated

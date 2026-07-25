@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:camera/camera.dart';
@@ -51,16 +52,38 @@ InputImage? cameraImageToInputImage(CameraImage image, CameraController controll
   final rotation = InputImageRotationValue.fromRawValue(rotationCompensation);
   if (rotation == null) return null;
 
-  final plane = image.planes.first;
+  final bytes = _planeBytesFor(image, format);
+  if (bytes == null) return null;
+
   return InputImage.fromBytes(
-    bytes: plane.bytes,
+    bytes: bytes,
     metadata: InputImageMetadata(
       size: Size(image.width.toDouble(), image.height.toDouble()),
       rotation: rotation,
       format: format,
-      bytesPerRow: plane.bytesPerRow,
+      bytesPerRow: image.planes.first.bytesPerRow,
     ),
   );
+}
+
+/// `nv21`/`bgra8888` frames arrive as a single plane already containing
+/// everything ML Kit needs, so `.first` is correct for those. `yuv420` is
+/// genuinely multi-plane (separate Y/U/V buffers) — using only
+/// `planes.first` silently drops all chroma data (every frame would be
+/// missing U/V), which google_mlkit_commons' own `yuv420` fallback path
+/// expects concatenated, not just the luma plane. Returns null if any
+/// plane is missing (a malformed/incomplete frame — drop it rather than
+/// feed ML Kit a truncated buffer).
+Uint8List? _planeBytesFor(CameraImage image, InputImageFormat format) {
+  if (format != InputImageFormat.yuv420) {
+    return image.planes.first.bytes;
+  }
+  if (image.planes.length < 3) return null;
+  final builder = BytesBuilder(copy: false);
+  for (final plane in image.planes) {
+    builder.add(plane.bytes);
+  }
+  return builder.takeBytes();
 }
 
 const _landmarkToJoint = {

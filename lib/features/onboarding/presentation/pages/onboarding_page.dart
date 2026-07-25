@@ -44,7 +44,8 @@ final _cards = <_OnboardCard>[
   _OnboardCard(
     icon: Icons.groups,
     title: 'Bring your squad.',
-    body: 'Team up, watch each other train live, and climb the leaderboard together.',
+    body:
+        'Team up, watch each other train live, and climb the leaderboard together.',
     bg: (s) => s.secondaryContainer,
     fg: (s) => s.onSecondaryContainer,
     flower: (s) => s.secondary,
@@ -112,21 +113,29 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       child: Text(
                         card.body,
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 16, color: card.fg(scheme).withValues(alpha: 0.8)),
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: card.fg(scheme).withValues(alpha: 0.8),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 40,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: List.generate(_cards.length, (i) {
                     final active = i == _index;
                     return Expanded(
                       flex: active ? 3 : 1,
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 500),
+                        duration: MediaQuery.disableAnimationsOf(context)
+                            ? Duration.zero
+                            : const Duration(milliseconds: 500),
                         curve: Curves.easeOutCubic,
                         margin: const EdgeInsets.symmetric(horizontal: 2.5),
                         height: 5,
@@ -145,7 +154,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 children: [
                   if (!isLast) ...[
                     TextButton(
-                      style: TextButton.styleFrom(foregroundColor: card.fg(scheme).withValues(alpha: 0.7)),
+                      style: TextButton.styleFrom(
+                        foregroundColor: card.fg(scheme).withValues(alpha: 0.7),
+                      ),
                       onPressed: widget.onFinished,
                       child: const Text('Skip'),
                     ),
@@ -157,11 +168,18 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         backgroundColor: card.fg(scheme),
                         foregroundColor: card.bg(scheme),
                         minimumSize: const Size.fromHeight(60),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                        ),
                       ),
                       onPressed: isLast
                           ? widget.onFinished
-                          : () => setState(() => _index = (_index + 1).clamp(0, _cards.length - 1)),
+                          : () => setState(
+                              () => _index = (_index + 1).clamp(
+                                0,
+                                _cards.length - 1,
+                              ),
+                            ),
                       child: isLast
                           ? const Text('Get started')
                           : Row(

@@ -2,18 +2,43 @@ import 'package:injectable/injectable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 import '../../../../sync/local/database.dart';
+import '../../../../sync/outbox/sync_worker.dart';
 import '../../../../sync/pull/pull_down_sync.dart';
+import '../../../alarm/domain/repositories/alarm_repository.dart';
+import '../../../squad/domain/repositories/squad_repository.dart';
 import '../../domain/entities/app_user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_remote_datasource.dart';
 
 @LazySingleton(as: AuthRepository)
 class AuthRepositoryImpl implements AuthRepository {
-  AuthRepositoryImpl(this._remote, this._db, this._pullDownSync);
+  AuthRepositoryImpl(
+    this._remote,
+    this._db,
+    this._pullDownSync,
+    this._alarmRepository,
+    this._squadRepository,
+    this._syncWorker,
+  );
 
   final AuthRemoteDataSource _remote;
   final AppDatabase _db;
   final PullDownSync _pullDownSync;
+  final AlarmRepository _alarmRepository;
+  final SquadRepository _squadRepository;
+  final SyncWorker _syncWorker;
+
+  /// The full account-transition cleanup sequence, shared by
+  /// sign-out/sign-in-as-different-user/delete-account: cancel every
+  /// natively-scheduled alarm (a stale one could still fire against
+  /// now-wiped local data), close squad Realtime channels/cached state,
+  /// then wipe the local Drift cache — all held behind `SyncWorker.pauseFor`
+  /// so an in-flight outbox drain can't race the wipe.
+  Future<void> _clearIdentityState() async {
+    await _alarmRepository.cancelAllAlarms();
+    await _squadRepository.resetForAccountTransition();
+    await _syncWorker.pauseFor(_db.clearAllLocalData);
+  }
 
   AppUser _toAppUser(supabase.User user) {
     final metadata = user.userMetadata;
@@ -67,7 +92,7 @@ class AuthRepositoryImpl implements AuthRepository {
     // incoming account so the user isn't staring at an empty app until
     // their next cold start (PullDownSync otherwise only runs from
     // bootstrap).
-    await _db.clearAllLocalData();
+    await _clearIdentityState();
     await _remote.signInWithPassword(email: email, password: password);
     await _pullDownSync.run();
   }
@@ -77,7 +102,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> signInWithGoogle() async {
-    await _db.clearAllLocalData();
+    await _clearIdentityState();
     await _remote.signInWithGoogle();
     await _pullDownSync.run();
   }
@@ -85,12 +110,10 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> signOut() async {
     await _remote.signOut();
-    // Local Drift data has no per-user scoping (it's a single-identity
-    // cache, not a multi-tenant store) — leaving it in place would let the
-    // next anonymous/linked session on this device see, and even re-upload
-    // via the outbox, the previous identity's data. Clear after signOut
-    // succeeds so a failed signOut doesn't strand the user mid-wipe.
-    await _db.clearAllLocalData();
+    // Clear after signOut succeeds so a failed signOut doesn't strand the
+    // user mid-wipe. See `_clearIdentityState`'s doc comment for why this
+    // is more than just the Drift wipe.
+    await _clearIdentityState();
     // The app's whole model is "every user always has a session" (plan
     // H8) — that invariant only gets re-established automatically at the
     // next cold start (bootstrap's EnsureAuthSession). Without this, a
@@ -108,7 +131,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> deleteAccount() async {
     await _remote.deleteAccount();
     await _remote.signOut();
-    await _db.clearAllLocalData();
+    await _clearIdentityState();
     await ensureSession();
   }
 }

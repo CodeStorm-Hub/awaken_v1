@@ -9,6 +9,7 @@ import 'tables/alarms_table.dart';
 import 'tables/run_checkpoints_table.dart';
 import 'tables/runs_table.dart';
 import 'tables/sessions_table.dart';
+import 'tables/sync_meta_table.dart';
 import 'tables/sync_outbox_table.dart';
 import 'tables/territories_table.dart';
 import 'tables/user_stats_table.dart';
@@ -19,13 +20,13 @@ part 'database.g.dart';
 /// Opened once via `register_module.dart` (injectable can't construct a
 /// `QueryExecutor` itself) and injected everywhere as `AppDatabase`.
 @DriftDatabase(
-  tables: [Alarms, Sessions, Runs, Territories, SyncOutbox, UserStats, RunCheckpoints],
+  tables: [Alarms, Sessions, Runs, Territories, SyncOutbox, UserStats, RunCheckpoints, SyncMeta],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -47,6 +48,14 @@ class AppDatabase extends _$AppDatabase {
           if (from < 6) {
             await m.createTable(runCheckpoints);
           }
+          if (from < 7) {
+            await m.addColumn(territories, territories.deletedAt);
+            await m.addColumn(syncOutbox, syncOutbox.errorType);
+            await m.addColumn(syncOutbox, syncOutbox.lastError);
+            await m.addColumn(syncOutbox, syncOutbox.maxAttempts);
+            await m.createTable(syncMeta);
+            await m.createIndex(syncOutboxNextAttemptAtIdx);
+          }
         },
       );
 
@@ -67,6 +76,7 @@ class AppDatabase extends _$AppDatabase {
       await delete(alarms).go();
       await delete(userStats).go();
       await delete(runCheckpoints).go();
+      await delete(syncMeta).go();
     });
   }
 }

@@ -21,6 +21,7 @@ import '../../features/alarm/data/repositories/alarm_repository_impl.dart'
 import '../../features/alarm/domain/repositories/alarm_repository.dart'
     as _i1014;
 import '../../features/alarm/domain/usecases/cancel_alarm.dart' as _i915;
+import '../../features/alarm/domain/usecases/cancel_all_alarms.dart' as _i971;
 import '../../features/alarm/domain/usecases/complete_alarm_workout.dart'
     as _i738;
 import '../../features/alarm/domain/usecases/dismiss_alarm.dart' as _i735;
@@ -184,13 +185,6 @@ _i174.GetIt init(
   gh.lazySingleton<_i427.LocationProviderFactory>(
     () => _i427.GeolocatorLocationProviderFactory(),
   );
-  gh.lazySingleton<_i666.SyncWorker>(
-    () => _i666.SyncWorker(
-      gh<_i90.AppDatabase>(),
-      gh<_i454.SupabaseClient>(),
-      gh<_i1036.ConnectivityWatcher>(),
-    ),
-  );
   gh.factory<_i246.TerritoryRemoteDataSource>(
     () => _i246.TerritoryRemoteDataSource(gh<_i454.SupabaseClient>()),
   );
@@ -235,24 +229,8 @@ _i174.GetIt init(
   gh.lazySingleton<_i355.LocalWriter>(
     () => _i355.LocalWriter(gh<_i90.AppDatabase>()),
   );
-  gh.lazySingleton<_i175.RunTrackingRepository>(
-    () => _i501.RunTrackingRepositoryImpl(
-      gh<_i862.RunForegroundService>(),
-      gh<_i355.LocalWriter>(),
-      gh<_i666.SyncWorker>(),
-      gh<_i90.AppDatabase>(),
-      gh<_i427.LocationProviderFactory>(),
-    ),
-  );
   gh.lazySingleton<_i162.BatteryExemptionRepository>(
     () => _i694.BatteryExemptionRepositoryImpl(gh<_i703.SystemCapabilities>()),
-  );
-  gh.lazySingleton<_i487.AuthRepository>(
-    () => _i1.AuthRepositoryImpl(
-      gh<_i670.AuthRemoteDataSource>(),
-      gh<_i90.AppDatabase>(),
-      gh<_i1039.PullDownSync>(),
-    ),
   );
   gh.factory<_i490.RefreshTerritories>(
     () => _i490.RefreshTerritories(gh<_i706.TerritoryRepository>()),
@@ -319,51 +297,25 @@ _i174.GetIt init(
   gh.factory<_i522.MarkOnboardingSeen>(
     () => _i522.MarkOnboardingSeen(gh<_i430.OnboardingRepository>()),
   );
-  gh.factory<_i773.AbandonRun>(
-    () => _i773.AbandonRun(gh<_i175.RunTrackingRepository>()),
-  );
-  gh.factory<_i125.CaptureRun>(
-    () => _i125.CaptureRun(gh<_i175.RunTrackingRepository>()),
-  );
-  gh.factory<_i740.GetCurrentPosition>(
-    () => _i740.GetCurrentPosition(gh<_i175.RunTrackingRepository>()),
-  );
-  gh.factory<_i592.StartRun>(
-    () => _i592.StartRun(gh<_i175.RunTrackingRepository>()),
-  );
-  gh.factory<_i256.WatchRunState>(
-    () => _i256.WatchRunState(gh<_i175.RunTrackingRepository>()),
+  gh.lazySingleton<_i666.SyncWorker>(
+    () => _i666.SyncWorker(
+      gh<_i90.AppDatabase>(),
+      gh<_i454.SupabaseClient>(),
+      gh<_i1036.ConnectivityWatcher>(),
+      gh<_i1039.PullDownSync>(),
+    ),
   );
   gh.factory<_i135.WatchRecentActivity>(
     () => _i135.WatchRecentActivity(gh<_i468.HomeActivityRepository>()),
   );
-  gh.factory<_i457.DeleteAccount>(
-    () => _i457.DeleteAccount(gh<_i487.AuthRepository>()),
-  );
-  gh.factory<_i688.EnsureAuthSession>(
-    () => _i688.EnsureAuthSession(gh<_i487.AuthRepository>()),
-  );
-  gh.factory<_i243.LinkWithEmail>(
-    () => _i243.LinkWithEmail(gh<_i487.AuthRepository>()),
-  );
-  gh.factory<_i343.LinkWithGoogle>(
-    () => _i343.LinkWithGoogle(gh<_i487.AuthRepository>()),
-  );
-  gh.factory<_i385.RefreshAuthSession>(
-    () => _i385.RefreshAuthSession(gh<_i487.AuthRepository>()),
-  );
-  gh.factory<_i412.SendPasswordResetEmail>(
-    () => _i412.SendPasswordResetEmail(gh<_i487.AuthRepository>()),
-  );
-  gh.factory<_i985.SignInWithGoogle>(
-    () => _i985.SignInWithGoogle(gh<_i487.AuthRepository>()),
-  );
-  gh.factory<_i224.SignInWithPassword>(
-    () => _i224.SignInWithPassword(gh<_i487.AuthRepository>()),
-  );
-  gh.factory<_i487.SignOut>(() => _i487.SignOut(gh<_i487.AuthRepository>()));
-  gh.factory<_i560.WatchCurrentUser>(
-    () => _i560.WatchCurrentUser(gh<_i487.AuthRepository>()),
+  gh.lazySingleton<_i175.RunTrackingRepository>(
+    () => _i501.RunTrackingRepositoryImpl(
+      gh<_i862.RunForegroundService>(),
+      gh<_i355.LocalWriter>(),
+      gh<_i666.SyncWorker>(),
+      gh<_i90.AppDatabase>(),
+      gh<_i427.LocationProviderFactory>(),
+    ),
   );
   gh.factory<_i635.SquadCubit>(
     () => _i635.SquadCubit(
@@ -384,17 +336,26 @@ _i174.GetIt init(
       gh<_i959.WakeUpTaxStore>(),
     ),
   );
-  gh.factory<_i3.RunTrackingCubit>(
-    () => _i3.RunTrackingCubit(
-      gh<_i592.StartRun>(),
-      gh<_i773.AbandonRun>(),
-      gh<_i125.CaptureRun>(),
-      gh<_i256.WatchRunState>(),
-      gh<_i1051.SquadRepository>(),
-    ),
+  gh.factory<_i773.AbandonRun>(
+    () => _i773.AbandonRun(gh<_i175.RunTrackingRepository>()),
+  );
+  gh.factory<_i125.CaptureRun>(
+    () => _i125.CaptureRun(gh<_i175.RunTrackingRepository>()),
+  );
+  gh.factory<_i740.GetCurrentPosition>(
+    () => _i740.GetCurrentPosition(gh<_i175.RunTrackingRepository>()),
+  );
+  gh.factory<_i592.StartRun>(
+    () => _i592.StartRun(gh<_i175.RunTrackingRepository>()),
+  );
+  gh.factory<_i256.WatchRunState>(
+    () => _i256.WatchRunState(gh<_i175.RunTrackingRepository>()),
   );
   gh.factory<_i915.CancelAlarm>(
     () => _i915.CancelAlarm(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i971.CancelAllAlarms>(
+    () => _i971.CancelAllAlarms(gh<_i1014.AlarmRepository>()),
   );
   gh.factory<_i738.CompleteAlarmWorkout>(
     () => _i738.CompleteAlarmWorkout(gh<_i1014.AlarmRepository>()),
@@ -426,6 +387,25 @@ _i174.GetIt init(
   gh.factory<_i879.WatchRingingAlarm>(
     () => _i879.WatchRingingAlarm(gh<_i1014.AlarmRepository>()),
   );
+  gh.lazySingleton<_i487.AuthRepository>(
+    () => _i1.AuthRepositoryImpl(
+      gh<_i670.AuthRemoteDataSource>(),
+      gh<_i90.AppDatabase>(),
+      gh<_i1039.PullDownSync>(),
+      gh<_i1014.AlarmRepository>(),
+      gh<_i1051.SquadRepository>(),
+      gh<_i666.SyncWorker>(),
+    ),
+  );
+  gh.factory<_i3.RunTrackingCubit>(
+    () => _i3.RunTrackingCubit(
+      gh<_i592.StartRun>(),
+      gh<_i773.AbandonRun>(),
+      gh<_i125.CaptureRun>(),
+      gh<_i256.WatchRunState>(),
+      gh<_i1051.SquadRepository>(),
+    ),
+  );
   gh.lazySingleton<_i268.AlarmCubit>(
     () => _i268.AlarmCubit(
       gh<_i396.WatchAlarms>(),
@@ -437,6 +417,34 @@ _i174.GetIt init(
       gh<_i893.WatchCurrentTaxMultiplier>(),
       gh<_i1064.SetAlarmActive>(),
     ),
+  );
+  gh.factory<_i457.DeleteAccount>(
+    () => _i457.DeleteAccount(gh<_i487.AuthRepository>()),
+  );
+  gh.factory<_i688.EnsureAuthSession>(
+    () => _i688.EnsureAuthSession(gh<_i487.AuthRepository>()),
+  );
+  gh.factory<_i243.LinkWithEmail>(
+    () => _i243.LinkWithEmail(gh<_i487.AuthRepository>()),
+  );
+  gh.factory<_i343.LinkWithGoogle>(
+    () => _i343.LinkWithGoogle(gh<_i487.AuthRepository>()),
+  );
+  gh.factory<_i385.RefreshAuthSession>(
+    () => _i385.RefreshAuthSession(gh<_i487.AuthRepository>()),
+  );
+  gh.factory<_i412.SendPasswordResetEmail>(
+    () => _i412.SendPasswordResetEmail(gh<_i487.AuthRepository>()),
+  );
+  gh.factory<_i985.SignInWithGoogle>(
+    () => _i985.SignInWithGoogle(gh<_i487.AuthRepository>()),
+  );
+  gh.factory<_i224.SignInWithPassword>(
+    () => _i224.SignInWithPassword(gh<_i487.AuthRepository>()),
+  );
+  gh.factory<_i487.SignOut>(() => _i487.SignOut(gh<_i487.AuthRepository>()));
+  gh.factory<_i560.WatchCurrentUser>(
+    () => _i560.WatchCurrentUser(gh<_i487.AuthRepository>()),
   );
   return getIt;
 }

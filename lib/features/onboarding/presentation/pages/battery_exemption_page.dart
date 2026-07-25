@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/di/injection.dart';
@@ -100,12 +102,24 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Android can silently stop apps in the background to save '
-                      'power. If that happens to Awaken, your alarm may not ring. '
-                      'Allowing unrestricted battery usage keeps it reliable.',
+                      // The battery-optimization/OEM-autostart-killer problem
+                      // this whole page addresses (plan H4) is Android-only —
+                      // see `BatteryExemptionRepositoryImpl`'s doc comment on
+                      // `getManufacturer()`. The generic body text previously
+                      // said "Android can silently stop apps..." even when
+                      // this page was reached on iOS via Profile, which is
+                      // simply false there.
+                      Platform.isAndroid
+                          ? 'Android can silently stop apps in the background to save '
+                                'power. If that happens to Awaken, your alarm may not ring. '
+                                'Allowing unrestricted battery usage keeps it reliable.'
+                          : "iOS doesn't have this battery-optimization concept — "
+                                "there's nothing to configure here.",
                       style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
                     ),
-                    if (status == null)
+                    if (!Platform.isAndroid)
+                      const SizedBox.shrink()
+                    else if (status == null)
                       const Padding(
                         padding: EdgeInsets.only(top: 36),
                         child: Center(child: ExpressiveLoader()),
@@ -173,8 +187,16 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
                     minimumSize: const Size.fromHeight(56),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                   ),
-                  onPressed: widget.onContinue,
-                  child: const Text('Continue'),
+                  // `onContinue` is only ever supplied by the onboarding
+                  // carousel, which owns advancing to the next step itself.
+                  // Opened from Profile (`ProfilePage`'s "Battery & location"
+                  // settings row), there's no next step — the button was
+                  // simply disabled (`null` callback) with no way to leave
+                  // the page except the system back gesture. Falling back to
+                  // popping the route makes it a working "Done" instead of a
+                  // dead end.
+                  onPressed: widget.onContinue ?? () => Navigator.of(context).maybePop(),
+                  child: Text(widget.onContinue != null ? 'Continue' : 'Done'),
                 ),
               ),
             ),

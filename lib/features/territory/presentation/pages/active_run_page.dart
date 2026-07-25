@@ -9,6 +9,7 @@ import '../../domain/entities/gps_quality.dart';
 import '../../domain/entities/run_track_state.dart';
 import '../../domain/entities/track_point.dart';
 import '../bloc/run_tracking_cubit.dart';
+import '../widgets/osm_attribution.dart';
 import '../widgets/territory_capture_sheet.dart';
 import '../widgets/territory_map_style.dart';
 
@@ -299,6 +300,11 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                 logoEnabled: false,
                                 attributionButtonPosition:
                                     AttributionButtonPosition.bottomLeft,
+                              ),
+                              const Positioned(
+                                bottom: 4,
+                                right: 8,
+                                child: OsmAttribution(),
                               ),
                               Positioned(
                                 top: 10,

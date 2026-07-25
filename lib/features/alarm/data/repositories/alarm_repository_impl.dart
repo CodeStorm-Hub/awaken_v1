@@ -294,6 +294,9 @@ class AlarmRepositoryImpl implements AlarmRepository {
   }
 
   @override
+  Future<void> cancelAllAlarms() => _local.stopAll();
+
+  @override
   Future<void> completeWorkout(
     AlarmSchedule alarm, {
     required bool verified,

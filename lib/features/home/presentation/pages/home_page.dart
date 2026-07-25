@@ -19,10 +19,11 @@ const _weekdayAbbrLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /// Home dashboard (Claude Design handoff — `isHome`). Next-alarm, streak,
 /// territory area, squad rank, achievements, and the activity feed are all
-/// real now (`AlarmCubit`, `WatchCurrentStreak`, `WatchOwnedArea`,
+/// real (`AlarmCubit`, `WatchCurrentStreak`, `WatchOwnedArea`,
 /// `WatchMyRank`/`WatchMySquad`, `WatchRecentActivity` — plan §6 Phases 5c/
-/// 6). "Today's goal" remains the design prototype's placeholder — there's
-/// still no daily-goal domain concept.
+/// 6). The design prototype's "Today's goal" card was removed rather than
+/// kept as a fabricated placeholder — there's no daily-goal domain concept
+/// to back it with real data.
 class HomePage extends StatelessWidget {
   const HomePage({
     required this.onOpenAlarms,
@@ -35,11 +36,15 @@ class HomePage extends StatelessWidget {
   final VoidCallback onOpenTerritory;
   final VoidCallback onOpenSquad;
 
+  /// Disabled alarms are still present in `AlarmCubit.state.alarms` (greyed
+  /// out in the list — see `AlarmRepositoryImpl.watchAlarms()`'s doc
+  /// comment), so picking the chronologically-first entry without an
+  /// `isActive` filter could surface a disabled alarm as "next" even though
+  /// it will never actually ring.
   AlarmSchedule? _nextAlarm(List<AlarmSchedule> alarms) {
-    if (alarms.isEmpty) return null;
-    final sorted = [...alarms]
+    final eligible = alarms.where((a) => a.isActive).toList()
       ..sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
-    return sorted.first;
+    return eligible.isEmpty ? null : eligible.first;
   }
 
   String _recurrenceSuffix(Set<int> recurringDays) {
@@ -80,8 +85,6 @@ class HomePage extends StatelessWidget {
               stream: getIt<WatchCurrentStreak>()(),
               builder: (context, streakSnapshot) {
                 final streak = streakSnapshot.data ?? 0;
-                const goalPct =
-                    70; // no daily-goal domain concept yet — placeholder, matches handoff mock
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,79 +254,6 @@ class HomePage extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 18),
-                            Material(
-                              color: scheme.surfaceContainerHigh,
-                              borderRadius: BorderRadius.circular(24),
-                              elevation: 2,
-                              shadowColor: scheme.shadow,
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 64,
-                                      height: 64,
-                                      child: Stack(
-                                        alignment: Alignment.center,
-                                        children: [
-                                          CircularProgressIndicator(
-                                            value: goalPct / 100,
-                                            strokeWidth: 6,
-                                            strokeCap: StrokeCap.round,
-                                            color: scheme.primary,
-                                            // The unfilled track needs real
-                                            // contrast against this card's own
-                                            // surfaceContainerHigh background —
-                                            // surfaceContainer was a near-
-                                            // identical tone (remaining 30% was
-                                            // invisible), and outlineVariant
-                                            // only measures ~1.4:1 here, well
-                                            // under WCAG 1.4.11's 3:1 for a
-                                            // functional progress track.
-                                            backgroundColor: scheme.outline,
-                                          ),
-                                          Text(
-                                            '$goalPct%',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                              color: scheme.onSurface,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            "Today's goal",
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: scheme.onSurface,
-                                            ),
-                                          ),
-                                          Text(
-                                            '14 / 20 squats completed',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: scheme.onSurfaceVariant,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Icon(
-                                      Icons.chevron_right,
-                                      color: scheme.onSurfaceVariant,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 22),
                             Text(
                               'Achievements',
                               style: TextStyle(

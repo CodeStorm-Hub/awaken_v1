@@ -103,8 +103,18 @@ class ProfilePage extends StatelessWidget {
                             // becomes "who" (their email) rather than
                             // repeating "synced" — the sync state is
                             // already implied by having an account at all.
+                            //
+                            // Anonymous sessions still sync to a real
+                            // remote `auth.uid()` (ensureSession() signs in
+                            // anonymously, not "offline") — the actual risk
+                            // is losing access to that account on
+                            // uninstall/new device without a linked
+                            // email/Google identity, which is a different
+                            // claim than "device only". Found live: this
+                            // line hadn't been updated even after the
+                            // sign-out dialog's equivalent copy was fixed.
                             final subtitle = isAnonymous
-                                ? 'Progress is saved on this device only'
+                                ? 'Add an email or Google to keep your progress if you switch devices'
                                 : (displayName != null && email != null
                                       ? email
                                       : 'Progress syncs across devices');
