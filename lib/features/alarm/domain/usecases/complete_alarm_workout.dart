@@ -24,17 +24,25 @@ class CompleteAlarmWorkoutParams extends Equatable {
   final bool isPreview;
 
   @override
-  List<Object?> get props => [alarm, verified, repsCompleted, startedAt, isPreview];
+  List<Object?> get props => [
+    alarm,
+    verified,
+    repsCompleted,
+    startedAt,
+    isPreview,
+  ];
 }
 
 @injectable
-class CompleteAlarmWorkout implements UseCase<void, CompleteAlarmWorkoutParams> {
+class CompleteAlarmWorkout
+    implements UseCase<void, CompleteAlarmWorkoutParams> {
   CompleteAlarmWorkout(this._repository);
 
   final AlarmRepository _repository;
 
   @override
-  Future<void> call(CompleteAlarmWorkoutParams params) => _repository.completeWorkout(
+  Future<void> call(CompleteAlarmWorkoutParams params) =>
+      _repository.completeWorkout(
         params.alarm,
         verified: params.verified,
         repsCompleted: params.repsCompleted,

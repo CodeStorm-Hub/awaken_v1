@@ -20,8 +20,6 @@ class AppShellPage extends StatefulWidget {
 }
 
 class _AppShellPageState extends State<AppShellPage> {
-  static const _mediumWindowBreakpoint = 600.0;
-
   var _index = 0;
 
   static const _destinations = [
@@ -45,18 +43,53 @@ class _AppShellPageState extends State<AppShellPage> {
       const TerritoryPage(),
       const SquadPage(),
     ];
-    final body = IndexedStack(index: _index, children: pages);
-    final isMediumOrWider = MediaQuery.sizeOf(context).width >= _mediumWindowBreakpoint;
+    return AdaptiveNavScaffold(
+      selectedIndex: _index,
+      onDestinationSelected: _goTo,
+      destinations: _destinations,
+      body: IndexedStack(index: _index, children: pages),
+    );
+  }
+}
+
+/// The shell's adaptive chrome (breakpoint switch + nav widgets), split out
+/// from [AppShellPage] so it's testable without needing every real feature
+/// page's own `getIt` dependencies (`HomePage`/`TerritoryPage`/etc. each
+/// pull in several use cases and, for `TerritoryPage`, a native
+/// `MapLibreMap` platform view — none of which a plain widget test can
+/// stand up without heavy mocking). Tests exercise this directly with a
+/// trivial `body` instead. Not otherwise meant to be reused — `body` is
+/// still the full `IndexedStack` of real pages in production.
+@visibleForTesting
+class AdaptiveNavScaffold extends StatelessWidget {
+  const AdaptiveNavScaffold({
+    required this.body,
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+    required this.destinations,
+    this.mediumWindowBreakpoint = 600.0,
+    super.key,
+  });
+
+  final Widget body;
+  final int selectedIndex;
+  final ValueChanged<int> onDestinationSelected;
+  final List<NavigationDestination> destinations;
+  final double mediumWindowBreakpoint;
+
+  @override
+  Widget build(BuildContext context) {
+    final isMediumOrWider = MediaQuery.sizeOf(context).width >= mediumWindowBreakpoint;
 
     if (isMediumOrWider) {
       return Scaffold(
         body: Row(
           children: [
             NavigationRail(
-              selectedIndex: _index,
-              onDestinationSelected: _goTo,
+              selectedIndex: selectedIndex,
+              onDestinationSelected: onDestinationSelected,
               labelType: NavigationRailLabelType.all,
-              destinations: _destinations
+              destinations: destinations
                   .map((d) => NavigationRailDestination(icon: d.icon, selectedIcon: d.selectedIcon, label: Text(d.label)))
                   .toList(),
             ),
@@ -70,9 +103,9 @@ class _AppShellPageState extends State<AppShellPage> {
     return Scaffold(
       body: body,
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: _goTo,
-        destinations: _destinations,
+        selectedIndex: selectedIndex,
+        onDestinationSelected: onDestinationSelected,
+        destinations: destinations,
       ),
     );
   }

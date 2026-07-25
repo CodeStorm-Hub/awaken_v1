@@ -21,7 +21,8 @@ class AlarmReliabilityTestPage extends StatefulWidget {
   const AlarmReliabilityTestPage({super.key});
 
   @override
-  State<AlarmReliabilityTestPage> createState() => _AlarmReliabilityTestPageState();
+  State<AlarmReliabilityTestPage> createState() =>
+      _AlarmReliabilityTestPageState();
 }
 
 class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
@@ -104,7 +105,11 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
                   child: SizedBox(
                     width: 44,
                     height: 44,
-                    child: Icon(Icons.arrow_back, size: 22, color: scheme.onSurface),
+                    child: Icon(
+                      Icons.arrow_back,
+                      size: 22,
+                      color: scheme.onSurface,
+                    ),
                   ),
                 ),
               ),
@@ -132,7 +137,9 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
                       'battery killers, start it, then lock your screen and, '
                       'ideally, swipe Awaken away from the recent-apps list. The '
                       'alarm should still fire.',
-                      style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(height: 22),
                     _StatusContainer(
@@ -152,13 +159,18 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
                 child: FilledButton(
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(56),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
                   ),
-                  onPressed: _phase == _TestPhase.waiting ? null : () => _startTest(cubit),
+                  onPressed: _phase == _TestPhase.waiting
+                      ? null
+                      : () => _startTest(cubit),
                   child: Text(
                     _phase == _TestPhase.waiting
                         ? 'Test running…'
-                        : _phase == _TestPhase.passed || _phase == _TestPhase.timedOut
+                        : _phase == _TestPhase.passed ||
+                              _phase == _TestPhase.timedOut
                         ? 'Run again'
                         : 'Start test',
                   ),
@@ -173,7 +185,11 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
 }
 
 class _StatusContainer extends StatelessWidget {
-  const _StatusContainer({required this.phase, required this.measuredDelay, required this.scheme});
+  const _StatusContainer({
+    required this.phase,
+    required this.measuredDelay,
+    required this.scheme,
+  });
 
   final _TestPhase phase;
   final Duration? measuredDelay;
@@ -192,7 +208,11 @@ class _StatusContainer extends StatelessWidget {
       child: Column(
         children: [
           switch (phase) {
-            _TestPhase.idle => Icon(Icons.bug_report, size: 36, color: scheme.onSurfaceVariant),
+            _TestPhase.idle => Icon(
+              Icons.bug_report,
+              size: 36,
+              color: scheme.onSurfaceVariant,
+            ),
             _TestPhase.waiting => const ExpressiveLoader(),
             _TestPhase.passed => ExpressiveFlower(
               size: 72,
@@ -200,14 +220,19 @@ class _StatusContainer extends StatelessWidget {
               animatePop: true,
               child: Icon(Icons.check, size: 34, color: scheme.onPrimary),
             ),
-            _TestPhase.timedOut => Icon(Icons.error, size: 36, color: scheme.error),
+            _TestPhase.timedOut => Icon(
+              Icons.error,
+              size: 36,
+              color: scheme.error,
+            ),
           },
           const SizedBox(height: 12),
           Text(
             switch (phase) {
               _TestPhase.idle => 'Not started.',
               _TestPhase.waiting => 'Waiting for alarm…',
-              _TestPhase.passed => 'PASS — fired ${measuredDelay!.inSeconds}s after scheduling.',
+              _TestPhase.passed =>
+                'PASS — fired ${measuredDelay!.inSeconds}s after scheduling.',
               _TestPhase.timedOut =>
                 'FAIL — alarm did not fire within the expected window. Check '
                     'battery-exemption settings and OEM autostart permissions.',
@@ -215,8 +240,12 @@ class _StatusContainer extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              fontWeight: phase == _TestPhase.passed ? FontWeight.w800 : FontWeight.w600,
-              color: passed ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+              fontWeight: phase == _TestPhase.passed
+                  ? FontWeight.w800
+                  : FontWeight.w600,
+              color: passed
+                  ? scheme.onPrimaryContainer
+                  : scheme.onSurfaceVariant,
             ),
           ),
         ],

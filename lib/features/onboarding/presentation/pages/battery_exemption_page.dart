@@ -24,7 +24,8 @@ class BatteryExemptionPage extends StatefulWidget {
   State<BatteryExemptionPage> createState() => _BatteryExemptionPageState();
 }
 
-class _BatteryExemptionPageState extends State<BatteryExemptionPage> with WidgetsBindingObserver {
+class _BatteryExemptionPageState extends State<BatteryExemptionPage>
+    with WidgetsBindingObserver {
   BatteryExemptionStatus? _status;
 
   @override
@@ -52,14 +53,16 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
     if (mounted) setState(() => _status = status);
   }
 
-  String _capitalize(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+  String _capitalize(String s) =>
+      s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
   @override
   Widget build(BuildContext context) {
     final status = _status;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final showOemStep = status != null && status.isAggressiveOem && !status.isExempt;
+    final showOemStep =
+        status != null && status.isAggressiveOem && !status.isExempt;
 
     return Scaffold(
       backgroundColor: scheme.surface,
@@ -115,7 +118,9 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
                                 'Allowing unrestricted battery usage keeps it reliable.'
                           : "iOS doesn't have this battery-optimization concept — "
                                 "there's nothing to configure here.",
-                      style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                     if (!Platform.isAndroid)
                       const SizedBox.shrink()
@@ -136,10 +141,18 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
                                       bottom: Radius.circular(8),
                                     )
                                   : BorderRadius.circular(20),
-                              bg: status.isExempt ? scheme.primaryContainer : const Color(0xFFFFE08C),
-                              fg: status.isExempt ? scheme.onPrimaryContainer : const Color(0xFF2A1F00),
-                              icon: status.isExempt ? Icons.check_circle : Icons.warning,
-                              title: status.isExempt ? 'Exemption granted' : 'Still restricted',
+                              bg: status.isExempt
+                                  ? scheme.primaryContainer
+                                  : const Color(0xFFFFE08C),
+                              fg: status.isExempt
+                                  ? scheme.onPrimaryContainer
+                                  : const Color(0xFF2A1F00),
+                              icon: status.isExempt
+                                  ? Icons.check_circle
+                                  : Icons.warning,
+                              title: status.isExempt
+                                  ? 'Exemption granted'
+                                  : 'Still restricted',
                               subtitle: status.isExempt
                                   ? 'Battery optimization exemption granted.'
                                   : 'Battery optimization is still restricting Awaken.',
@@ -147,7 +160,9 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
                               onAction: status.isExempt
                                   ? null
                                   : () async {
-                                      await getIt<RequestBatteryExemption>()(const NoParams());
+                                      await getIt<RequestBatteryExemption>()(
+                                        const NoParams(),
+                                      );
                                       await _refreshStatus();
                                     },
                             ),
@@ -162,13 +177,17 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
                                 fg: scheme.onSurface,
                                 icon: Icons.settings,
                                 iconColor: scheme.onSurfaceVariant,
-                                title: '${_capitalize(status.manufacturer)} extra step',
+                                title:
+                                    '${_capitalize(status.manufacturer)} extra step',
                                 subtitle:
                                     '${_capitalize(status.manufacturer)} devices often need an '
                                     'extra step: allow Awaken to auto-start in the background.',
                                 actionLabel: 'Open',
                                 outlined: true,
-                                onAction: () => getIt<OpenOemAutostartSettings>()(const NoParams()),
+                                onAction: () =>
+                                    getIt<OpenOemAutostartSettings>()(
+                                      const NoParams(),
+                                    ),
                               ),
                             ],
                           ],
@@ -185,7 +204,9 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
                 child: FilledButton(
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(56),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
                   ),
                   // `onContinue` is only ever supplied by the onboarding
                   // carousel, which owns advancing to the next step itself.
@@ -195,7 +216,9 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
                   // the page except the system back gesture. Falling back to
                   // popping the route makes it a working "Done" instead of a
                   // dead end.
-                  onPressed: widget.onContinue ?? () => Navigator.of(context).maybePop(),
+                  onPressed:
+                      widget.onContinue ??
+                      () => Navigator.of(context).maybePop(),
                   child: Text(widget.onContinue != null ? 'Continue' : 'Done'),
                 ),
               ),
@@ -246,11 +269,21 @@ class _StatusRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: fg)),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: fg,
+                  ),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: TextStyle(fontSize: 13, color: fg.withValues(alpha: 0.85)),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: fg.withValues(alpha: 0.85),
+                  ),
                 ),
               ],
             ),
@@ -259,7 +292,10 @@ class _StatusRow extends StatelessWidget {
             outlined
                 ? OutlinedButton(onPressed: onAction, child: Text(actionLabel!))
                 : FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: fg, foregroundColor: bg),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: fg,
+                      foregroundColor: bg,
+                    ),
                     onPressed: onAction,
                     child: Text(actionLabel!),
                   ),

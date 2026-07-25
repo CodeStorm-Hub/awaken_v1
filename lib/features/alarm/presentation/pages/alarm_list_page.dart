@@ -297,7 +297,9 @@ class _AlarmListPageState extends State<AlarmListPage> {
     try {
       await cubit.cancel(alarm.id);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not delete alarm: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not delete alarm: $e')),
+      );
       return;
     }
     messenger.showSnackBar(const SnackBar(content: Text('Alarm deleted')));

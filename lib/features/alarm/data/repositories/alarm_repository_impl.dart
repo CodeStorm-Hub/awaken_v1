@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:alarm/alarm.dart';
 import 'package:drift/drift.dart' show Value;
@@ -7,6 +8,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/error/failures.dart';
+import '../../../../core/platform/system_capabilities.dart';
 import '../../../../sync/local/database.dart';
 import '../../../../sync/outbox/local_writer.dart';
 import '../../domain/entities/alarm_schedule.dart';
@@ -17,7 +19,13 @@ import '../models/alarm_payload.dart';
 
 @LazySingleton(as: AlarmRepository)
 class AlarmRepositoryImpl implements AlarmRepository {
-  AlarmRepositoryImpl(this._local, this._localWriter, this._db, this._taxStore);
+  AlarmRepositoryImpl(
+    this._local,
+    this._localWriter,
+    this._db,
+    this._taxStore,
+    this._systemCapabilities,
+  );
 
   final AlarmLocalDataSource _local;
 
@@ -33,6 +41,7 @@ class AlarmRepositoryImpl implements AlarmRepository {
   final AppDatabase _db;
 
   final WakeUpTaxStore _taxStore;
+  final SystemCapabilities _systemCapabilities;
 
   /// `Alarm.set()`/`Alarm.stop()` return `bool`, not `void` — a `false`
   /// result (native scheduling/cancellation actually failed on-device) was
@@ -42,7 +51,9 @@ class AlarmRepositoryImpl implements AlarmRepository {
   Future<void> _setNative(AlarmSettings settings) async {
     final ok = await _local.set(settings);
     if (!ok) {
-      throw const AlarmOperationFailure('The device could not schedule this alarm');
+      throw const AlarmOperationFailure(
+        'The device could not schedule this alarm',
+      );
     }
   }
 
@@ -66,7 +77,8 @@ class AlarmRepositoryImpl implements AlarmRepository {
         Sentry.captureMessage(
           'Native Alarm.stop() returned false during completeWorkout',
           level: SentryLevel.warning,
-          withScope: (scope) => scope.setTag('nativeAlarmId', nativeId.toString()),
+          withScope: (scope) =>
+              scope.setTag('nativeAlarmId', nativeId.toString()),
         ),
       );
     }
@@ -79,7 +91,9 @@ class AlarmRepositoryImpl implements AlarmRepository {
   /// on `Alarms`). Backfills existing rows the first time they're touched
   /// post-migration.
   Future<int> _nativeIdFor(String alarmId) async {
-    final row = await (_db.select(_db.alarms)..where((t) => t.id.equals(alarmId))).getSingleOrNull();
+    final row = await (_db.select(
+      _db.alarms,
+    )..where((t) => t.id.equals(alarmId))).getSingleOrNull();
     if (row?.nativeId != null) return row!.nativeId!;
     final computed = AlarmPayload.deriveNativeId(alarmId);
     if (row != null) {
@@ -91,9 +105,9 @@ class AlarmRepositoryImpl implements AlarmRepository {
   }
 
   String _titleFor(ExerciseMode mode) => switch (mode) {
-        ExerciseMode.squat => 'Time to squat!',
-        ExerciseMode.pushup => 'Time to push up!',
-      };
+    ExerciseMode.squat => 'Time to squat!',
+    ExerciseMode.pushup => 'Time to push up!',
+  };
 
   AlarmSettings _toAlarmSettings(AlarmSchedule alarm, int nativeId) {
     final payload = AlarmPayload(
@@ -202,19 +216,23 @@ class AlarmRepositoryImpl implements AlarmRepository {
     controller = StreamController<List<AlarmSchedule>>.broadcast(
       onListen: () {
         nativeSub = _local.scheduled.listen((settingsList) {
-          latestNative = settingsList.map(_toAlarmSchedule).whereType<AlarmSchedule>().toList();
+          latestNative = settingsList
+              .map(_toAlarmSchedule)
+              .whereType<AlarmSchedule>()
+              .toList();
           hasNative = true;
           emitIfReady();
         });
-        disabledSub = (_db.select(_db.alarms)
-              ..where((t) => t.isActive.equals(false))
-              ..where((t) => t.deletedAt.isNull()))
-            .watch()
-            .listen((rows) {
-          latestDisabled = rows.map(_toAlarmScheduleFromRow).toList();
-          hasDisabled = true;
-          emitIfReady();
-        });
+        disabledSub =
+            (_db.select(_db.alarms)
+                  ..where((t) => t.isActive.equals(false))
+                  ..where((t) => t.deletedAt.isNull()))
+                .watch()
+                .listen((rows) {
+                  latestDisabled = rows.map(_toAlarmScheduleFromRow).toList();
+                  hasDisabled = true;
+                  emitIfReady();
+                });
       },
       onCancel: () {
         unawaited(nativeSub.cancel());
@@ -230,7 +248,9 @@ class AlarmRepositoryImpl implements AlarmRepository {
     if (!isActive) {
       final nativeId = await _nativeIdFor(id);
       await _stopNative(nativeId);
-      final row = await (_db.select(_db.alarms)..where((t) => t.id.equals(id))).getSingleOrNull();
+      final row = await (_db.select(
+        _db.alarms,
+      )..where((t) => t.id.equals(id))).getSingleOrNull();
       if (row == null) return;
       await _localWriter.upsertAlarm(
         id: row.id,
@@ -247,7 +267,9 @@ class AlarmRepositoryImpl implements AlarmRepository {
       return;
     }
 
-    final row = await (_db.select(_db.alarms)..where((t) => t.id.equals(id))).getSingleOrNull();
+    final row = await (_db.select(
+      _db.alarms,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
     if (row == null) return;
     var schedule = _toAlarmScheduleFromRow(row).copyWith(isActive: true);
     final now = DateTime.now();
@@ -295,6 +317,31 @@ class AlarmRepositoryImpl implements AlarmRepository {
 
   @override
   Future<void> cancelAllAlarms() => _local.stopAll();
+
+  @override
+  Future<void> engageRingLockdown() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _systemCapabilities.startAlarmLockdown();
+    } catch (e, st) {
+      // Best-effort hardening only — must never block the ring flow itself
+      // (PopScope/the full-screen overlay are what actually gate
+      // dismissal). Reported so a persistently-failing device is visible,
+      // not silently degraded forever.
+      unawaited(Sentry.captureException(e, stackTrace: st));
+    }
+  }
+
+  @override
+  Future<void> releaseRingLockdown() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _systemCapabilities.stopAlarmLockdown();
+    } catch (_) {
+      // Not currently pinned (engage may have failed, or this is a
+      // preview) — nothing to do.
+    }
+  }
 
   @override
   Future<void> completeWorkout(
@@ -391,12 +438,17 @@ class AlarmRepositoryImpl implements AlarmRepository {
   @override
   Future<void> rearmFromCache() async {
     final armedIds = await _local.scheduled.first.then(
-      (list) => list.map(_toAlarmSchedule).whereType<AlarmSchedule>().map((a) => a.id).toSet(),
+      (list) => list
+          .map(_toAlarmSchedule)
+          .whereType<AlarmSchedule>()
+          .map((a) => a.id)
+          .toSet(),
     );
-    final rows = await (_db.select(_db.alarms)
-          ..where((t) => t.isActive.equals(true))
-          ..where((t) => t.deletedAt.isNull()))
-        .get();
+    final rows =
+        await (_db.select(_db.alarms)
+              ..where((t) => t.isActive.equals(true))
+              ..where((t) => t.deletedAt.isNull()))
+            .get();
 
     final now = DateTime.now();
     for (final row in rows) {
@@ -405,7 +457,8 @@ class AlarmRepositoryImpl implements AlarmRepository {
       if (schedule.isRecurring && schedule.scheduledTime.isBefore(now)) {
         final next = schedule.nextOccurrenceAfter(now);
         if (next != null) schedule = schedule.copyWith(scheduledTime: next);
-      } else if (!schedule.isRecurring && schedule.scheduledTime.isBefore(now)) {
+      } else if (!schedule.isRecurring &&
+          schedule.scheduledTime.isBefore(now)) {
         continue; // a past one-shot alarm has nothing sensible to re-arm to
       }
       await scheduleAlarm(schedule);
@@ -420,7 +473,13 @@ class AlarmRepositoryImpl implements AlarmRepository {
   int _computeStreak(List<SessionRow> sessions) {
     final completedDays = sessions
         .where((s) => s.completedAt != null)
-        .map((s) => DateTime(s.completedAt!.year, s.completedAt!.month, s.completedAt!.day))
+        .map(
+          (s) => DateTime(
+            s.completedAt!.year,
+            s.completedAt!.month,
+            s.completedAt!.day,
+          ),
+        )
         .toSet();
 
     var cursor = DateTime.now();

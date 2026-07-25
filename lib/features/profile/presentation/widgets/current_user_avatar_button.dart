@@ -25,9 +25,9 @@ class CurrentUserAvatarButton extends StatelessWidget {
         return ProfileAvatarButton(
           initial: initial,
           avatarUrl: isAnonymous ? null : user?.avatarUrl,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ProfilePage()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ProfilePage())),
         );
       },
     );

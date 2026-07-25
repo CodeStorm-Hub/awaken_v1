@@ -19,6 +19,19 @@ abstract interface class AlarmRepository {
   /// wipe, or an alarm ringing for a session that's no longer this user's).
   Future<void> cancelAllAlarms();
 
+  /// Engages Android screen pinning for as long as a real (non-preview)
+  /// alarm is ringing — the strongest escape-blocking a normal Play Store
+  /// app can do (no Device Owner/kiosk mode). Android-only; a no-op on iOS.
+  /// Best-effort and never throws — the ring screen's own UI blocking
+  /// (`PopScope`, full-screen overlay) is the load-bearing mechanism, this
+  /// is additional hardening on top of it, not a replacement for it.
+  Future<void> engageRingLockdown();
+
+  /// Releases the screen pinning engaged by [engageRingLockdown]. Safe to
+  /// call even if lockdown was never engaged (e.g. iOS, or the engage call
+  /// itself failed).
+  Future<void> releaseRingLockdown();
+
   /// Enable/disable an alarm without discarding its settings (unlike
   /// `cancelAlarm`, which deletes it outright). Disabling cancels the
   /// native schedule but keeps the alarm's config in the local cache so it

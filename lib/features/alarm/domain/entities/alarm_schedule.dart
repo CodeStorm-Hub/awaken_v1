@@ -90,6 +90,13 @@ class AlarmSchedule extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [id, scheduledTime, exerciseMode, requiredReps, penaltyMultiplier, isActive, recurringDays];
+  List<Object?> get props => [
+    id,
+    scheduledTime,
+    exerciseMode,
+    requiredReps,
+    penaltyMultiplier,
+    isActive,
+    recurringDays,
+  ];
 }

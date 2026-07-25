@@ -21,5 +21,6 @@ class SetAlarmActive implements UseCase<void, SetAlarmActiveParams> {
   final AlarmRepository _repository;
 
   @override
-  Future<void> call(SetAlarmActiveParams params) => _repository.setActive(params.id, params.isActive);
+  Future<void> call(SetAlarmActiveParams params) =>
+      _repository.setActive(params.id, params.isActive);
 }

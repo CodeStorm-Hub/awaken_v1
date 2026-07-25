@@ -325,6 +325,7 @@ class StatTile extends StatelessWidget {
     required this.label,
     this.icon,
     this.radius = const BorderRadius.all(Radius.circular(8)),
+    this.hasError = false,
     super.key,
   });
 
@@ -335,37 +336,51 @@ class StatTile extends StatelessWidget {
   final IconData? icon;
   final BorderRadius radius;
 
+  /// Set when the stream backing [value] emitted an error — without this,
+  /// every stat tile on Home/Profile fell back to `?? 0`, which renders
+  /// identically to a genuine zero (a real "you haven't started yet" state)
+  /// and silently hides a failed fetch. When true, an error glyph replaces
+  /// [value] and [icon] and the tile tints toward `errorContainer` instead
+  /// of masking the failure.
+  final bool hasError;
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final effectiveBg = hasError ? scheme.errorContainer : bg;
+    final effectiveFg = hasError ? scheme.onErrorContainer : fg;
     // Flat, no elevation — the handoff's own CSS for these tiles has no
     // box-shadow. Elevation here previously cast a drop shadow into the
     // 3px gap between adjacent tiles, reading as a stray colored seam.
     return Material(
-      color: bg,
+      color: effectiveBg,
       borderRadius: radius,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (icon != null) Icon(icon, size: 22, color: fg),
+            if (hasError)
+              Icon(Icons.error_outline, size: 22, color: effectiveFg)
+            else if (icon != null)
+              Icon(icon, size: 22, color: effectiveFg),
             Text(
-              value,
+              hasError ? '—' : value,
               style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -1,
-                color: fg,
+                color: effectiveFg,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
             Text(
-              label,
+              hasError ? "Couldn't load" : label,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: fg,
+                color: effectiveFg,
               ),
             ),
           ],

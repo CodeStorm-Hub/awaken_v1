@@ -41,12 +41,12 @@ class AlarmPayload {
   }
 
   String toJson() => jsonEncode({
-        'id': id,
-        'exerciseMode': exerciseMode.name,
-        'requiredReps': requiredReps,
-        'penaltyMultiplier': penaltyMultiplier,
-        'recurringDays': recurringDays.toList(),
-      });
+    'id': id,
+    'exerciseMode': exerciseMode.name,
+    'requiredReps': requiredReps,
+    'penaltyMultiplier': penaltyMultiplier,
+    'recurringDays': recurringDays.toList(),
+  });
 
   /// Derives a 32-bit positive int from the UUID for the native `alarm`
   /// package's id field (it doesn't accept string ids), using a specified

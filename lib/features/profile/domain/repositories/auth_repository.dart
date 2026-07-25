@@ -32,7 +32,10 @@ abstract interface class AuthRepository {
   /// Signs in as a returning linked user, replacing whatever session
   /// (typically anonymous) is currently active. The counterpart to
   /// [linkWithEmail] that was previously missing entirely.
-  Future<void> signInWithPassword({required String email, required String password});
+  Future<void> signInWithPassword({
+    required String email,
+    required String password,
+  });
 
   /// Requests a password-recovery email for an existing linked account.
   Future<void> sendPasswordResetEmail(String email);

@@ -45,4 +45,20 @@ class SystemCapabilities {
     final result = await _channel.invokeMethod<bool>('openOemAutostartSettings');
     return result ?? false;
   }
+
+  /// Screen pinning (`Activity.startLockTask()`) — see the native
+  /// implementation's doc comment for exactly what this does and doesn't
+  /// restrict. Best-effort: returns whether pinning actually engaged: a
+  /// duplicate call or a not-yet-resumed Activity returns false rather
+  /// than throwing, since this must never be allowed to block the ring
+  /// flow itself.
+  Future<bool> startAlarmLockdown() async {
+    final result = await _channel.invokeMethod<bool>('startAlarmLockdown');
+    return result ?? false;
+  }
+
+  Future<bool> stopAlarmLockdown() async {
+    final result = await _channel.invokeMethod<bool>('stopAlarmLockdown');
+    return result ?? false;
+  }
 }

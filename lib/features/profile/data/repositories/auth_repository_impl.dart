@@ -50,8 +50,10 @@ class AuthRepositoryImpl implements AuthRepository {
       // userMetadata — Google's native id-token flow populates `full_name`
       // and `name` (both, in practice); email/password accounts have
       // neither key at all.
-      displayName: metadata?['full_name'] as String? ?? metadata?['name'] as String?,
-      avatarUrl: metadata?['avatar_url'] as String? ?? metadata?['picture'] as String?,
+      displayName:
+          metadata?['full_name'] as String? ?? metadata?['name'] as String?,
+      avatarUrl:
+          metadata?['avatar_url'] as String? ?? metadata?['picture'] as String?,
     );
   }
 
@@ -78,14 +80,19 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> refreshSession() => _remote.refreshSession();
 
   @override
-  Future<void> linkWithEmail({required String email, required String password}) =>
-      _remote.linkWithEmail(email: email, password: password);
+  Future<void> linkWithEmail({
+    required String email,
+    required String password,
+  }) => _remote.linkWithEmail(email: email, password: password);
 
   @override
   Future<void> linkWithGoogle() => _remote.linkWithGoogle();
 
   @override
-  Future<void> signInWithPassword({required String email, required String password}) async {
+  Future<void> signInWithPassword({
+    required String email,
+    required String password,
+  }) async {
     // Switching identity mid-session (not a cold start) carries the same
     // cross-account leakage risk as sign-out — clear the outgoing
     // identity's cache first, then immediately re-hydrate from the
@@ -98,7 +105,8 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<void> sendPasswordResetEmail(String email) => _remote.sendPasswordResetEmail(email);
+  Future<void> sendPasswordResetEmail(String email) =>
+      _remote.sendPasswordResetEmail(email);
 
   @override
   Future<void> signInWithGoogle() async {

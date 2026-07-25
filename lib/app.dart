@@ -10,6 +10,8 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/no_scrollbar_behavior.dart';
 import 'core/theme/theme_mode_cubit.dart';
 import 'core/usecase/usecase.dart';
+import 'features/alarm/domain/usecases/engage_alarm_lockdown.dart';
+import 'features/alarm/domain/usecases/release_alarm_lockdown.dart';
 import 'features/alarm/presentation/bloc/alarm_cubit.dart';
 import 'features/alarm/presentation/bloc/alarm_state.dart';
 import 'features/alarm/presentation/pages/alarm_ring_page.dart';
@@ -78,7 +80,8 @@ class _StartupFlow extends StatefulWidget {
   State<_StartupFlow> createState() => _StartupFlowState();
 }
 
-class _StartupFlowState extends State<_StartupFlow> with WidgetsBindingObserver {
+class _StartupFlowState extends State<_StartupFlow>
+    with WidgetsBindingObserver {
   var _loading = true;
   var _onboarded = false;
 
@@ -128,17 +131,44 @@ class _StartupFlowState extends State<_StartupFlow> with WidgetsBindingObserver 
   }
 }
 
-class _AlarmRingOverlay extends StatelessWidget {
+class _AlarmRingOverlay extends StatefulWidget {
   const _AlarmRingOverlay({required this.child});
 
   final Widget child;
 
   @override
+  State<_AlarmRingOverlay> createState() => _AlarmRingOverlayState();
+}
+
+class _AlarmRingOverlayState extends State<_AlarmRingOverlay> {
+  // Tracks whether screen-pinning is currently engaged so engage/release
+  // only fire on an actual open→closed/closed→open transition, not on
+  // every rebuild this listener happens to run on.
+  var _lockdownEngaged = false;
+
+  @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AlarmCubit, AlarmState>(
+    return BlocConsumer<AlarmCubit, AlarmState>(
       buildWhen: (previous, current) =>
           previous.ringingAlarm != current.ringingAlarm ||
           previous.verificationInProgress != current.verificationInProgress,
+      listenWhen: (previous, current) =>
+          previous.ringingAlarm != current.ringingAlarm,
+      listener: (context, state) {
+        // Deliberately keyed off `ringingAlarm` alone, not
+        // `verificationInProgress` — screen pinning should stay engaged for
+        // the whole ring→verify loop (including while `VerificationPage` is
+        // pushed on top, which is exactly when the user is most likely to
+        // reach for Home/Recents to bail out), only releasing once the
+        // alarm itself actually stops ringing.
+        if (state.ringingAlarm != null && !_lockdownEngaged) {
+          _lockdownEngaged = true;
+          unawaited(getIt<EngageAlarmLockdown>()(const NoParams()));
+        } else if (state.ringingAlarm == null && _lockdownEngaged) {
+          _lockdownEngaged = false;
+          unawaited(getIt<ReleaseAlarmLockdown>()(const NoParams()));
+        }
+      },
       builder: (context, state) {
         final ringing = state.ringingAlarm;
         // Real bug found live: this overlay used to paint AlarmRingPage
@@ -164,9 +194,9 @@ class _AlarmRingOverlay extends StatelessWidget {
             // page is visually on top. The whole point of this overlay is
             // that nothing else is reachable while an alarm rings.
             if (showOverlay)
-              ExcludeSemantics(child: IgnorePointer(child: child))
+              ExcludeSemantics(child: IgnorePointer(child: widget.child))
             else
-              child,
+              widget.child,
             if (showOverlay) AlarmRingPage(alarm: ringing),
           ],
         );

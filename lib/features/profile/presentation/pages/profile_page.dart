@@ -6,11 +6,8 @@ import '../../../../core/theme/expressive_widgets.dart';
 import '../../../../core/theme/google_logo.dart';
 import '../../../../core/theme/theme_mode_cubit.dart';
 import '../../../../core/usecase/usecase.dart';
-import '../../../alarm/domain/usecases/watch_current_streak.dart';
 import '../../../alarm/presentation/pages/alarm_reliability_test_page.dart';
 import '../../../onboarding/presentation/pages/battery_exemption_page.dart';
-import '../../../territory/domain/usecases/watch_owned_area.dart';
-import '../../domain/entities/app_user.dart';
 import '../../domain/usecases/delete_account.dart';
 import '../../domain/usecases/link_with_email.dart';
 import '../../domain/usecases/link_with_google.dart';
@@ -18,12 +15,14 @@ import '../../domain/usecases/send_password_reset_email.dart';
 import '../../domain/usecases/sign_in_with_google.dart';
 import '../../domain/usecases/sign_in_with_password.dart';
 import '../../domain/usecases/sign_out.dart';
-import '../../domain/usecases/watch_current_user.dart';
 import '../auth_error_message.dart';
+import '../bloc/profile_cubit.dart';
+import '../bloc/profile_state.dart';
 
-/// Profile screen (Claude Design handoff — `isProfile`). Streak and
-/// territory area are real (`WatchCurrentStreak`, `WatchOwnedArea` — plan
-/// §6 Phase 5c). "Alarm reliability" and "Battery & location" route to the
+/// Profile screen (Claude Design handoff — `isProfile`). Streak/territory-
+/// area/current-user come from the per-page `ProfileCubit` (Phase 3:
+/// previously two nested `StreamBuilder`s calling use cases directly via
+/// `getIt`). "Alarm reliability" and "Battery & location" route to the
 /// app's real existing pages. "Migrate to cloud"/Appearance/Sign out are
 /// wired to real auth/theme state (plan §6 Phase 6.5) — Notifications was
 /// cut entirely rather than left as a dead tappable row, since no
@@ -35,287 +34,298 @@ class ProfilePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      backgroundColor: scheme.surface,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: Row(
-                children: [
-                  Tooltip(
-                    message: 'Back',
-                    child: Material(
-                      color: scheme.surfaceContainerHigh,
-                      shape: const CircleBorder(),
-                      child: InkWell(
-                        customBorder: const CircleBorder(),
-                        onTap: () => Navigator.of(context).pop(),
-                        child: SizedBox(
-                          width: 44,
-                          height: 44,
-                          child: Icon(
-                            Icons.arrow_back,
-                            size: 22,
-                            color: scheme.onSurface,
+    return BlocProvider<ProfileCubit>(
+      create: (_) => getIt<ProfileCubit>(),
+      child: Scaffold(
+        backgroundColor: scheme.surface,
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                child: Row(
+                  children: [
+                    Tooltip(
+                      message: 'Back',
+                      child: Material(
+                        color: scheme.surfaceContainerHigh,
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => Navigator.of(context).pop(),
+                          child: SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: Icon(
+                              Icons.arrow_back,
+                              size: 22,
+                              color: scheme.onSurface,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Profile',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.4,
-                      color: scheme.onSurface,
+                    const SizedBox(width: 10),
+                    Text(
+                      'Profile',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.4,
+                        color: scheme.onSurface,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: StreamBuilder<int>(
-                stream: getIt<WatchCurrentStreak>()(),
-                builder: (context, snapshot) {
-                  final streak = snapshot.data ?? 0;
-                  return SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        StreamBuilder<AppUser?>(
-                          stream: getIt<WatchCurrentUser>()(),
-                          builder: (context, userSnapshot) {
-                            final user = userSnapshot.data;
-                            final isAnonymous = user?.isAnonymous ?? true;
-                            final displayName = user?.displayName;
-                            final email = user?.email;
-                            final avatarUrl = user?.avatarUrl;
-                            final title = isAnonymous
-                                ? 'Guest'
-                                : (displayName ?? email ?? 'Account linked');
-                            // Once we have a real name, the second line
-                            // becomes "who" (their email) rather than
-                            // repeating "synced" — the sync state is
-                            // already implied by having an account at all.
-                            //
-                            // Anonymous sessions still sync to a real
-                            // remote `auth.uid()` (ensureSession() signs in
-                            // anonymously, not "offline") — the actual risk
-                            // is losing access to that account on
-                            // uninstall/new device without a linked
-                            // email/Google identity, which is a different
-                            // claim than "device only". Found live: this
-                            // line hadn't been updated even after the
-                            // sign-out dialog's equivalent copy was fixed.
-                            final subtitle = isAnonymous
-                                ? 'Add an email or Google to keep your progress if you switch devices'
-                                : (displayName != null && email != null
-                                      ? email
-                                      : 'Progress syncs across devices');
-                            final initial = isAnonymous
-                                ? 'G'
-                                : (displayName ?? email ?? 'A')[0].toUpperCase();
-                            return Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 22,
-                              ),
-                              decoration: BoxDecoration(
-                                color: scheme.surfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(28),
-                              ),
-                              child: Column(
-                                children: [
-                                  if (avatarUrl != null)
-                                    ClipOval(
-                                      child: Image.network(
-                                        avatarUrl,
-                                        width: 84,
-                                        height: 84,
-                                        fit: BoxFit.cover,
-                                        // The provider's photo is a nice-to-have,
-                                        // not load-bearing — fall back to the
-                                        // initial badge rather than an error icon
-                                        // if the CDN URL 404s/expires.
-                                        errorBuilder: (context, error, stackTrace) =>
-                                            _InitialAvatar(initial: initial, scheme: scheme),
-                                        loadingBuilder: (context, child, progress) {
-                                          if (progress == null) return child;
-                                          return _InitialAvatar(initial: initial, scheme: scheme);
-                                        },
-                                      ),
-                                    )
-                                  else
-                                    _InitialAvatar(initial: initial, scheme: scheme),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    title,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                      color: scheme.onSurface,
-                                    ),
-                                  ),
-                                  Text(
-                                    subtitle,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: scheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                  if (isAnonymous) ...[
-                                    const SizedBox(height: 12),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: FilledButton(
-                                        style: FilledButton.styleFrom(
-                                          minimumSize: const Size.fromHeight(
-                                            48,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              999,
-                                            ),
-                                          ),
-                                        ),
-                                        onPressed: () => showDialog<void>(
-                                          context: context,
-                                          builder: (_) => const _AuthDialog(mode: _AuthDialogMode.link),
-                                        ),
-                                        child: const Text('Migrate to cloud'),
-                                      ),
-                                    ),
-                                    Center(
-                                      child: TextButton(
-                                        onPressed: () => showDialog<void>(
-                                          context: context,
-                                          builder: (_) => const _AuthDialog(mode: _AuthDialogMode.signIn),
-                                        ),
-                                        child: const Text('Already have an account? Sign in'),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: StreamBuilder<double>(
-                                stream: getIt<WatchOwnedArea>()(),
-                                builder: (context, ownedAreaSnapshot) {
-                                  final areaSqm = ownedAreaSnapshot.data ?? 0;
-                                  return StatTile(
-                                    bg: scheme.primaryContainer,
-                                    fg: scheme.onPrimaryContainer,
-                                    value:
-                                        '${(areaSqm / 1000000).toStringAsFixed(2)} km²',
-                                    label: 'Territory',
-                                    radius: const BorderRadius.horizontal(
-                                      left: Radius.circular(24),
-                                    ),
-                                  );
-                                },
-                              ),
+              Expanded(
+                child: BlocBuilder<ProfileCubit, ProfileState>(
+                  builder: (context, profile) {
+                    final user = profile.user;
+                    final isAnonymous = user?.isAnonymous ?? true;
+                    final displayName = user?.displayName;
+                    final email = user?.email;
+                    final avatarUrl = user?.avatarUrl;
+                    final title = isAnonymous
+                        ? 'Guest'
+                        : (displayName ?? email ?? 'Account linked');
+                    // Once we have a real name, the second line becomes
+                    // "who" (their email) rather than repeating "synced" —
+                    // the sync state is already implied by having an
+                    // account at all.
+                    //
+                    // Anonymous sessions still sync to a real remote
+                    // `auth.uid()` (ensureSession() signs in anonymously,
+                    // not "offline") — the actual risk is losing access to
+                    // that account on uninstall/new device without a
+                    // linked email/Google identity, which is a different
+                    // claim than "device only". Found live: this line
+                    // hadn't been updated even after the sign-out dialog's
+                    // equivalent copy was fixed.
+                    final subtitle = isAnonymous
+                        ? 'Add an email or Google to keep your progress if you switch devices'
+                        : (displayName != null && email != null
+                              ? email
+                              : 'Progress syncs across devices');
+                    final initial = isAnonymous
+                        ? 'G'
+                        : (displayName ?? email ?? 'A')[0].toUpperCase();
+
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 22,
                             ),
-                            const SizedBox(width: 3),
-                            Expanded(
-                              child: StatTile(
-                                bg: scheme.tertiaryContainer,
-                                fg: scheme.onTertiaryContainer,
-                                value: '$streak',
-                                label: 'Day streak',
-                                radius: const BorderRadius.horizontal(
-                                  right: Radius.circular(24),
+                            decoration: BoxDecoration(
+                              color: scheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            child: Column(
+                              children: [
+                                if (avatarUrl != null)
+                                  ClipOval(
+                                    child: Image.network(
+                                      avatarUrl,
+                                      width: 84,
+                                      height: 84,
+                                      fit: BoxFit.cover,
+                                      // The provider's photo is a nice-to-have,
+                                      // not load-bearing — fall back to the
+                                      // initial badge rather than an error icon
+                                      // if the CDN URL 404s/expires.
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              _InitialAvatar(
+                                                initial: initial,
+                                                scheme: scheme,
+                                              ),
+                                      loadingBuilder:
+                                          (context, child, progress) {
+                                            if (progress == null) {
+                                              return child;
+                                            }
+                                            return _InitialAvatar(
+                                              initial: initial,
+                                              scheme: scheme,
+                                            );
+                                          },
+                                    ),
+                                  )
+                                else
+                                  _InitialAvatar(
+                                    initial: initial,
+                                    scheme: scheme,
+                                  ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  title,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                    color: scheme.onSurface,
+                                  ),
+                                ),
+                                Text(
+                                  subtitle,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                if (isAnonymous) ...[
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: FilledButton(
+                                      style: FilledButton.styleFrom(
+                                        minimumSize: const Size.fromHeight(48),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
+                                        ),
+                                      ),
+                                      onPressed: () => showDialog<void>(
+                                        context: context,
+                                        builder: (_) => const _AuthDialog(
+                                          mode: _AuthDialogMode.link,
+                                        ),
+                                      ),
+                                      child: const Text('Migrate to cloud'),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: TextButton(
+                                      onPressed: () => showDialog<void>(
+                                        context: context,
+                                        builder: (_) => const _AuthDialog(
+                                          mode: _AuthDialogMode.signIn,
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'Already have an account? Sign in',
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: StatTile(
+                                  bg: scheme.primaryContainer,
+                                  fg: scheme.onPrimaryContainer,
+                                  value:
+                                      '${(profile.ownedAreaSqm / 1000000).toStringAsFixed(2)} km²',
+                                  label: 'Territory',
+                                  hasError: profile.ownedAreaError,
+                                  radius: const BorderRadius.horizontal(
+                                    left: Radius.circular(24),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        Text(
-                          'Settings',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: scheme.onSurface,
+                              const SizedBox(width: 3),
+                              Expanded(
+                                child: StatTile(
+                                  bg: scheme.tertiaryContainer,
+                                  fg: scheme.onTertiaryContainer,
+                                  value: '${profile.streak}',
+                                  label: 'Day streak',
+                                  hasError: profile.streakError,
+                                  radius: const BorderRadius.horizontal(
+                                    right: Radius.circular(24),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        _SettingsRow(
-                          icon: Icons.bug_report,
-                          label: 'Alarm reliability',
-                          radius: const BorderRadius.vertical(
-                            top: Radius.circular(20),
-                            bottom: Radius.circular(8),
-                          ),
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const AlarmReliabilityTestPage(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        _SettingsRow(
-                          icon: Icons.battery_charging_full,
-                          label: 'Battery & location',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const BatteryExemptionPage(),
+                          const SizedBox(height: 18),
+                          Text(
+                            'Settings',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: scheme.onSurface,
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 3),
-                        _SettingsRow(
-                          icon: Icons.palette,
-                          label: 'Appearance',
-                          radius: const BorderRadius.vertical(
-                            top: Radius.circular(8),
-                            bottom: Radius.circular(20),
-                          ),
-                          onTap: () => _showAppearanceDialog(context),
-                        ),
-                        const SizedBox(height: 18),
-                        // Sign out is reversible (sign back in any time); Delete
-                        // account is not. Both previously used identical
-                        // red-text styling with no visual cue for the
-                        // difference in severity — found in design critique.
-                        Center(
-                          child: TextButton(
-                            style: TextButton.styleFrom(
-                              foregroundColor: scheme.onSurfaceVariant,
+                          const SizedBox(height: 10),
+                          _SettingsRow(
+                            icon: Icons.bug_report,
+                            label: 'Alarm reliability',
+                            radius: const BorderRadius.vertical(
+                              top: Radius.circular(20),
+                              bottom: Radius.circular(8),
                             ),
-                            onPressed: () => _showSignOutDialog(context),
-                            child: const Text('Sign out'),
-                          ),
-                        ),
-                        Center(
-                          child: TextButton(
-                            style: TextButton.styleFrom(
-                              foregroundColor: scheme.error,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const AlarmReliabilityTestPage(),
+                              ),
                             ),
-                            onPressed: () => _showDeleteAccountDialog(context),
-                            child: const Text('Delete account'),
                           ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                          const SizedBox(height: 3),
+                          _SettingsRow(
+                            icon: Icons.battery_charging_full,
+                            label: 'Battery & location',
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const BatteryExemptionPage(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          _SettingsRow(
+                            icon: Icons.palette,
+                            label: 'Appearance',
+                            radius: const BorderRadius.vertical(
+                              top: Radius.circular(8),
+                              bottom: Radius.circular(20),
+                            ),
+                            onTap: () => _showAppearanceDialog(context),
+                          ),
+                          const SizedBox(height: 18),
+                          // Sign out is reversible (sign back in any time); Delete
+                          // account is not. Both previously used identical
+                          // red-text styling with no visual cue for the
+                          // difference in severity — found in design critique.
+                          Center(
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                foregroundColor: scheme.onSurfaceVariant,
+                              ),
+                              onPressed: () => _showSignOutDialog(context),
+                              child: const Text('Sign out'),
+                            ),
+                          ),
+                          Center(
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                foregroundColor: scheme.error,
+                              ),
+                              onPressed: () =>
+                                  _showDeleteAccountDialog(context),
+                              child: const Text('Delete account'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -495,7 +505,11 @@ class _AuthDialogState extends State<_AuthDialog> {
         if (mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Check your email to confirm linking your account.')),
+            const SnackBar(
+              content: Text(
+                'Check your email to confirm linking your account.',
+              ),
+            ),
           );
         }
       } else {
@@ -524,17 +538,17 @@ class _AuthDialogState extends State<_AuthDialog> {
         await getIt<LinkWithGoogle>()(const NoParams());
         if (mounted) {
           Navigator.of(context).pop();
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Account linked with Google.')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Account linked with Google.')),
+          );
         }
       } else {
         await getIt<SignInWithGoogle>()(const NoParams());
         if (mounted) {
           Navigator.of(context).pop();
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Signed in with Google.')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Signed in with Google.')),
+          );
         }
       }
     } catch (e) {
@@ -547,7 +561,10 @@ class _AuthDialogState extends State<_AuthDialog> {
   Future<void> _forgotPassword() async {
     final email = _emailController.text.trim();
     if (email.isEmpty || !_emailPattern.hasMatch(email)) {
-      setState(() => _error = 'Enter your email above first, then tap "Forgot password?".');
+      setState(
+        () => _error =
+            'Enter your email above first, then tap "Forgot password?".',
+      );
       return;
     }
     setState(() {
@@ -588,13 +605,18 @@ class _AuthDialogState extends State<_AuthDialog> {
             controller: _passwordController,
             enabled: !_submitting,
             obscureText: _obscurePassword,
-            autofillHints: [isLink ? AutofillHints.newPassword : AutofillHints.password],
+            autofillHints: [
+              isLink ? AutofillHints.newPassword : AutofillHints.password,
+            ],
             decoration: InputDecoration(
               labelText: 'Password',
               suffixIcon: IconButton(
-                icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                icon: Icon(
+                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                ),
                 tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
               ),
             ),
             onSubmitted: (_) => _submitEmail(),
@@ -614,7 +636,10 @@ class _AuthDialogState extends State<_AuthDialog> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
                 _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 13),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 13,
+                ),
               ),
             ),
           ],
@@ -637,7 +662,9 @@ class _AuthDialogState extends State<_AuthDialog> {
             child: OutlinedButton.icon(
               icon: const GoogleLogo(size: 18),
               onPressed: _submitting ? null : _submitGoogle,
-              label: Text(isLink ? 'Continue with Google' : 'Sign in with Google'),
+              label: Text(
+                isLink ? 'Continue with Google' : 'Sign in with Google',
+              ),
             ),
           ),
           const SizedBox(height: 4),
@@ -645,11 +672,15 @@ class _AuthDialogState extends State<_AuthDialog> {
             onPressed: _submitting
                 ? null
                 : () => setState(() {
-                      _mode = isLink ? _AuthDialogMode.signIn : _AuthDialogMode.link;
-                      _error = null;
-                    }),
+                    _mode = isLink
+                        ? _AuthDialogMode.signIn
+                        : _AuthDialogMode.link;
+                    _error = null;
+                  }),
             child: Text(
-              isLink ? 'Already have an account? Sign in' : "Don't have an account? Migrate to cloud",
+              isLink
+                  ? 'Already have an account? Sign in'
+                  : "Don't have an account? Migrate to cloud",
             ),
           ),
         ],

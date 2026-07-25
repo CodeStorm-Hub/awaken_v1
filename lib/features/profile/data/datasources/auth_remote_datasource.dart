@@ -34,8 +34,13 @@ class AuthRemoteDataSource {
   /// credentials to the *same* user id rather than creating a new account
   /// (plan H8 — no re-keying). Supabase emails a confirmation link; the
   /// identity isn't fully non-anonymous until it's clicked.
-  Future<void> linkWithEmail({required String email, required String password}) async {
-    await _client.auth.updateUser(UserAttributes(email: email, password: password));
+  Future<void> linkWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    await _client.auth.updateUser(
+      UserAttributes(email: email, password: password),
+    );
   }
 
   /// Signs in as a *returning* linked user — deliberately distinct from
@@ -44,8 +49,14 @@ class AuthRemoteDataSource {
   /// same way Supabase's own `signInWithPassword` always behaves. Without
   /// this, a user who links an account and later loses their local session
   /// (sign out, uninstall, new device) had no way back into their own data.
-  Future<void> signInWithPassword({required String email, required String password}) async {
-    final response = await _client.auth.signInWithPassword(email: email, password: password);
+  Future<void> signInWithPassword({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _client.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
     if (response.user == null) {
       throw const AuthDataSourceException('Sign-in returned no user');
     }
@@ -69,15 +80,22 @@ class AuthRemoteDataSource {
   /// web-redirect `getLinkIdentityUrl`/`linkIdentity` pair.
   Future<void> linkWithGoogle() async {
     if (!_googleSignInInitialized) {
-      await GoogleSignIn.instance.initialize(serverClientId: Env.googleOAuthClientId);
+      await GoogleSignIn.instance.initialize(
+        serverClientId: Env.googleOAuthClientId,
+      );
       _googleSignInInitialized = true;
     }
     final account = await GoogleSignIn.instance.authenticate();
     final idToken = account.authentication.idToken;
     if (idToken == null) {
-      throw const AuthDataSourceException('Google sign-in returned no ID token');
+      throw const AuthDataSourceException(
+        'Google sign-in returned no ID token',
+      );
     }
-    await _client.auth.linkIdentityWithIdToken(provider: OAuthProvider.google, idToken: idToken);
+    await _client.auth.linkIdentityWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+    );
   }
 
   /// Signs in as a returning user via Google — the counterpart to
@@ -86,15 +104,22 @@ class AuthRemoteDataSource {
   /// active, same as [signInWithPassword].
   Future<void> signInWithGoogle() async {
     if (!_googleSignInInitialized) {
-      await GoogleSignIn.instance.initialize(serverClientId: Env.googleOAuthClientId);
+      await GoogleSignIn.instance.initialize(
+        serverClientId: Env.googleOAuthClientId,
+      );
       _googleSignInInitialized = true;
     }
     final account = await GoogleSignIn.instance.authenticate();
     final idToken = account.authentication.idToken;
     if (idToken == null) {
-      throw const AuthDataSourceException('Google sign-in returned no ID token');
+      throw const AuthDataSourceException(
+        'Google sign-in returned no ID token',
+      );
     }
-    await _client.auth.signInWithIdToken(provider: OAuthProvider.google, idToken: idToken);
+    await _client.auth.signInWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+    );
   }
 
   /// Forces a token refresh against Supabase. Needed because claims baked
@@ -123,7 +148,9 @@ class AuthRemoteDataSource {
     final response = await _client.functions.invoke('delete-account');
     final data = response.data;
     if (response.status != 200 || (data is Map && data['error'] != null)) {
-      throw AuthDataSourceException('Account deletion failed: ${response.data}');
+      throw AuthDataSourceException(
+        'Account deletion failed: ${response.data}',
+      );
     }
   }
 }

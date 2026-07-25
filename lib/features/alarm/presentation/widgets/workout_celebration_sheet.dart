@@ -8,7 +8,11 @@ import '../../domain/usecases/watch_current_streak.dart';
 /// The "hero moment" after a verified dismissal (plan §6 Phase 4 / Claude
 /// Design handoff "CelebrationSheet").
 class WorkoutCelebrationSheet extends StatelessWidget {
-  const WorkoutCelebrationSheet({required this.alarm, required this.repsCompleted, super.key});
+  const WorkoutCelebrationSheet({
+    required this.alarm,
+    required this.repsCompleted,
+    super.key,
+  });
 
   final AlarmSchedule alarm;
   final int repsCompleted;
@@ -42,7 +46,11 @@ class WorkoutCelebrationSheet extends StatelessWidget {
               size: 116,
               color: scheme.primaryContainer,
               animatePop: true,
-              child: Icon(Icons.emoji_events, size: 52, color: scheme.onPrimaryContainer),
+              child: Icon(
+                Icons.emoji_events,
+                size: 52,
+                color: scheme.onPrimaryContainer,
+              ),
             ),
             const SizedBox(height: 18),
             Text(
@@ -55,7 +63,9 @@ class WorkoutCelebrationSheet extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               "Nice work — that's how mornings are won.",
-              style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
@@ -101,7 +111,9 @@ class WorkoutCelebrationSheet extends StatelessWidget {
               child: FilledButton(
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(56),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                 ),
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text('Nice!'),
@@ -146,7 +158,10 @@ class _StatChip extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (icon != null) ...[Icon(icon, size: 24, color: fg), const SizedBox(width: 4)],
+              if (icon != null) ...[
+                Icon(icon, size: 24, color: fg),
+                const SizedBox(width: 4),
+              ],
               Text(
                 value,
                 style: TextStyle(
@@ -159,7 +174,14 @@ class _StatChip extends StatelessWidget {
               ),
             ],
           ),
-          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: fg,
+            ),
+          ),
         ],
       ),
     );

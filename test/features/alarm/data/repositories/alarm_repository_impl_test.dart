@@ -1,4 +1,5 @@
 import 'package:alarm/alarm.dart';
+import 'package:awaken/core/platform/system_capabilities.dart';
 import 'package:awaken/features/alarm/data/datasources/alarm_local_datasource.dart';
 import 'package:awaken/features/alarm/data/datasources/wake_up_tax_store.dart';
 import 'package:awaken/features/alarm/data/repositories/alarm_repository_impl.dart';
@@ -15,6 +16,8 @@ class _MockLocalWriter extends Mock implements LocalWriter {}
 
 class _MockWakeUpTaxStore extends Mock implements WakeUpTaxStore {}
 
+class _MockSystemCapabilities extends Mock implements SystemCapabilities {}
+
 class _FakeAlarmSettings extends Fake implements AlarmSettings {}
 
 void main() {
@@ -26,6 +29,7 @@ void main() {
   late _MockLocalWriter localWriter;
   late AppDatabase db;
   late _MockWakeUpTaxStore taxStore;
+  late _MockSystemCapabilities systemCapabilities;
   late AlarmRepositoryImpl repository;
 
   final alarm = AlarmSchedule(
@@ -40,7 +44,8 @@ void main() {
     localWriter = _MockLocalWriter();
     db = AppDatabase(NativeDatabase.memory());
     taxStore = _MockWakeUpTaxStore();
-    repository = AlarmRepositoryImpl(local, localWriter, db, taxStore);
+    systemCapabilities = _MockSystemCapabilities();
+    repository = AlarmRepositoryImpl(local, localWriter, db, taxStore, systemCapabilities);
   });
 
   tearDown(() => db.close());

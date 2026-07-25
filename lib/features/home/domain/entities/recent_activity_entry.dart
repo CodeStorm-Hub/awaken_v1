@@ -7,7 +7,11 @@ enum RecentActivityKind { alarmDismissed, territoryCaptured }
 /// entry with no backing event data; that kind is deliberately not
 /// modeled here since nothing tracks squad-join timestamps yet).
 class RecentActivityEntry extends Equatable {
-  const RecentActivityEntry({required this.kind, required this.text, required this.occurredAt});
+  const RecentActivityEntry({
+    required this.kind,
+    required this.text,
+    required this.occurredAt,
+  });
 
   final RecentActivityKind kind;
   final String text;

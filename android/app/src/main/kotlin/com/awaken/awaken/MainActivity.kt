@@ -60,6 +60,8 @@ class MainActivity : FlutterActivity() {
                     "openExactAlarmSettings" -> result.success(openExactAlarmSettings())
                     "getManufacturer" -> result.success(Build.MANUFACTURER)
                     "openOemAutostartSettings" -> result.success(openOemAutostartSettings())
+                    "startAlarmLockdown" -> result.success(startAlarmLockdown())
+                    "stopAlarmLockdown" -> result.success(stopAlarmLockdown())
                     else -> result.notImplemented()
                 }
             }
@@ -141,5 +143,42 @@ class MainActivity : FlutterActivity() {
             }
         }
         return false
+    }
+
+    /**
+     * Screen pinning (`Activity.startLockTask()`) — a standard API any app
+     * can call from a resumed Activity, distinct from (and far less
+     * invasive than) Device Owner/kiosk mode: it disables the Home/Recents
+     * buttons and shows the system's own "app is pinned" affordance, but
+     * the OS *always* provides an unpin gesture (long-press Back+Overview,
+     * or on gesture nav, swipe-up-and-hold) that works regardless of this
+     * app's own state — so a crash or bug here can never actually strand
+     * the user with no way out. Deliberately does *not* touch notification
+     * shade/quick-settings access (that restriction requires Device Owner,
+     * which isn't installable on an already-set-up phone via a normal app
+     * flow — see the alarm-lockdown planning discussion) and never blocks
+     * incoming calls, which Android's own phone UI takes over regardless
+     * of pinning state.
+     */
+    private fun startAlarmLockdown(): Boolean {
+        return try {
+            startLockTask()
+            true
+        } catch (e: IllegalStateException) {
+            // Already pinned (e.g. a duplicate call), or the activity isn't
+            // in a state that allows it — not fatal, the ring screen's own
+            // UI blocking (PopScope, full-screen overlay) still applies.
+            false
+        }
+    }
+
+    private fun stopAlarmLockdown(): Boolean {
+        return try {
+            stopLockTask()
+            true
+        } catch (e: IllegalStateException) {
+            // Not currently pinned — nothing to do.
+            false
+        }
     }
 }
