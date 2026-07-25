@@ -1,10 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../../onboarding/presentation/pages/battery_exemption_page.dart';
-import '../../../profile/presentation/pages/profile_page.dart';
+import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
 import '../../domain/entities/alarm_schedule.dart';
 import '../bloc/alarm_cubit.dart';
 import '../bloc/alarm_state.dart';
@@ -89,14 +91,7 @@ class _AlarmListPageState extends State<AlarmListPage> {
                               ),
                             ],
                           ),
-                          ProfileAvatarButton(
-                            initial: 'G',
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const ProfilePage(),
-                              ),
-                            ),
-                          ),
+                          const CurrentUserAvatarButton(),
                         ],
                       ),
                     ),
@@ -368,13 +363,20 @@ class _RiseIn extends StatefulWidget {
 
 class _RiseInState extends State<_RiseIn> {
   bool _played = false;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    Future.delayed(widget.delay, () {
+    _timer = Timer(widget.delay, () {
       if (mounted) setState(() => _played = true);
     });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   @override

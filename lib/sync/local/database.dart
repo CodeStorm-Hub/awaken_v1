@@ -37,6 +37,25 @@ class AppDatabase extends _$AppDatabase {
           }
         },
       );
+
+  /// Wipes every locally-cached row. This DB has no per-row `user_id`
+  /// scoping — it's a single cache of "whichever identity is currently
+  /// signed in," not a multi-tenant store — so switching identities
+  /// (sign-out, delete-account, or a new anonymous session starting up
+  /// afterwards) without clearing it first leaks the previous identity's
+  /// alarms/runs/territories into the next one, and the outbox would try
+  /// to push the old identity's pending writes under the new one's
+  /// `user_id`. Call this right before/after ending a Supabase session.
+  Future<void> clearAllLocalData() {
+    return transaction(() async {
+      await delete(syncOutbox).go();
+      await delete(sessions).go();
+      await delete(runs).go();
+      await delete(territories).go();
+      await delete(alarms).go();
+      await delete(userStats).go();
+    });
+  }
 }
 
 LazyDatabase _openConnection() {

@@ -16,6 +16,7 @@ import 'features/alarm/presentation/pages/alarm_ring_page.dart';
 import 'features/onboarding/domain/usecases/has_seen_onboarding.dart';
 import 'features/onboarding/domain/usecases/mark_onboarding_seen.dart';
 import 'features/onboarding/presentation/pages/onboarding_page.dart';
+import 'features/profile/domain/usecases/refresh_auth_session.dart';
 import 'features/shell/presentation/pages/app_shell_page.dart';
 
 class AwakenApp extends StatelessWidget {
@@ -77,13 +78,14 @@ class _StartupFlow extends StatefulWidget {
   State<_StartupFlow> createState() => _StartupFlowState();
 }
 
-class _StartupFlowState extends State<_StartupFlow> {
+class _StartupFlowState extends State<_StartupFlow> with WidgetsBindingObserver {
   var _loading = true;
   var _onboarded = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     getIt<HasSeenOnboarding>()(const NoParams()).then((seen) {
       if (mounted) {
         setState(() {
@@ -92,6 +94,23 @@ class _StartupFlowState extends State<_StartupFlow> {
         });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Picks up the common "link email → switch to mail app → tap confirm →
+    // come back" case: the confirmation happens entirely outside the app,
+    // so resuming is the only reliable signal to re-check auth state. See
+    // AuthRemoteDataSource.refreshSession for why this is needed at all.
+    if (state == AppLifecycleState.resumed) {
+      unawaited(getIt<RefreshAuthSession>()(const NoParams()));
+    }
   }
 
   @override

@@ -15,15 +15,39 @@ class ProfileAvatarButton extends StatelessWidget {
   const ProfileAvatarButton({
     required this.initial,
     required this.onTap,
+    this.avatarUrl,
     super.key,
   });
 
   final String initial;
   final VoidCallback onTap;
 
+  /// The signed-in-with-Google user's provider photo, if any. Falls back
+  /// to [initial] when null, or if the image fails to load — same
+  /// fallback behavior as the Profile page's own avatar.
+  final String? avatarUrl;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final fallback = Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer,
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Text(
+          initial,
+          style: TextStyle(
+            color: scheme.onSecondaryContainer,
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+          ),
+        ),
+      ),
+    );
     return Semantics(
       label: 'Profile',
       button: true,
@@ -39,24 +63,19 @@ class ProfileAvatarButton extends StatelessWidget {
               width: 44,
               height: 44,
               child: Center(
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: scheme.secondaryContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      initial,
-                      style: TextStyle(
-                        color: scheme.onSecondaryContainer,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
+                child: avatarUrl == null
+                    ? fallback
+                    : ClipOval(
+                        child: Image.network(
+                          avatarUrl!,
+                          width: 40,
+                          height: 40,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => fallback,
+                          loadingBuilder: (context, child, progress) =>
+                              progress == null ? child : fallback,
+                        ),
                       ),
-                    ),
-                  ),
-                ),
               ),
             ),
           ),

@@ -7,7 +7,7 @@ import '../../../alarm/domain/entities/alarm_schedule.dart';
 import '../../../alarm/domain/usecases/watch_current_streak.dart';
 import '../../../alarm/presentation/bloc/alarm_cubit.dart';
 import '../../../alarm/presentation/bloc/alarm_state.dart';
-import '../../../profile/presentation/pages/profile_page.dart';
+import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
 import '../../../squad/domain/entities/squad.dart';
 import '../../../squad/domain/usecases/watch_my_rank.dart';
 import '../../../squad/domain/usecases/watch_my_squad.dart';
@@ -142,14 +142,7 @@ class HomePage extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              ProfileAvatarButton(
-                                initial: 'G',
-                                onTap: () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const ProfilePage(),
-                                  ),
-                                ),
-                              ),
+                              const CurrentUserAvatarButton(),
                             ],
                           ),
                         ],

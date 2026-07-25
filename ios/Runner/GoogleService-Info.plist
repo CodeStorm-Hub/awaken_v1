@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>230513820686-640n9b4ieo9aaraqpj9gs1ajs4e5bp97.apps.googleusercontent.com</string>
+	<string>230513820686-6ot9m4lqb58nlgp574lb8qkivmhp2cp2.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.230513820686-640n9b4ieo9aaraqpj9gs1ajs4e5bp97</string>
+	<string>com.googleusercontent.apps.230513820686-6ot9m4lqb58nlgp574lb8qkivmhp2cp2</string>
 	<key>ANDROID_CLIENT_ID</key>
-	<string>230513820686-dvgdso7035jcvq4jhbu4n1bvrpudqr7v.apps.googleusercontent.com</string>
+	<string>230513820686-1mrijlbf9686g2k12hcpcgho9315t0s0.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
 	<string>AIzaSyBd0CwKQXxaJpvEoukfG2zODHGi6XR_79o</string>
 	<key>GCM_SENDER_ID</key>
@@ -15,7 +15,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.example.awaken</string>
+	<string>com.awaken.awaken</string>
 	<key>PROJECT_ID</key>
 	<string>awaken-27f39</string>
 	<key>STORAGE_BUCKET</key>
@@ -31,6 +31,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:230513820686:ios:084195da84579419d0285f</string>
+	<string>1:230513820686:ios:df9c7956cf0fca20d0285f</string>
 </dict>
 </plist>

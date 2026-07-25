@@ -4,7 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
-import '../../../profile/presentation/pages/profile_page.dart';
+import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
 import '../../domain/entities/leaderboard_entry.dart';
 import '../bloc/squad_cubit.dart';
 import '../bloc/squad_state.dart';
@@ -67,14 +67,7 @@ class _SquadView extends StatelessWidget {
                           ),
                         ],
                       ),
-                      ProfileAvatarButton(
-                        initial: 'G',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const ProfilePage(),
-                          ),
-                        ),
-                      ),
+                      const CurrentUserAvatarButton(),
                     ],
                   ),
                 ),

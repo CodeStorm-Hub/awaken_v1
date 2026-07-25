@@ -132,6 +132,24 @@
       "sourceType": "github",
       "skillPath": "skills/flutter-use-http-package/SKILL.md",
       "computedHash": "bd169b5cee731751f3b32f43c94cfe9495fc8e6c3eb621b785c69e38b77d0e19"
+    },
+    "maplibre-mapbox-migration": {
+      "source": "maplibre/maplibre-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/maplibre-mapbox-migration/SKILL.md",
+      "computedHash": "662884718c59cb3ece8008e8b9ccb45a78f5305db2cc69863a885b59637623cb"
+    },
+    "maplibre-pmtiles-patterns": {
+      "source": "maplibre/maplibre-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/maplibre-pmtiles-patterns/SKILL.md",
+      "computedHash": "9f9ff505c53b149a45b7a998241f5236e72203755c3104e3a54370797f601393"
+    },
+    "maplibre-tile-sources": {
+      "source": "maplibre/maplibre-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/maplibre-tile-sources/SKILL.md",
+      "computedHash": "d46a88ec7b3896870019a3b083005589d4ff4b4850f2d54490eaf0c1cc312f18"
     }
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/google_logo.dart';
 import '../../../../core/theme/theme_mode_cubit.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../../alarm/domain/usecases/watch_current_streak.dart';
@@ -13,8 +14,12 @@ import '../../domain/entities/app_user.dart';
 import '../../domain/usecases/delete_account.dart';
 import '../../domain/usecases/link_with_email.dart';
 import '../../domain/usecases/link_with_google.dart';
+import '../../domain/usecases/send_password_reset_email.dart';
+import '../../domain/usecases/sign_in_with_google.dart';
+import '../../domain/usecases/sign_in_with_password.dart';
 import '../../domain/usecases/sign_out.dart';
 import '../../domain/usecases/watch_current_user.dart';
+import '../auth_error_message.dart';
 
 /// Profile screen (Claude Design handoff — `isProfile`). Streak and
 /// territory area are real (`WatchCurrentStreak`, `WatchOwnedArea` — plan
@@ -88,6 +93,24 @@ class ProfilePage extends StatelessWidget {
                           builder: (context, userSnapshot) {
                             final user = userSnapshot.data;
                             final isAnonymous = user?.isAnonymous ?? true;
+                            final displayName = user?.displayName;
+                            final email = user?.email;
+                            final avatarUrl = user?.avatarUrl;
+                            final title = isAnonymous
+                                ? 'Guest'
+                                : (displayName ?? email ?? 'Account linked');
+                            // Once we have a real name, the second line
+                            // becomes "who" (their email) rather than
+                            // repeating "synced" — the sync state is
+                            // already implied by having an account at all.
+                            final subtitle = isAnonymous
+                                ? 'Progress is saved on this device only'
+                                : (displayName != null && email != null
+                                      ? email
+                                      : 'Progress syncs across devices');
+                            final initial = isAnonymous
+                                ? 'G'
+                                : (displayName ?? email ?? 'A')[0].toUpperCase();
                             return Container(
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(
@@ -100,21 +123,31 @@ class ProfilePage extends StatelessWidget {
                               ),
                               child: Column(
                                 children: [
-                                  ExpressiveFlower(
-                                    size: 84,
-                                    color: scheme.secondaryContainer,
-                                    child: Text(
-                                      isAnonymous ? 'G' : 'A',
-                                      style: TextStyle(
-                                        fontSize: 28,
-                                        fontWeight: FontWeight.w800,
-                                        color: scheme.onSecondaryContainer,
+                                  if (avatarUrl != null)
+                                    ClipOval(
+                                      child: Image.network(
+                                        avatarUrl,
+                                        width: 84,
+                                        height: 84,
+                                        fit: BoxFit.cover,
+                                        // The provider's photo is a nice-to-have,
+                                        // not load-bearing — fall back to the
+                                        // initial badge rather than an error icon
+                                        // if the CDN URL 404s/expires.
+                                        errorBuilder: (context, error, stackTrace) =>
+                                            _InitialAvatar(initial: initial, scheme: scheme),
+                                        loadingBuilder: (context, child, progress) {
+                                          if (progress == null) return child;
+                                          return _InitialAvatar(initial: initial, scheme: scheme);
+                                        },
                                       ),
-                                    ),
-                                  ),
+                                    )
+                                  else
+                                    _InitialAvatar(initial: initial, scheme: scheme),
                                   const SizedBox(height: 8),
                                   Text(
-                                    isAnonymous ? 'Guest' : 'Account linked',
+                                    title,
+                                    textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 18,
@@ -122,9 +155,8 @@ class ProfilePage extends StatelessWidget {
                                     ),
                                   ),
                                   Text(
-                                    isAnonymous
-                                        ? 'Progress is saved on this device only'
-                                        : 'Progress syncs across devices',
+                                    subtitle,
+                                    textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: scheme.onSurfaceVariant,
@@ -145,9 +177,20 @@ class ProfilePage extends StatelessWidget {
                                             ),
                                           ),
                                         ),
-                                        onPressed: () =>
-                                            _showMigrateToCloudDialog(context),
+                                        onPressed: () => showDialog<void>(
+                                          context: context,
+                                          builder: (_) => const _AuthDialog(mode: _AuthDialogMode.link),
+                                        ),
                                         child: const Text('Migrate to cloud'),
+                                      ),
+                                    ),
+                                    Center(
+                                      child: TextButton(
+                                        onPressed: () => showDialog<void>(
+                                          context: context,
+                                          builder: (_) => const _AuthDialog(mode: _AuthDialogMode.signIn),
+                                        ),
+                                        child: const Text('Already have an account? Sign in'),
                                       ),
                                     ),
                                   ],
@@ -315,8 +358,8 @@ Future<void> _showSignOutDialog(BuildContext context) async {
     builder: (dialogContext) => AlertDialog(
       title: const Text('Sign out?'),
       content: const Text(
-        "You'll lose access to your cloud-synced data on this device unless you've linked an "
-        'account. Data already on this device stays put.',
+        'This clears your data from this device. If you linked an email or Google account, '
+        "it's still safe in the cloud — sign back in any time to get it back.",
       ),
       actions: [
         TextButton(
@@ -370,106 +413,271 @@ Future<void> _showDeleteAccountDialog(BuildContext context) async {
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(friendlyAuthErrorMessage(e))));
     }
   }
 }
 
-Future<void> _showMigrateToCloudDialog(BuildContext context) async {
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
+enum _AuthDialogMode { link, signIn }
 
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) {
-      return AlertDialog(
-        title: const Text('Migrate to cloud'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password'),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () async {
-                  final email = emailController.text.trim();
-                  final password = passwordController.text;
-                  if (email.isEmpty || password.isEmpty) return;
-                  Navigator.of(dialogContext).pop();
-                  try {
-                    await getIt<LinkWithEmail>()(
-                      email: email,
-                      password: password,
-                    );
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Check your email to confirm linking your account.',
-                          ),
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text('$e')));
-                    }
-                  }
-                },
-                child: const Text('Continue with email'),
+final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+/// One dialog, two modes: linking an anonymous session to email/password
+/// (the "sign-up" equivalent) or signing in as a returning linked user —
+/// the flow that was previously missing entirely, leaving anyone who lost
+/// their local session with no way back into their own account. Rebuilt as
+/// a StatefulWidget (the old version was a stateless closure) specifically
+/// to support inline loading/error state and a submit-lock, since the old
+/// dialog closed itself before its async call even resolved.
+class _AuthDialog extends StatefulWidget {
+  const _AuthDialog({required this.mode});
+
+  final _AuthDialogMode mode;
+
+  @override
+  State<_AuthDialog> createState() => _AuthDialogState();
+}
+
+class _AuthDialogState extends State<_AuthDialog> {
+  late var _mode = widget.mode;
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  var _obscurePassword = true;
+  var _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  String? _validate() {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    if (email.isEmpty || !_emailPattern.hasMatch(email)) {
+      return 'Enter a valid email address.';
+    }
+    if (password.length < 6) {
+      return 'Password must be at least 6 characters.';
+    }
+    return null;
+  }
+
+  Future<void> _submitEmail() async {
+    final validationError = _validate();
+    if (validationError != null) {
+      setState(() => _error = validationError);
+      return;
+    }
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      if (_mode == _AuthDialogMode.link) {
+        await getIt<LinkWithEmail>()(email: email, password: password);
+        if (mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Check your email to confirm linking your account.')),
+          );
+        }
+      } else {
+        await getIt<SignInWithPassword>()(email: email, password: password);
+        if (mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Signed in.')));
+        }
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = friendlyAuthErrorMessage(e));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _submitGoogle() async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      if (_mode == _AuthDialogMode.link) {
+        await getIt<LinkWithGoogle>()(const NoParams());
+        if (mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Account linked with Google.')));
+        }
+      } else {
+        await getIt<SignInWithGoogle>()(const NoParams());
+        if (mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Signed in with Google.')));
+        }
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = friendlyAuthErrorMessage(e));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !_emailPattern.hasMatch(email)) {
+      setState(() => _error = 'Enter your email above first, then tap "Forgot password?".');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await getIt<SendPasswordResetEmail>()(email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Password reset email sent to $email.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = friendlyAuthErrorMessage(e));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isLink = _mode == _AuthDialogMode.link;
+    return AlertDialog(
+      title: Text(isLink ? 'Migrate to cloud' : 'Sign in'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _emailController,
+            enabled: !_submitting,
+            keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
+            decoration: const InputDecoration(labelText: 'Email'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _passwordController,
+            enabled: !_submitting,
+            obscureText: _obscurePassword,
+            autofillHints: [isLink ? AutofillHints.newPassword : AutofillHints.password],
+            decoration: InputDecoration(
+              labelText: 'Password',
+              suffixIcon: IconButton(
+                icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
               ),
             ),
+            onSubmitted: (_) => _submitEmail(),
+          ),
+          if (!isLink) ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _submitting ? null : _forgotPassword,
+                child: const Text('Forgot password?'),
+              ),
+            ),
+          ] else
             const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.g_mobiledata),
-                onPressed: () async {
-                  Navigator.of(dialogContext).pop();
-                  try {
-                    await getIt<LinkWithGoogle>()(const NoParams());
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Account linked with Google.'),
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text('$e')));
-                    }
-                  }
-                },
-                label: const Text('Continue with Google'),
+          if (_error != null) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 13),
               ),
             ),
           ],
-        ),
-        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _submitting ? null : _submitEmail,
+              child: _submitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(isLink ? 'Continue with email' : 'Sign in'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              icon: const GoogleLogo(size: 18),
+              onPressed: _submitting ? null : _submitGoogle,
+              label: Text(isLink ? 'Continue with Google' : 'Sign in with Google'),
+            ),
+          ),
+          const SizedBox(height: 4),
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
+            onPressed: _submitting
+                ? null
+                : () => setState(() {
+                      _mode = isLink ? _AuthDialogMode.signIn : _AuthDialogMode.link;
+                      _error = null;
+                    }),
+            child: Text(
+              isLink ? 'Already have an account? Sign in' : "Don't have an account? Migrate to cloud",
+            ),
           ),
         ],
-      );
-    },
-  );
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
+}
+
+/// The letter-badge fallback shown when there's no provider photo (every
+/// email/password account, and anonymous/loading/error states for linked
+/// ones).
+class _InitialAvatar extends StatelessWidget {
+  const _InitialAvatar({required this.initial, required this.scheme});
+
+  final String initial;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return ExpressiveFlower(
+      size: 84,
+      color: scheme.secondaryContainer,
+      child: Text(
+        initial,
+        style: TextStyle(
+          fontSize: 28,
+          fontWeight: FontWeight.w800,
+          color: scheme.onSecondaryContainer,
+        ),
+      ),
+    );
+  }
 }
 
 class _SettingsRow extends StatelessWidget {

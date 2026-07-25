@@ -59,6 +59,14 @@ abstract final class Env {
   /// project's other "needs a human in a console somewhere" notes).
   static String? get googleOAuthClientId => dotenv.maybeGet('GOOGLE_OAUTH_CLIENT_ID');
 
+  /// Sentry DSN is a public identifier (not a secret — safe to ship
+  /// client-side per Sentry's own docs), but optional: unset until a real
+  /// Sentry project exists. `SentryFlutter.init` is called unconditionally
+  /// with `dsn: sentryDsn ?? ''` — passing an empty DSN makes the SDK a
+  /// safe no-op (still installs Flutter/zone error handlers, just never
+  /// sends) rather than crashing bootstrap when this is unset.
+  static String? get sentryDsn => dotenv.maybeGet('SENTRY_DSN');
+
   static String _require(String key) {
     final value = dotenv.maybeGet(key);
     if (value == null || value.isEmpty) {

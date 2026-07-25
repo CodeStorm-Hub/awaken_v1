@@ -7,25 +7,17 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:230513820686:android:c71ef9ea26c0c232d0285f",
+        "mobilesdk_app_id": "1:230513820686:android:812ee00dff00fc69d0285f",
         "android_client_info": {
-          "package_name": "com.example.awaken"
+          "package_name": "com.awaken.awaken"
         }
       },
       "oauth_client": [
         {
-          "client_id": "230513820686-dvgdso7035jcvq4jhbu4n1bvrpudqr7v.apps.googleusercontent.com",
+          "client_id": "230513820686-ms0fv6pcfa3frpacrvnv8k58itc71at5.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.example.awaken",
-            "certificate_hash": "1ba8506c8bf503447cb46f31660994484f5c7440"
-          }
-        },
-        {
-          "client_id": "230513820686-ua1prkedtbtceb4d39e2kqg5m23q7te8.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.example.awaken",
+            "package_name": "com.awaken.awaken",
             "certificate_hash": "1441a3dee9bfd8f926414d626855d7c9bd3239b1"
           }
         },
@@ -47,10 +39,54 @@
               "client_type": 3
             },
             {
-              "client_id": "230513820686-640n9b4ieo9aaraqpj9gs1ajs4e5bp97.apps.googleusercontent.com",
+              "client_id": "230513820686-6ot9m4lqb58nlgp574lb8qkivmhp2cp2.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.example.awaken"
+                "bundle_id": "com.awaken.awaken"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:230513820686:android:cb1b8de549b2fc6ed0285f",
+        "android_client_info": {
+          "package_name": "com.awaken.awaken.dev"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "230513820686-1mrijlbf9686g2k12hcpcgho9315t0s0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.awaken.awaken.dev",
+            "certificate_hash": "1441a3dee9bfd8f926414d626855d7c9bd3239b1"
+          }
+        },
+        {
+          "client_id": "230513820686-ku2co5m68332qjv7t0cgbe5vk8nlvrea.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDZJQFYBKcCdEStfr9McOiD5bWWbC3V7A8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "230513820686-ku2co5m68332qjv7t0cgbe5vk8nlvrea.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "230513820686-6ot9m4lqb58nlgp574lb8qkivmhp2cp2.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.awaken.awaken"
               }
             }
           ]

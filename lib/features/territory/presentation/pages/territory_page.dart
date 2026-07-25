@@ -6,8 +6,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../../core/config/env.dart';
 import '../../../../core/di/injection.dart';
-import '../../../../core/theme/expressive_widgets.dart';
-import '../../../profile/presentation/pages/profile_page.dart';
+import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
 import '../../domain/entities/geo_bounds.dart';
 import '../../domain/entities/territory.dart';
 import '../../domain/usecases/refresh_territories.dart';
@@ -206,12 +205,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
                       color: scheme.onSurface,
                     ),
                   ),
-                  ProfileAvatarButton(
-                    initial: 'G',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ProfilePage()),
-                    ),
-                  ),
+                  const CurrentUserAvatarButton(),
                 ],
               ),
             ),

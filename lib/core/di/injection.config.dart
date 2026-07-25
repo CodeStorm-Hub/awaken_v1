@@ -74,6 +74,14 @@ import '../../features/profile/domain/usecases/ensure_auth_session.dart'
     as _i688;
 import '../../features/profile/domain/usecases/link_with_email.dart' as _i243;
 import '../../features/profile/domain/usecases/link_with_google.dart' as _i343;
+import '../../features/profile/domain/usecases/refresh_auth_session.dart'
+    as _i385;
+import '../../features/profile/domain/usecases/send_password_reset_email.dart'
+    as _i412;
+import '../../features/profile/domain/usecases/sign_in_with_google.dart'
+    as _i985;
+import '../../features/profile/domain/usecases/sign_in_with_password.dart'
+    as _i224;
 import '../../features/profile/domain/usecases/sign_out.dart' as _i487;
 import '../../features/profile/domain/usecases/watch_current_user.dart'
     as _i560;
@@ -237,6 +245,13 @@ _i174.GetIt init(
   gh.lazySingleton<_i162.BatteryExemptionRepository>(
     () => _i694.BatteryExemptionRepositoryImpl(gh<_i703.SystemCapabilities>()),
   );
+  gh.lazySingleton<_i487.AuthRepository>(
+    () => _i1.AuthRepositoryImpl(
+      gh<_i670.AuthRemoteDataSource>(),
+      gh<_i90.AppDatabase>(),
+      gh<_i1039.PullDownSync>(),
+    ),
+  );
   gh.factory<_i490.RefreshTerritories>(
     () => _i490.RefreshTerritories(gh<_i706.TerritoryRepository>()),
   );
@@ -271,9 +286,6 @@ _i174.GetIt init(
       gh<_i703.WatchVerificationState>(),
       gh<_i1051.SquadRepository>(),
     ),
-  );
-  gh.lazySingleton<_i487.AuthRepository>(
-    () => _i1.AuthRepositoryImpl(gh<_i670.AuthRemoteDataSource>()),
   );
   gh.lazySingleton<_i959.WakeUpTaxStore>(
     () => _i959.WakeUpTaxStore(gh<_i90.AppDatabase>(), gh<_i355.LocalWriter>()),
@@ -331,6 +343,18 @@ _i174.GetIt init(
   );
   gh.factory<_i343.LinkWithGoogle>(
     () => _i343.LinkWithGoogle(gh<_i487.AuthRepository>()),
+  );
+  gh.factory<_i385.RefreshAuthSession>(
+    () => _i385.RefreshAuthSession(gh<_i487.AuthRepository>()),
+  );
+  gh.factory<_i412.SendPasswordResetEmail>(
+    () => _i412.SendPasswordResetEmail(gh<_i487.AuthRepository>()),
+  );
+  gh.factory<_i985.SignInWithGoogle>(
+    () => _i985.SignInWithGoogle(gh<_i487.AuthRepository>()),
+  );
+  gh.factory<_i224.SignInWithPassword>(
+    () => _i224.SignInWithPassword(gh<_i487.AuthRepository>()),
   );
   gh.factory<_i487.SignOut>(() => _i487.SignOut(gh<_i487.AuthRepository>()));
   gh.factory<_i560.WatchCurrentUser>(

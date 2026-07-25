@@ -15,6 +15,13 @@ abstract interface class AuthRepository {
   /// Returns the resulting user.
   Future<AppUser> ensureSession();
 
+  /// Forces a token refresh so JWT claims (notably `is_anonymous`) reflect
+  /// server-side state that changed out-of-band, e.g. an email-link
+  /// confirmation completed in a browser/mail app while this app was
+  /// backgrounded. No-ops if there's no active session. See
+  /// `AuthRemoteDataSource.refreshSession` for the full rationale.
+  Future<void> refreshSession();
+
   /// Upgrades the current anonymous session to a real email/password
   /// identity — same `uid`, no re-keying (H8's documented pattern:
   /// `updateUser` on an anonymous session attaches credentials to it rather
@@ -22,9 +29,22 @@ abstract interface class AuthRepository {
   /// the account isn't fully "linked" until the user clicks it.
   Future<void> linkWithEmail({required String email, required String password});
 
+  /// Signs in as a returning linked user, replacing whatever session
+  /// (typically anonymous) is currently active. The counterpart to
+  /// [linkWithEmail] that was previously missing entirely.
+  Future<void> signInWithPassword({required String email, required String password});
+
+  /// Requests a password-recovery email for an existing linked account.
+  Future<void> sendPasswordResetEmail(String email);
+
   /// Upgrades the current anonymous session via native Google Sign-In +
   /// ID-token linking (no browser redirect) — same `uid`, no re-keying.
   Future<void> linkWithGoogle();
+
+  /// Signs in as a returning user via Google, replacing whatever session is
+  /// currently active. The counterpart to [linkWithGoogle] that was
+  /// previously missing.
+  Future<void> signInWithGoogle();
 
   /// Ends the remote session. Local Drift data is never touched — this
   /// only signs out of Supabase; the point of the offline-first design is
