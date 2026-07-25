@@ -260,15 +260,30 @@ Organized by area, in rough priority order within each area.
 - [x] **`active_run_page.dart` now has full map style-load failure handling** — same
       `MapStyleLoader`/timeout/retry/overlay treatment as the territory page (previously had none at
       all).
-- [x] **Self-hosted tile fallback added** (`infra/tile-worker/`) — a vendored, adapted copy of
-      Protomaps' official Cloudflare Worker (byte-range reads over an R2-hosted `.pmtiles` file),
-      installed/type-checked/dry-run-built in-repo. Backing data: a global, maxzoom-6 Protomaps OSM
-      extract (~45MB, `generate_basemap.sh` regenerates it) — country/city-level detail, intended as
-      a last-resort tier only, **not** a replacement for OpenFreeMap as primary (street-level detail
-      globally would mean ~1TB+ storage, a real ongoing cost/maintenance commitment that was
-      deliberately declined). See `infra/tile-worker/README.md` for the deploy steps (require your
-      own Cloudflare login — not something that can be scripted end-to-end by an assistant).
-      Estimated cost at this app's scale: $0/month (well inside R2 + Workers free tiers).
+- [x] **Self-hosted tile fallback added and deployed** (`infra/tile-worker/`) — a vendored, adapted
+      copy of Protomaps' official Cloudflare Worker (byte-range reads over an R2-hosted `.pmtiles`
+      file). Backing data: a global, maxzoom-6 Protomaps OSM extract (~45MB, `generate_basemap.sh`
+      regenerates it) — country/city-level detail, intended as a last-resort tier only, **not** a
+      replacement for OpenFreeMap as primary (street-level detail globally would mean ~1TB+ storage,
+      a real ongoing cost/maintenance commitment that was deliberately declined). Live at
+      `https://awaken-tile-fallback.codestormhub.workers.dev`; `TILE_WORKER_BASE_URL` in
+      `.env.client` points at it. Cost: $0/month (well inside R2 + Workers free tiers).
+      **Live-verified on an Android emulator** (forced primary failure via an unreachable
+      `MAP_STYLE_URL`): escalation timing confirmed via logcat (primary fails, 15s timeout fires,
+      fallback loads clean), and a real bug was caught and fixed in the process — `_onStyleLoaded`'s
+      camera zoom (15, tuned for full-detail tiers) overzoomed the z6 fallback data into an
+      illegible blown-up single-color tile fragment. Fixed via `MapStyleLoader.dataMaxZoom` (6 for
+      the bundled tier, `null`/unclamped otherwise) clamping all 5 camera-zoom call sites across both
+      map pages. Re-verified live: fallback now renders legibly (rivers/roads/boundaries/labels) at
+      the clamped zoom instead of a color blob.
+- [x] **Manual zoom in/out buttons added** to both map pages (primary tier only, per explicit
+      scope) — `CameraUpdate.zoomIn()`/`zoomOut()`, a tap-target/accessibility affordance alongside
+      the pinch gesture that already reached the full unbounded zoom range
+      (`MapLibreMap`'s default `minMaxZoomPreference`). Live-verified: zoom-in reached individual
+      building outlines, zoom-out reached whole-city view, both correctly re-rendering real
+      OpenFreeMap data at each level. Deliberately *not* wired to `MapStyleLoader.dataMaxZoom` (would
+      let a user manually re-trigger the overzoom-blob issue above on the fallback tier) — noted as
+      a possible follow-up, not done, per explicit scope ("just for the primary tier").
 
 ### Territory / run tracking — genuinely hard, Appium/hardware-gated
 - [ ] **Foreground task handler is still empty.** `run_foreground_service.dart`'s
