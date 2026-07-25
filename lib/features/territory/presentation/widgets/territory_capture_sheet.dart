@@ -6,9 +6,18 @@ import '../../../../core/theme/expressive_widgets.dart';
 /// `isTerritoryCelebrate`). `areaLabel` comes from the real `submit_run()`
 /// RPC result via `ActiveRunPage._capture` (plan §6 Phase 5).
 class TerritoryCaptureSheet extends StatelessWidget {
-  const TerritoryCaptureSheet({required this.areaLabel, super.key});
+  const TerritoryCaptureSheet({
+    required this.areaLabel,
+    this.bountyMultiplier,
+    super.key,
+  });
 
   final String areaLabel;
+
+  /// Set only when the capture point fell inside an active bounty zone
+  /// (refined territory plan item 1) — e.g. `2.0` for a 2x zone. Null/1.0
+  /// shows no bonus badge at all.
+  final double? bountyMultiplier;
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +95,38 @@ class TerritoryCaptureSheet extends StatelessWidget {
                 ],
               ),
             ),
+            if (bountyMultiplier != null && bountyMultiplier! > 1.0) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.local_fire_department,
+                      size: 15,
+                      color: scheme.onPrimaryContainer,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Bounty zone — ${bountyMultiplier!.toStringAsFixed(0)}x credit applied',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 22),
             SizedBox(
               width: double.infinity,

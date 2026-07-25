@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -6,6 +8,8 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
 import '../../domain/entities/leaderboard_entry.dart';
+import '../../domain/usecases/get_global_leaderboard.dart';
+import '../../domain/usecases/get_nearby_leaderboard.dart';
 import '../bloc/squad_cubit.dart';
 import '../bloc/squad_state.dart';
 import '../squad_error_message.dart';
@@ -68,7 +72,42 @@ class _SquadView extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const CurrentUserAvatarButton(),
+                      Row(
+                        children: [
+                          Tooltip(
+                            message: 'Leaderboards',
+                            child: Material(
+                              color: scheme.surfaceContainerHigh,
+                              shape: const CircleBorder(),
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: () => showModalBottomSheet<void>(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: scheme.surfaceContainerLow,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.vertical(
+                                      top: Radius.circular(28),
+                                    ),
+                                  ),
+                                  builder: (_) => const _LeaderboardsSheet(),
+                                ),
+                                child: SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: Icon(
+                                    Icons.leaderboard,
+                                    size: 20,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const CurrentUserAvatarButton(),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -447,7 +486,9 @@ class _SquadLoadedView extends StatelessWidget {
                       style: TextButton.styleFrom(
                         foregroundColor: scheme.onSurfaceVariant,
                       ),
-                      onPressed: state.isLeavingSquad ? null : () => _confirmLeaveSquad(context),
+                      onPressed: state.isLeavingSquad
+                          ? null
+                          : () => _confirmLeaveSquad(context),
                       child: state.isLeavingSquad
                           ? const SizedBox(
                               width: 16,
@@ -673,7 +714,9 @@ Future<void> _confirmLeaveSquad(BuildContext context) async {
     await cubit.leaveSquad();
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlySquadErrorMessage(e))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(friendlySquadErrorMessage(e))));
     }
   }
 }
@@ -719,7 +762,180 @@ Future<void> _showReportMemberDialog(
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlySquadErrorMessage(e))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(friendlySquadErrorMessage(e))));
     }
+  }
+}
+
+enum _LeaderboardScope { nearby, global }
+
+/// Nearby/global leaderboard scope + all-time/weekly time window (refined
+/// territory plan item 4) — deliberately separate from the squad-scoped
+/// leaderboard above (`SquadCubit.watchLeaderboard`'s live-polled stream),
+/// which needs neither a scope nor window picker and works whether or not
+/// this sheet is ever opened. One-shot fetches, refetched on scope/window
+/// change rather than polled — a leaderboard spanning "everyone nearby" or
+/// "everyone" doesn't need the same live-during-a-run freshness a squad's
+/// own handful of members does.
+class _LeaderboardsSheet extends StatefulWidget {
+  const _LeaderboardsSheet();
+
+  @override
+  State<_LeaderboardsSheet> createState() => _LeaderboardsSheetState();
+}
+
+class _LeaderboardsSheetState extends State<_LeaderboardsSheet> {
+  static const _nearbyRadiusM = 5000.0;
+
+  var _scope = _LeaderboardScope.nearby;
+  var _weekly = false;
+  var _loading = true;
+  String? _error;
+  List<LeaderboardEntry> _entries = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final entries = _scope == _LeaderboardScope.nearby
+          ? await getIt<GetNearbyLeaderboard>()(
+              GetNearbyLeaderboardParams(
+                radiusM: _nearbyRadiusM,
+                weekly: _weekly,
+              ),
+            )
+          : await getIt<GetGlobalLeaderboard>()(weekly: _weekly);
+      if (!mounted) return;
+      setState(() {
+        _entries = entries;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = friendlySquadErrorMessage(e);
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 18),
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            Text(
+              'Leaderboards',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: scheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: SegmentedButton<_LeaderboardScope>(
+                    segments: const [
+                      ButtonSegment(
+                        value: _LeaderboardScope.nearby,
+                        label: Text('Nearby'),
+                      ),
+                      ButtonSegment(
+                        value: _LeaderboardScope.global,
+                        label: Text('Global'),
+                      ),
+                    ],
+                    selected: {_scope},
+                    onSelectionChanged: (selected) {
+                      setState(() => _scope = selected.first);
+                      unawaited(_load());
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(value: false, label: Text('All-time')),
+                      ButtonSegment(value: true, label: Text('Weekly')),
+                    ],
+                    selected: {_weekly},
+                    onSelectionChanged: (selected) {
+                      setState(() => _weekly = selected.first);
+                      unawaited(_load());
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 320,
+              child: _loading
+                  ? const Center(child: ExpressiveLoader())
+                  : _error != null
+                  ? Center(
+                      child: Text(
+                        _error!,
+                        style: TextStyle(color: scheme.error),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : _entries.isEmpty
+                  ? Center(
+                      child: Text(
+                        _scope == _LeaderboardScope.nearby
+                            ? "No nearby players yet — complete a run so others can find you."
+                            : 'No global activity yet.',
+                        style: TextStyle(color: scheme.onSurfaceVariant),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: _entries.length,
+                      itemBuilder: (context, i) => _LeaderboardRow(
+                        row: _entries[i],
+                        index: i,
+                        count: _entries.length,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

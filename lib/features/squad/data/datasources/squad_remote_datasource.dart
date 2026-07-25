@@ -26,12 +26,18 @@ class SquadRemoteDataSource {
   final _trackedSquadIds = <String>{};
 
   Future<Map<String, dynamic>> createSquad(String name) async {
-    final result = await _supabase.rpc('create_squad', params: {'p_name': name});
+    final result = await _supabase.rpc(
+      'create_squad',
+      params: {'p_name': name},
+    );
     return Map<String, dynamic>.from(result as Map);
   }
 
   Future<Map<String, dynamic>> joinSquad(String inviteCode) async {
-    final result = await _supabase.rpc('join_squad', params: {'p_invite_code': inviteCode});
+    final result = await _supabase.rpc(
+      'join_squad',
+      params: {'p_invite_code': inviteCode},
+    );
     return Map<String, dynamic>.from(result as Map);
   }
 
@@ -52,7 +58,33 @@ class SquadRemoteDataSource {
   }
 
   Future<List<Map<String, dynamic>>> fetchLeaderboard(String squadId) async {
-    final result = await _supabase.rpc('squad_leaderboard', params: {'p_squad_id': squadId});
+    final result = await _supabase.rpc(
+      'squad_leaderboard',
+      params: {'p_squad_id': squadId},
+    );
+    return (result as List).cast<Map<String, dynamic>>();
+  }
+
+  /// [timeWindow] is `'all_time'` or `'weekly'` (matches the RPCs'
+  /// `p_time_window` check constraint).
+  Future<List<Map<String, dynamic>>> fetchNearbyLeaderboard({
+    required double radiusM,
+    required String timeWindow,
+  }) async {
+    final result = await _supabase.rpc(
+      'nearby_leaderboard',
+      params: {'p_radius_m': radiusM, 'p_time_window': timeWindow},
+    );
+    return (result as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchGlobalLeaderboard({
+    required String timeWindow,
+  }) async {
+    final result = await _supabase.rpc(
+      'global_leaderboard',
+      params: {'p_time_window': timeWindow},
+    );
     return (result as List).cast<Map<String, dynamic>>();
   }
 
@@ -117,7 +149,10 @@ class SquadRemoteDataSource {
     return controller.stream;
   }
 
-  Future<void> trackPresence(String squadId, Map<String, dynamic> payload) async {
+  Future<void> trackPresence(
+    String squadId,
+    Map<String, dynamic> payload,
+  ) async {
     if (_trackedSquadIds.add(squadId)) _retain(squadId);
     await _channelFor(squadId).track(payload);
   }
@@ -125,7 +160,11 @@ class SquadRemoteDataSource {
   static const _broadcastEvent = 'telemetry';
 
   void broadcastTelemetry(String squadId, Map<String, dynamic> payload) {
-    unawaited(_channelFor(squadId).sendBroadcastMessage(event: _broadcastEvent, payload: payload));
+    unawaited(
+      _channelFor(
+        squadId,
+      ).sendBroadcastMessage(event: _broadcastEvent, payload: payload),
+    );
   }
 
   /// Live telemetry from squadmates' `broadcastTelemetry` calls — each

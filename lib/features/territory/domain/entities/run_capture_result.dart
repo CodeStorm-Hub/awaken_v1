@@ -12,6 +12,8 @@ class RunCaptureResult extends Equatable {
     this.closedLoop = false,
     this.capturedAreaSqm,
     this.territoryAreaSqm,
+    this.bonusAreaSqm,
+    this.bountyMultiplier,
     this.rejectedReason,
   });
 
@@ -21,6 +23,8 @@ class RunCaptureResult extends Equatable {
       closedLoop = false,
       capturedAreaSqm = null,
       territoryAreaSqm = null,
+      bonusAreaSqm = null,
+      bountyMultiplier = null,
       rejectedReason = null;
 
   final bool pending;
@@ -28,6 +32,12 @@ class RunCaptureResult extends Equatable {
   final bool closedLoop;
   final double? capturedAreaSqm;
   final double? territoryAreaSqm;
+
+  /// Bounty-zone bonus (celebration-UI-only credit — see `Runs` table's
+  /// doc comment on these two columns). Null/zero when no active bounty
+  /// zone covered this capture.
+  final double? bonusAreaSqm;
+  final double? bountyMultiplier;
   final String? rejectedReason;
 
   @override
@@ -37,6 +47,8 @@ class RunCaptureResult extends Equatable {
     closedLoop,
     capturedAreaSqm,
     territoryAreaSqm,
+    bonusAreaSqm,
+    bountyMultiplier,
     rejectedReason,
   ];
 }

@@ -341,6 +341,8 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
       closedLoop: row.isClosedLoop,
       capturedAreaSqm: row.capturedAreaSqm,
       territoryAreaSqm: row.areaSqm,
+      bonusAreaSqm: row.bonusAreaSqm,
+      bountyMultiplier: row.bountyMultiplier,
       rejectedReason: row.rejectedReason,
     );
   }

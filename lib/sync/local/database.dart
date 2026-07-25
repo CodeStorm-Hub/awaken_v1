@@ -26,7 +26,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -55,6 +55,10 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(syncOutbox, syncOutbox.maxAttempts);
             await m.createTable(syncMeta);
             await m.createIndex(syncOutboxNextAttemptAtIdx);
+          }
+          if (from < 8) {
+            await m.addColumn(runs, runs.bonusAreaSqm);
+            await m.addColumn(runs, runs.bountyMultiplier);
           }
         },
       );

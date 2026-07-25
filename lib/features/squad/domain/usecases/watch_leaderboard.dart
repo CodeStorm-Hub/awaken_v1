@@ -9,5 +9,6 @@ class WatchLeaderboard {
 
   final SquadRepository _repository;
 
-  Stream<List<LeaderboardEntry>> call(String squadId) => _repository.watchLeaderboard(squadId);
+  Stream<List<LeaderboardEntry>> call(String squadId) =>
+      _repository.watchLeaderboard(squadId);
 }

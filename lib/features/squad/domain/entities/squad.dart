@@ -1,7 +1,12 @@
 import 'package:equatable/equatable.dart';
 
 class Squad extends Equatable {
-  const Squad({required this.id, required this.name, required this.inviteCode, required this.ownerId});
+  const Squad({
+    required this.id,
+    required this.name,
+    required this.inviteCode,
+    required this.ownerId,
+  });
 
   final String id;
   final String name;

@@ -55,19 +55,24 @@ class SquadCubit extends Cubit<SquadState> {
     }
 
     emit(state.copyWith(status: SquadStatus.loaded, squad: squad));
-    _leaderboardSub = _watchLeaderboard(squad.id).listen(
-      (entries) => emit(state.copyWith(leaderboard: entries)),
-    );
-    _presenceSub = _watchSquadPresence(squad.id).listen(
-      (members) => emit(state.copyWith(presence: members)),
-    );
+    _leaderboardSub = _watchLeaderboard(
+      squad.id,
+    ).listen((entries) => emit(state.copyWith(leaderboard: entries)));
+    _presenceSub = _watchSquadPresence(
+      squad.id,
+    ).listen((members) => emit(state.copyWith(presence: members)));
   }
 
   Future<void> createSquad(String name) async {
     try {
       await _createSquad(name);
     } catch (e) {
-      emit(state.copyWith(status: SquadStatus.error, errorMessage: friendlySquadErrorMessage(e)));
+      emit(
+        state.copyWith(
+          status: SquadStatus.error,
+          errorMessage: friendlySquadErrorMessage(e),
+        ),
+      );
     }
   }
 
@@ -75,7 +80,12 @@ class SquadCubit extends Cubit<SquadState> {
     try {
       await _joinSquad(inviteCode);
     } catch (e) {
-      emit(state.copyWith(status: SquadStatus.error, errorMessage: friendlySquadErrorMessage(e)));
+      emit(
+        state.copyWith(
+          status: SquadStatus.error,
+          errorMessage: friendlySquadErrorMessage(e),
+        ),
+      );
     }
   }
 
@@ -95,8 +105,14 @@ class SquadCubit extends Cubit<SquadState> {
     emit(state.copyWith(isLeavingSquad: false));
   }
 
-  Future<void> reportMember({required String reportedUserId, required String reason}) {
-    return _squadRepository.reportMember(reportedUserId: reportedUserId, reason: reason);
+  Future<void> reportMember({
+    required String reportedUserId,
+    required String reason,
+  }) {
+    return _squadRepository.reportMember(
+      reportedUserId: reportedUserId,
+      reason: reason,
+    );
   }
 
   @override

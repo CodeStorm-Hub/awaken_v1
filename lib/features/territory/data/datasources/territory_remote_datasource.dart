@@ -39,4 +39,27 @@ class TerritoryRemoteDataSource {
     );
     return List<Map<String, Object?>>.from(result! as List);
   }
+
+  /// The caller's most recent contested capture (either direction) via the
+  /// `current_rival()` RPC — null if there is none yet.
+  Future<Map<String, Object?>?> fetchCurrentRival() async {
+    final result = await _supabase.rpc<Object?>('current_rival');
+    final rows = List<Map<String, Object?>>.from(result! as List);
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Territories within the decay warning window via `my_territories_at_risk()`.
+  Future<List<Map<String, Object?>>> fetchTerritoriesAtRisk() async {
+    final result = await _supabase.rpc<Object?>('my_territories_at_risk');
+    return List<Map<String, Object?>>.from(result! as List);
+  }
+
+  /// Currently-active bounty zones, via the `active_bounty_zones()` RPC
+  /// (explicit lat/lng columns rather than relying on ambiguous PostgREST
+  /// geography-column serialization — same reasoning as `territories_in_bbox`'s
+  /// `geom_geojson`).
+  Future<List<Map<String, Object?>>> fetchActiveBountyZones() async {
+    final result = await _supabase.rpc<Object?>('active_bounty_zones');
+    return List<Map<String, Object?>>.from(result! as List);
+  }
 }

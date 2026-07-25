@@ -22,5 +22,12 @@ class LeaderboardEntry extends Equatable {
   final bool isYou;
 
   @override
-  List<Object?> get props => [rank, userId, displayName, streakTier, areaSqm, isYou];
+  List<Object?> get props => [
+    rank,
+    userId,
+    displayName,
+    streakTier,
+    areaSqm,
+    isYou,
+  ];
 }

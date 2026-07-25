@@ -196,14 +196,19 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
         return;
       }
 
-      final areaSqm = result.capturedAreaSqm ?? result.territoryAreaSqm ?? 0;
+      final baseAreaSqm =
+          result.capturedAreaSqm ?? result.territoryAreaSqm ?? 0;
+      final areaSqm = baseAreaSqm + (result.bonusAreaSqm ?? 0);
       final areaLabel = '${(areaSqm / 1000000).toStringAsFixed(3)} km²';
       await showModalBottomSheet<void>(
         context: context,
         isDismissible: false,
         enableDrag: false,
         backgroundColor: Colors.transparent,
-        builder: (_) => TerritoryCaptureSheet(areaLabel: areaLabel),
+        builder: (_) => TerritoryCaptureSheet(
+          areaLabel: areaLabel,
+          bountyMultiplier: result.bountyMultiplier,
+        ),
       );
       if (mounted) Navigator.of(context).pop();
     } finally {

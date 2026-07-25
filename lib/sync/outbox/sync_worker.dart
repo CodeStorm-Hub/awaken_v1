@@ -195,6 +195,8 @@ class SyncWorker {
         isClosedLoop: Value(response['closed_loop'] as bool? ?? false),
         capturedAreaSqm: Value((response['captured_area_sqm'] as num?)?.toDouble()),
         areaSqm: Value((response['territory_area_sqm'] as num?)?.toDouble()),
+        bonusAreaSqm: Value((response['bonus_area_sqm'] as num?)?.toDouble()),
+        bountyMultiplier: Value((response['bounty_multiplier'] as num?)?.toDouble()),
         integrityVerdict: Value(response['accepted'] == true ? 'trusted' : 'rejected'),
         rejectedReason: Value(response['reason'] as String?),
       ),

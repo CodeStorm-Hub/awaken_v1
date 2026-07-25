@@ -1286,6 +1286,28 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
     type: DriftSqlType.double,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _bonusAreaSqmMeta = const VerificationMeta(
+    'bonusAreaSqm',
+  );
+  @override
+  late final GeneratedColumn<double> bonusAreaSqm = GeneratedColumn<double>(
+    'bonus_area_sqm',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _bountyMultiplierMeta = const VerificationMeta(
+    'bountyMultiplier',
+  );
+  @override
+  late final GeneratedColumn<double> bountyMultiplier = GeneratedColumn<double>(
+    'bounty_multiplier',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _integrityVerdictMeta = const VerificationMeta(
     'integrityVerdict',
   );
@@ -1341,6 +1363,8 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
     isClosedLoop,
     capturedAreaSqm,
     areaSqm,
+    bonusAreaSqm,
+    bountyMultiplier,
     integrityVerdict,
     rejectedReason,
     updatedAt,
@@ -1429,6 +1453,24 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
         areaSqm.isAcceptableOrUnknown(data['area_sqm']!, _areaSqmMeta),
       );
     }
+    if (data.containsKey('bonus_area_sqm')) {
+      context.handle(
+        _bonusAreaSqmMeta,
+        bonusAreaSqm.isAcceptableOrUnknown(
+          data['bonus_area_sqm']!,
+          _bonusAreaSqmMeta,
+        ),
+      );
+    }
+    if (data.containsKey('bounty_multiplier')) {
+      context.handle(
+        _bountyMultiplierMeta,
+        bountyMultiplier.isAcceptableOrUnknown(
+          data['bounty_multiplier']!,
+          _bountyMultiplierMeta,
+        ),
+      );
+    }
     if (data.containsKey('integrity_verdict')) {
       context.handle(
         _integrityVerdictMeta,
@@ -1506,6 +1548,14 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
         DriftSqlType.double,
         data['${effectivePrefix}area_sqm'],
       ),
+      bonusAreaSqm: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}bonus_area_sqm'],
+      ),
+      bountyMultiplier: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}bounty_multiplier'],
+      ),
       integrityVerdict: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}integrity_verdict'],
@@ -1552,6 +1602,13 @@ class RunRow extends DataClass implements Insertable<RunRow> {
   /// `areaSqm` (the user's total territory area after server-side merge).
   final double? capturedAreaSqm;
   final double? areaSqm;
+
+  /// Bounty-zone bonus (refined territory plan item 1) — `submit_run()`'s
+  /// `bonus_area_sqm`/`bounty_multiplier`, a celebration-UI-only credit
+  /// that never affects the stored territory polygon/`areaSqm`. Null when
+  /// no active bounty zone covered this run's capture point.
+  final double? bonusAreaSqm;
+  final double? bountyMultiplier;
   final String? integrityVerdict;
   final String? rejectedReason;
   final DateTime updatedAt;
@@ -1566,6 +1623,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     required this.isClosedLoop,
     this.capturedAreaSqm,
     this.areaSqm,
+    this.bonusAreaSqm,
+    this.bountyMultiplier,
     this.integrityVerdict,
     this.rejectedReason,
     required this.updatedAt,
@@ -1590,6 +1649,12 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     }
     if (!nullToAbsent || areaSqm != null) {
       map['area_sqm'] = Variable<double>(areaSqm);
+    }
+    if (!nullToAbsent || bonusAreaSqm != null) {
+      map['bonus_area_sqm'] = Variable<double>(bonusAreaSqm);
+    }
+    if (!nullToAbsent || bountyMultiplier != null) {
+      map['bounty_multiplier'] = Variable<double>(bountyMultiplier);
     }
     if (!nullToAbsent || integrityVerdict != null) {
       map['integrity_verdict'] = Variable<String>(integrityVerdict);
@@ -1623,6 +1688,12 @@ class RunRow extends DataClass implements Insertable<RunRow> {
       areaSqm: areaSqm == null && nullToAbsent
           ? const Value.absent()
           : Value(areaSqm),
+      bonusAreaSqm: bonusAreaSqm == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bonusAreaSqm),
+      bountyMultiplier: bountyMultiplier == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bountyMultiplier),
       integrityVerdict: integrityVerdict == null && nullToAbsent
           ? const Value.absent()
           : Value(integrityVerdict),
@@ -1653,6 +1724,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
       isClosedLoop: serializer.fromJson<bool>(json['isClosedLoop']),
       capturedAreaSqm: serializer.fromJson<double?>(json['capturedAreaSqm']),
       areaSqm: serializer.fromJson<double?>(json['areaSqm']),
+      bonusAreaSqm: serializer.fromJson<double?>(json['bonusAreaSqm']),
+      bountyMultiplier: serializer.fromJson<double?>(json['bountyMultiplier']),
       integrityVerdict: serializer.fromJson<String?>(json['integrityVerdict']),
       rejectedReason: serializer.fromJson<String?>(json['rejectedReason']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -1672,6 +1745,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
       'isClosedLoop': serializer.toJson<bool>(isClosedLoop),
       'capturedAreaSqm': serializer.toJson<double?>(capturedAreaSqm),
       'areaSqm': serializer.toJson<double?>(areaSqm),
+      'bonusAreaSqm': serializer.toJson<double?>(bonusAreaSqm),
+      'bountyMultiplier': serializer.toJson<double?>(bountyMultiplier),
       'integrityVerdict': serializer.toJson<String?>(integrityVerdict),
       'rejectedReason': serializer.toJson<String?>(rejectedReason),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -1689,6 +1764,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     bool? isClosedLoop,
     Value<double?> capturedAreaSqm = const Value.absent(),
     Value<double?> areaSqm = const Value.absent(),
+    Value<double?> bonusAreaSqm = const Value.absent(),
+    Value<double?> bountyMultiplier = const Value.absent(),
     Value<String?> integrityVerdict = const Value.absent(),
     Value<String?> rejectedReason = const Value.absent(),
     DateTime? updatedAt,
@@ -1707,6 +1784,10 @@ class RunRow extends DataClass implements Insertable<RunRow> {
         ? capturedAreaSqm.value
         : this.capturedAreaSqm,
     areaSqm: areaSqm.present ? areaSqm.value : this.areaSqm,
+    bonusAreaSqm: bonusAreaSqm.present ? bonusAreaSqm.value : this.bonusAreaSqm,
+    bountyMultiplier: bountyMultiplier.present
+        ? bountyMultiplier.value
+        : this.bountyMultiplier,
     integrityVerdict: integrityVerdict.present
         ? integrityVerdict.value
         : this.integrityVerdict,
@@ -1737,6 +1818,12 @@ class RunRow extends DataClass implements Insertable<RunRow> {
           ? data.capturedAreaSqm.value
           : this.capturedAreaSqm,
       areaSqm: data.areaSqm.present ? data.areaSqm.value : this.areaSqm,
+      bonusAreaSqm: data.bonusAreaSqm.present
+          ? data.bonusAreaSqm.value
+          : this.bonusAreaSqm,
+      bountyMultiplier: data.bountyMultiplier.present
+          ? data.bountyMultiplier.value
+          : this.bountyMultiplier,
       integrityVerdict: data.integrityVerdict.present
           ? data.integrityVerdict.value
           : this.integrityVerdict,
@@ -1760,6 +1847,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
           ..write('isClosedLoop: $isClosedLoop, ')
           ..write('capturedAreaSqm: $capturedAreaSqm, ')
           ..write('areaSqm: $areaSqm, ')
+          ..write('bonusAreaSqm: $bonusAreaSqm, ')
+          ..write('bountyMultiplier: $bountyMultiplier, ')
           ..write('integrityVerdict: $integrityVerdict, ')
           ..write('rejectedReason: $rejectedReason, ')
           ..write('updatedAt: $updatedAt, ')
@@ -1779,6 +1868,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     isClosedLoop,
     capturedAreaSqm,
     areaSqm,
+    bonusAreaSqm,
+    bountyMultiplier,
     integrityVerdict,
     rejectedReason,
     updatedAt,
@@ -1797,6 +1888,8 @@ class RunRow extends DataClass implements Insertable<RunRow> {
           other.isClosedLoop == this.isClosedLoop &&
           other.capturedAreaSqm == this.capturedAreaSqm &&
           other.areaSqm == this.areaSqm &&
+          other.bonusAreaSqm == this.bonusAreaSqm &&
+          other.bountyMultiplier == this.bountyMultiplier &&
           other.integrityVerdict == this.integrityVerdict &&
           other.rejectedReason == this.rejectedReason &&
           other.updatedAt == this.updatedAt &&
@@ -1813,6 +1906,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
   final Value<bool> isClosedLoop;
   final Value<double?> capturedAreaSqm;
   final Value<double?> areaSqm;
+  final Value<double?> bonusAreaSqm;
+  final Value<double?> bountyMultiplier;
   final Value<String?> integrityVerdict;
   final Value<String?> rejectedReason;
   final Value<DateTime> updatedAt;
@@ -1828,6 +1923,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     this.isClosedLoop = const Value.absent(),
     this.capturedAreaSqm = const Value.absent(),
     this.areaSqm = const Value.absent(),
+    this.bonusAreaSqm = const Value.absent(),
+    this.bountyMultiplier = const Value.absent(),
     this.integrityVerdict = const Value.absent(),
     this.rejectedReason = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1844,6 +1941,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     this.isClosedLoop = const Value.absent(),
     this.capturedAreaSqm = const Value.absent(),
     this.areaSqm = const Value.absent(),
+    this.bonusAreaSqm = const Value.absent(),
+    this.bountyMultiplier = const Value.absent(),
     this.integrityVerdict = const Value.absent(),
     this.rejectedReason = const Value.absent(),
     required DateTime updatedAt,
@@ -1864,6 +1963,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     Expression<bool>? isClosedLoop,
     Expression<double>? capturedAreaSqm,
     Expression<double>? areaSqm,
+    Expression<double>? bonusAreaSqm,
+    Expression<double>? bountyMultiplier,
     Expression<String>? integrityVerdict,
     Expression<String>? rejectedReason,
     Expression<DateTime>? updatedAt,
@@ -1881,6 +1982,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
       if (isClosedLoop != null) 'is_closed_loop': isClosedLoop,
       if (capturedAreaSqm != null) 'captured_area_sqm': capturedAreaSqm,
       if (areaSqm != null) 'area_sqm': areaSqm,
+      if (bonusAreaSqm != null) 'bonus_area_sqm': bonusAreaSqm,
+      if (bountyMultiplier != null) 'bounty_multiplier': bountyMultiplier,
       if (integrityVerdict != null) 'integrity_verdict': integrityVerdict,
       if (rejectedReason != null) 'rejected_reason': rejectedReason,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -1899,6 +2002,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     Value<bool>? isClosedLoop,
     Value<double?>? capturedAreaSqm,
     Value<double?>? areaSqm,
+    Value<double?>? bonusAreaSqm,
+    Value<double?>? bountyMultiplier,
     Value<String?>? integrityVerdict,
     Value<String?>? rejectedReason,
     Value<DateTime>? updatedAt,
@@ -1915,6 +2020,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
       isClosedLoop: isClosedLoop ?? this.isClosedLoop,
       capturedAreaSqm: capturedAreaSqm ?? this.capturedAreaSqm,
       areaSqm: areaSqm ?? this.areaSqm,
+      bonusAreaSqm: bonusAreaSqm ?? this.bonusAreaSqm,
+      bountyMultiplier: bountyMultiplier ?? this.bountyMultiplier,
       integrityVerdict: integrityVerdict ?? this.integrityVerdict,
       rejectedReason: rejectedReason ?? this.rejectedReason,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1955,6 +2062,12 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     if (areaSqm.present) {
       map['area_sqm'] = Variable<double>(areaSqm.value);
     }
+    if (bonusAreaSqm.present) {
+      map['bonus_area_sqm'] = Variable<double>(bonusAreaSqm.value);
+    }
+    if (bountyMultiplier.present) {
+      map['bounty_multiplier'] = Variable<double>(bountyMultiplier.value);
+    }
     if (integrityVerdict.present) {
       map['integrity_verdict'] = Variable<String>(integrityVerdict.value);
     }
@@ -1985,6 +2098,8 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
           ..write('isClosedLoop: $isClosedLoop, ')
           ..write('capturedAreaSqm: $capturedAreaSqm, ')
           ..write('areaSqm: $areaSqm, ')
+          ..write('bonusAreaSqm: $bonusAreaSqm, ')
+          ..write('bountyMultiplier: $bountyMultiplier, ')
           ..write('integrityVerdict: $integrityVerdict, ')
           ..write('rejectedReason: $rejectedReason, ')
           ..write('updatedAt: $updatedAt, ')
@@ -4580,6 +4695,8 @@ typedef $$RunsTableCreateCompanionBuilder =
       Value<bool> isClosedLoop,
       Value<double?> capturedAreaSqm,
       Value<double?> areaSqm,
+      Value<double?> bonusAreaSqm,
+      Value<double?> bountyMultiplier,
       Value<String?> integrityVerdict,
       Value<String?> rejectedReason,
       required DateTime updatedAt,
@@ -4597,6 +4714,8 @@ typedef $$RunsTableUpdateCompanionBuilder =
       Value<bool> isClosedLoop,
       Value<double?> capturedAreaSqm,
       Value<double?> areaSqm,
+      Value<double?> bonusAreaSqm,
+      Value<double?> bountyMultiplier,
       Value<String?> integrityVerdict,
       Value<String?> rejectedReason,
       Value<DateTime> updatedAt,
@@ -4654,6 +4773,16 @@ class $$RunsTableFilterComposer extends Composer<_$AppDatabase, $RunsTable> {
 
   ColumnFilters<double> get areaSqm => $composableBuilder(
     column: $table.areaSqm,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get bonusAreaSqm => $composableBuilder(
+    column: $table.bonusAreaSqm,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get bountyMultiplier => $composableBuilder(
+    column: $table.bountyMultiplier,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4731,6 +4860,16 @@ class $$RunsTableOrderingComposer extends Composer<_$AppDatabase, $RunsTable> {
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get bonusAreaSqm => $composableBuilder(
+    column: $table.bonusAreaSqm,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get bountyMultiplier => $composableBuilder(
+    column: $table.bountyMultiplier,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get integrityVerdict => $composableBuilder(
     column: $table.integrityVerdict,
     builder: (column) => ColumnOrderings(column),
@@ -4798,6 +4937,16 @@ class $$RunsTableAnnotationComposer
   GeneratedColumn<double> get areaSqm =>
       $composableBuilder(column: $table.areaSqm, builder: (column) => column);
 
+  GeneratedColumn<double> get bonusAreaSqm => $composableBuilder(
+    column: $table.bonusAreaSqm,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get bountyMultiplier => $composableBuilder(
+    column: $table.bountyMultiplier,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get integrityVerdict => $composableBuilder(
     column: $table.integrityVerdict,
     builder: (column) => column,
@@ -4852,6 +5001,8 @@ class $$RunsTableTableManager
                 Value<bool> isClosedLoop = const Value.absent(),
                 Value<double?> capturedAreaSqm = const Value.absent(),
                 Value<double?> areaSqm = const Value.absent(),
+                Value<double?> bonusAreaSqm = const Value.absent(),
+                Value<double?> bountyMultiplier = const Value.absent(),
                 Value<String?> integrityVerdict = const Value.absent(),
                 Value<String?> rejectedReason = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -4867,6 +5018,8 @@ class $$RunsTableTableManager
                 isClosedLoop: isClosedLoop,
                 capturedAreaSqm: capturedAreaSqm,
                 areaSqm: areaSqm,
+                bonusAreaSqm: bonusAreaSqm,
+                bountyMultiplier: bountyMultiplier,
                 integrityVerdict: integrityVerdict,
                 rejectedReason: rejectedReason,
                 updatedAt: updatedAt,
@@ -4884,6 +5037,8 @@ class $$RunsTableTableManager
                 Value<bool> isClosedLoop = const Value.absent(),
                 Value<double?> capturedAreaSqm = const Value.absent(),
                 Value<double?> areaSqm = const Value.absent(),
+                Value<double?> bonusAreaSqm = const Value.absent(),
+                Value<double?> bountyMultiplier = const Value.absent(),
                 Value<String?> integrityVerdict = const Value.absent(),
                 Value<String?> rejectedReason = const Value.absent(),
                 required DateTime updatedAt,
@@ -4899,6 +5054,8 @@ class $$RunsTableTableManager
                 isClosedLoop: isClosedLoop,
                 capturedAreaSqm: capturedAreaSqm,
                 areaSqm: areaSqm,
+                bonusAreaSqm: bonusAreaSqm,
+                bountyMultiplier: bountyMultiplier,
                 integrityVerdict: integrityVerdict,
                 rejectedReason: rejectedReason,
                 updatedAt: updatedAt,

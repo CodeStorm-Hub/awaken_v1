@@ -12,7 +12,8 @@ String friendlySquadErrorMessage(Object error) {
     if (message.contains('invite code')) {
       return "That invite code doesn't look right — check it and try again.";
     }
-    if (message.contains('already in a squad') || message.contains('already a member')) {
+    if (message.contains('already in a squad') ||
+        message.contains('already a member')) {
       return "You're already in a squad — leave it first to join another.";
     }
     if (message.contains('not a member')) {
@@ -21,7 +22,9 @@ String friendlySquadErrorMessage(Object error) {
     if (message.contains('not authenticated')) {
       return 'Please sign in and try again.';
     }
-    if (message.contains('network') || message.contains('timed out') || message.contains('socket')) {
+    if (message.contains('network') ||
+        message.contains('timed out') ||
+        message.contains('socket')) {
       return 'Check your connection and try again.';
     }
     return error.message;

@@ -93,6 +93,10 @@ import '../../features/squad/data/repositories/squad_repository_impl.dart'
 import '../../features/squad/domain/repositories/squad_repository.dart'
     as _i1051;
 import '../../features/squad/domain/usecases/create_squad.dart' as _i134;
+import '../../features/squad/domain/usecases/get_global_leaderboard.dart'
+    as _i752;
+import '../../features/squad/domain/usecases/get_nearby_leaderboard.dart'
+    as _i966;
 import '../../features/squad/domain/usecases/join_squad.dart' as _i36;
 import '../../features/squad/domain/usecases/leave_squad.dart' as _i769;
 import '../../features/squad/domain/usecases/watch_leaderboard.dart' as _i670;
@@ -117,8 +121,14 @@ import '../../features/territory/domain/repositories/territory_repository.dart'
     as _i706;
 import '../../features/territory/domain/usecases/abandon_run.dart' as _i773;
 import '../../features/territory/domain/usecases/capture_run.dart' as _i125;
+import '../../features/territory/domain/usecases/get_active_bounty_zones.dart'
+    as _i412;
 import '../../features/territory/domain/usecases/get_current_position.dart'
     as _i740;
+import '../../features/territory/domain/usecases/get_current_rival.dart'
+    as _i553;
+import '../../features/territory/domain/usecases/get_territories_at_risk.dart'
+    as _i143;
 import '../../features/territory/domain/usecases/refresh_territories.dart'
     as _i490;
 import '../../features/territory/domain/usecases/start_run.dart' as _i592;
@@ -232,6 +242,15 @@ _i174.GetIt init(
   gh.lazySingleton<_i162.BatteryExemptionRepository>(
     () => _i694.BatteryExemptionRepositoryImpl(gh<_i703.SystemCapabilities>()),
   );
+  gh.factory<_i412.GetActiveBountyZones>(
+    () => _i412.GetActiveBountyZones(gh<_i706.TerritoryRepository>()),
+  );
+  gh.factory<_i553.GetCurrentRival>(
+    () => _i553.GetCurrentRival(gh<_i706.TerritoryRepository>()),
+  );
+  gh.factory<_i143.GetTerritoriesAtRisk>(
+    () => _i143.GetTerritoriesAtRisk(gh<_i706.TerritoryRepository>()),
+  );
   gh.factory<_i490.RefreshTerritories>(
     () => _i490.RefreshTerritories(gh<_i706.TerritoryRepository>()),
   );
@@ -272,6 +291,12 @@ _i174.GetIt init(
   );
   gh.factory<_i134.CreateSquad>(
     () => _i134.CreateSquad(gh<_i1051.SquadRepository>()),
+  );
+  gh.factory<_i752.GetGlobalLeaderboard>(
+    () => _i752.GetGlobalLeaderboard(gh<_i1051.SquadRepository>()),
+  );
+  gh.factory<_i966.GetNearbyLeaderboard>(
+    () => _i966.GetNearbyLeaderboard(gh<_i1051.SquadRepository>()),
   );
   gh.factory<_i36.JoinSquad>(
     () => _i36.JoinSquad(gh<_i1051.SquadRepository>()),

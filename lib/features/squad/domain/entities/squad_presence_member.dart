@@ -6,7 +6,11 @@ import 'package:equatable/equatable.dart';
 /// member's own device, per H6's Presence-for-status +
 /// Broadcast-for-telemetry split.
 class SquadPresenceMember extends Equatable {
-  const SquadPresenceMember({required this.userId, required this.displayName, this.activity});
+  const SquadPresenceMember({
+    required this.userId,
+    required this.displayName,
+    this.activity,
+  });
 
   final String userId;
   final String displayName;

@@ -5,8 +5,11 @@ import 'package:injectable/injectable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../sync/local/database.dart';
+import '../../domain/entities/bounty_zone.dart';
 import '../../domain/entities/geo_bounds.dart';
+import '../../domain/entities/rival.dart';
 import '../../domain/entities/territory.dart';
+import '../../domain/entities/territory_at_risk.dart';
 import '../../domain/repositories/territory_repository.dart';
 import '../datasources/territory_remote_datasource.dart';
 import '../mappers/territory_mapper.dart';
@@ -133,5 +136,49 @@ class TerritoryRepositoryImpl implements TerritoryRepository {
     await (_db.delete(
       _db.territories,
     )..where((t) => t.id.isIn(evictable.map((r) => r.id)))).go();
+  }
+
+  @override
+  Future<Rival?> fetchCurrentRival() async {
+    final row = await _remote.fetchCurrentRival();
+    if (row == null) return null;
+    return Rival(
+      rivalId: row['rival_id']! as String,
+      rivalDisplayName: row['rival_display_name'] as String?,
+      areaTakenSqm: (row['area_taken_sqm']! as num).toDouble(),
+      asWinner: row['as_winner']! as bool,
+      occurredAt: DateTime.parse(row['occurred_at']! as String),
+    );
+  }
+
+  @override
+  Future<List<TerritoryAtRisk>> fetchTerritoriesAtRisk() async {
+    final rows = await _remote.fetchTerritoriesAtRisk();
+    return rows
+        .map(
+          (row) => TerritoryAtRisk(
+            id: row['id']! as String,
+            areaSqm: (row['area_sqm']! as num).toDouble(),
+            lastDefendedAt: DateTime.parse(row['last_defended_at']! as String),
+            expiresAt: DateTime.parse(row['expires_at']! as String),
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  Future<List<BountyZone>> fetchActiveBountyZones() async {
+    final rows = await _remote.fetchActiveBountyZones();
+    return rows
+        .map(
+          (row) => BountyZone(
+            id: row['id']! as String,
+            centerLat: (row['center_lat']! as num).toDouble(),
+            centerLng: (row['center_lng']! as num).toDouble(),
+            radiusM: (row['radius_m']! as num).toDouble(),
+            multiplier: (row['multiplier']! as num).toDouble(),
+          ),
+        )
+        .toList();
   }
 }

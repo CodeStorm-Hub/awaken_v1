@@ -58,5 +58,12 @@ class SquadState extends Equatable {
   }
 
   @override
-  List<Object?> get props => [status, squad, leaderboard, presence, errorMessage, isLeavingSquad];
+  List<Object?> get props => [
+    status,
+    squad,
+    leaderboard,
+    presence,
+    errorMessage,
+    isLeavingSquad,
+  ];
 }

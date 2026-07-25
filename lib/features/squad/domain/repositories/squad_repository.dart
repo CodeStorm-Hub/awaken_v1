@@ -20,6 +20,18 @@ abstract interface class SquadRepository {
   /// not a Realtime subscription — active only while listened.
   Stream<List<LeaderboardEntry>> watchLeaderboard(String squadId);
 
+  /// One-shot (not polled, unlike [watchLeaderboard]) — players within
+  /// [radiusM] of the caller's own last submitted run location. Empty if
+  /// the caller has never submitted a run (`profiles.last_run_location` is
+  /// null server-side).
+  Future<List<LeaderboardEntry>> fetchNearbyLeaderboard({
+    required double radiusM,
+    required bool weekly,
+  });
+
+  /// One-shot global top-N leaderboard.
+  Future<List<LeaderboardEntry>> fetchGlobalLeaderboard({required bool weekly});
+
   /// Realtime Presence sync/join/leave for the squad's channel — online
   /// members and their current activity label.
   Stream<List<SquadPresenceMember>> watchPresence(String squadId);
@@ -39,7 +51,10 @@ abstract interface class SquadRepository {
   /// applies: a report path is sufficient, no public block/moderation
   /// queue). Reports are reviewed by the operator directly, never surfaced
   /// back to any client.
-  Future<void> reportMember({required String reportedUserId, required String reason});
+  Future<void> reportMember({
+    required String reportedUserId,
+    required String reason,
+  });
 
   /// Closes any open Realtime channels and clears cached squad state —
   /// called only from account sign-out/switch/delete, immediately before

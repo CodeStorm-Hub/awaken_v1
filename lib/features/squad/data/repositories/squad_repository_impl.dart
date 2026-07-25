@@ -137,32 +137,65 @@ class SquadRepositoryImpl implements SquadRepository {
     _emitSquad(null);
   }
 
+  List<LeaderboardEntry> _mapLeaderboardRows(
+    List<Map<String, dynamic>> rows, {
+    String defaultName = 'Player',
+  }) {
+    final userId = _currentUserId;
+    return [
+      for (var i = 0; i < rows.length; i++)
+        LeaderboardEntry(
+          rank: i + 1,
+          userId: rows[i]['user_id'] as String,
+          displayName: (rows[i]['display_name'] as String?) ?? defaultName,
+          streakTier: StreakTier.fromValue(
+            (rows[i]['streak_tier'] as num?)?.toInt() ?? 0,
+          ),
+          areaSqm: (rows[i]['area_sqm'] as num?)?.toDouble() ?? 0,
+          isYou: rows[i]['user_id'] == userId,
+        ),
+    ];
+  }
+
   @override
   Stream<List<LeaderboardEntry>> watchLeaderboard(String squadId) async* {
-    final userId = _currentUserId;
     while (true) {
       // A single failed poll must not kill the whole stream (an unhandled
       // error here would terminate the `async*` generator entirely,
       // silently ending the leaderboard for the rest of the session) —
       // skip this round and retry on the next tick instead.
       try {
-        final rows = await _remote.fetchLeaderboard(squadId).timeout(const Duration(seconds: 10));
-        yield [
-          for (var i = 0; i < rows.length; i++)
-            LeaderboardEntry(
-              rank: i + 1,
-              userId: rows[i]['user_id'] as String,
-              displayName: (rows[i]['display_name'] as String?) ?? 'Squad member',
-              streakTier: StreakTier.fromValue((rows[i]['streak_tier'] as num?)?.toInt() ?? 0),
-              areaSqm: (rows[i]['area_sqm'] as num?)?.toDouble() ?? 0,
-              isYou: rows[i]['user_id'] == userId,
-            ),
-        ];
+        final rows = await _remote
+            .fetchLeaderboard(squadId)
+            .timeout(const Duration(seconds: 10));
+        yield _mapLeaderboardRows(rows, defaultName: 'Squad member');
       } catch (_) {
         // no-op — retry next tick
       }
       await Future<void>.delayed(const Duration(seconds: 20));
     }
+  }
+
+  @override
+  Future<List<LeaderboardEntry>> fetchNearbyLeaderboard({
+    required double radiusM,
+    required bool weekly,
+  }) async {
+    final rows = await _remote.fetchNearbyLeaderboard(
+      radiusM: radiusM,
+      timeWindow: weekly ? 'weekly' : 'all_time',
+    );
+    return _mapLeaderboardRows(rows);
+  }
+
+  @override
+  Future<List<LeaderboardEntry>> fetchGlobalLeaderboard({
+    required bool weekly,
+  }) async {
+    final rows = await _remote.fetchGlobalLeaderboard(
+      timeWindow: weekly ? 'weekly' : 'all_time',
+    );
+    return _mapLeaderboardRows(rows);
   }
 
   /// Latest broadcast-telemetry label per user, per squad — kept as
@@ -192,7 +225,9 @@ class SquadRepositoryImpl implements SquadRepository {
             SquadPresenceMember(
               userId: userId,
               displayName: displayName,
-              activity: activityOverrides[userId] ?? presence.payload['activity'] as String?,
+              activity:
+                  activityOverrides[userId] ??
+                  presence.payload['activity'] as String?,
             ),
           );
         }
@@ -233,10 +268,18 @@ class SquadRepositoryImpl implements SquadRepository {
     final userId = _currentUserId;
     if (squad == null || userId == null) return;
     final displayName =
-        (await _supabase.from('profiles').select('display_name').eq('id', userId).maybeSingle())?['display_name']
+        (await _supabase
+                .from('profiles')
+                .select('display_name')
+                .eq('id', userId)
+                .maybeSingle())?['display_name']
             as String? ??
         'You';
-    await _remote.trackPresence(squad.id, {'user_id': userId, 'display_name': displayName, 'activity': activity});
+    await _remote.trackPresence(squad.id, {
+      'user_id': userId,
+      'display_name': displayName,
+      'activity': activity,
+    });
   }
 
   @override
@@ -269,7 +312,10 @@ class SquadRepositoryImpl implements SquadRepository {
   }
 
   @override
-  Future<void> reportMember({required String reportedUserId, required String reason}) async {
+  Future<void> reportMember({
+    required String reportedUserId,
+    required String reason,
+  }) async {
     final squad = _cachedSquad;
     final userId = _currentUserId;
     if (squad == null || userId == null) return;

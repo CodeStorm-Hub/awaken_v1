@@ -26,6 +26,13 @@ class Runs extends Table {
   /// `areaSqm` (the user's total territory area after server-side merge).
   RealColumn get capturedAreaSqm => real().nullable()();
   RealColumn get areaSqm => real().nullable()();
+
+  /// Bounty-zone bonus (refined territory plan item 1) — `submit_run()`'s
+  /// `bonus_area_sqm`/`bounty_multiplier`, a celebration-UI-only credit
+  /// that never affects the stored territory polygon/`areaSqm`. Null when
+  /// no active bounty zone covered this run's capture point.
+  RealColumn get bonusAreaSqm => real().nullable()();
+  RealColumn get bountyMultiplier => real().nullable()();
   TextColumn get integrityVerdict => text().nullable()();
   TextColumn get rejectedReason => text().nullable()();
   DateTimeColumn get updatedAt => dateTime()();

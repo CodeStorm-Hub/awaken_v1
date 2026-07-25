@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -7,9 +8,15 @@ import '../../../../core/config/env.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
+import '../../domain/entities/bounty_zone.dart';
 import '../../domain/entities/geo_bounds.dart';
+import '../../domain/entities/rival.dart';
 import '../../domain/entities/territory.dart';
+import '../../domain/entities/territory_at_risk.dart';
+import '../../domain/usecases/get_active_bounty_zones.dart';
 import '../../domain/usecases/get_current_position.dart';
+import '../../domain/usecases/get_current_rival.dart';
+import '../../domain/usecases/get_territories_at_risk.dart';
 import '../../domain/usecases/refresh_territories.dart';
 import '../../domain/usecases/watch_owned_area.dart';
 import '../../domain/usecases/watch_territories.dart';
@@ -53,10 +60,34 @@ class _TerritoryPageState extends State<TerritoryPage> {
   Timer? _styleLoadTimer;
   static const _styleLoadTimeout = Duration(seconds: 15);
 
+  final _bountyFillsByZoneId = <String, List<Fill>>{};
+  Rival? _currentRival;
+  List<TerritoryAtRisk> _atRisk = const [];
+
   @override
   void initState() {
     super.initState();
     unawaited(_locateSelf());
+    unawaited(_loadRivalAndDecayStatus());
+  }
+
+  /// Neither of these is viewport-scoped like territories/bounty zones —
+  /// fetched once per page open rather than per camera move.
+  Future<void> _loadRivalAndDecayStatus() async {
+    try {
+      final results = await Future.wait([
+        getIt<GetCurrentRival>()(const NoParams()),
+        getIt<GetTerritoriesAtRisk>()(const NoParams()),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _currentRival = results[0] as Rival?;
+        _atRisk = results[1] as List<TerritoryAtRisk>;
+      });
+    } catch (_) {
+      // Best-effort — the map/run-tracking core functionality doesn't
+      // depend on either of these loading successfully.
+    }
   }
 
   @override
@@ -126,6 +157,62 @@ class _TerritoryPageState extends State<TerritoryPage> {
     }
     await _refreshForCurrentView();
     _territoriesSub = getIt<WatchTerritories>()().listen(_onTerritoriesChanged);
+    unawaited(_drawBountyZones());
+  }
+
+  /// Bounty zones are few and global (not per-viewport like territories),
+  /// so this fetches once per style load rather than on every camera move.
+  Future<void> _drawBountyZones() async {
+    final controller = _controller;
+    if (controller == null) return;
+    List<BountyZone> zones;
+    try {
+      zones = await getIt<GetActiveBountyZones>()(const NoParams());
+    } catch (_) {
+      return; // best-effort — a failed fetch just means no bounty layer this session
+    }
+    if (!mounted || _controller == null) return;
+
+    final scheme = Theme.of(context).colorScheme;
+    for (final zone in zones) {
+      final ring = _circlePolygon(zone.centerLat, zone.centerLng, zone.radiusM);
+      final fill = await controller.addFill(
+        FillOptions(
+          geometry: [ring],
+          fillColor: _colorToHex(scheme.tertiary),
+          fillOpacity: 0.2,
+          fillOutlineColor: _colorToHex(scheme.tertiary),
+        ),
+      );
+      _bountyFillsByZoneId[zone.id] = [fill];
+    }
+  }
+
+  /// A 32-point polygon approximating a [radiusMeters] circle around
+  /// (lat, lng) — MapLibre's `CircleOptions.circleRadius` is in screen
+  /// pixels, not meters, so it can't represent a real-world-sized zone that
+  /// stays accurate across zoom levels; a `Fill` polygon (same primitive
+  /// territories already use) does.
+  static List<LatLng> _circlePolygon(
+    double lat,
+    double lng,
+    double radiusMeters,
+  ) {
+    const points = 32;
+    const earthRadiusM = 6371000.0;
+    final latRad = lat * (math.pi / 180);
+    final ring = <LatLng>[];
+    for (var i = 0; i <= points; i++) {
+      final angle = 2 * math.pi * i / points;
+      final dLat =
+          (radiusMeters * math.cos(angle)) / earthRadiusM * (180 / math.pi);
+      final dLng =
+          (radiusMeters * math.sin(angle)) /
+          (earthRadiusM * math.cos(latRad)) *
+          (180 / math.pi);
+      ring.add(LatLng(lat + dLat, lng + dLng));
+    }
+    return ring;
   }
 
   void _onTerritoriesChanged(List<Territory> territories) {
@@ -265,14 +352,30 @@ class _TerritoryPageState extends State<TerritoryPage> {
                         top: 14,
                         left: 14,
                         right: 14,
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            _OwnedAreaChip(scheme: scheme),
-                            const Spacer(),
-                            _TerritoryLegend(
-                              scheme: scheme,
-                              showRivalTerritory: _showRivalTerritory,
+                            Row(
+                              children: [
+                                _OwnedAreaChip(scheme: scheme),
+                                const Spacer(),
+                                _TerritoryLegend(
+                                  scheme: scheme,
+                                  showRivalTerritory: _showRivalTerritory,
+                                ),
+                              ],
                             ),
+                            if (_atRisk.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              _AtRiskBanner(
+                                territories: _atRisk,
+                                scheme: scheme,
+                              ),
+                            ],
+                            if (_currentRival != null) ...[
+                              const SizedBox(height: 8),
+                              _RivalCard(rival: _currentRival!, scheme: scheme),
+                            ],
                           ],
                         ),
                       ),
@@ -561,6 +664,100 @@ class _TerritoryLegend extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AtRiskBanner extends StatelessWidget {
+  const _AtRiskBanner({required this.territories, required this.scheme});
+
+  final List<TerritoryAtRisk> territories;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final soonest = territories.reduce(
+      (a, b) => a.expiresAt.isBefore(b.expiresAt) ? a : b,
+    );
+    final daysLeft = soonest.expiresAt
+        .difference(DateTime.now())
+        .inDays
+        .clamp(0, 99);
+    final label = territories.length == 1
+        ? "1 territory at risk — undefended, reverts in ${daysLeft}d"
+        : "${territories.length} territories at risk — soonest reverts in ${daysLeft}d";
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFE08C),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.warning, size: 16, color: Color(0xFF2A1F00)),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF2A1F00),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RivalCard extends StatelessWidget {
+  const _RivalCard({required this.rival, required this.scheme});
+
+  final Rival rival;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = rival.rivalDisplayName ?? 'A rival';
+    final areaLabel =
+        '${(rival.areaTakenSqm / 1000000).toStringAsFixed(3)} km²';
+    final label = rival.asWinner
+        ? 'You took $areaLabel from $name'
+        : '$name took $areaLabel from you';
+    final bg = rival.asWinner ? scheme.primaryContainer : scheme.errorContainer;
+    final fg = rival.asWinner
+        ? scheme.onPrimaryContainer
+        : scheme.onErrorContainer;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            rival.asWinner ? Icons.emoji_events : Icons.shield_moon,
+            size: 16,
+            color: fg,
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: fg,
+              ),
+            ),
+          ),
         ],
       ),
     );
