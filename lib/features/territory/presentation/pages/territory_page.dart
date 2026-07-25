@@ -100,7 +100,9 @@ class _TerritoryPageState extends State<TerritoryPage> {
       });
       final controller = _controller;
       if (controller != null) {
-        await controller.animateCamera(CameraUpdate.newLatLngZoom(_center, 15));
+        await controller.animateCamera(
+          CameraUpdate.newLatLngZoom(_center, _focusZoom),
+        );
         await _syncCurrentPositionMarker();
       }
     } catch (_) {
@@ -147,7 +149,9 @@ class _TerritoryPageState extends State<TerritoryPage> {
   Future<void> _onStyleLoaded() async {
     _styleLoader.onStyleLoaded();
     if (_hasFix) {
-      await _controller?.animateCamera(CameraUpdate.newLatLngZoom(_center, 15));
+      await _controller?.animateCamera(
+        CameraUpdate.newLatLngZoom(_center, _focusZoom),
+      );
       await _syncCurrentPositionMarker();
     }
     await _refreshForCurrentView();
@@ -284,8 +288,16 @@ class _TerritoryPageState extends State<TerritoryPage> {
   Future<void> _recenter() async {
     final controller = _controller;
     if (controller == null) return;
-    await controller.animateCamera(CameraUpdate.newLatLngZoom(_center, 15));
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(_center, _focusZoom),
+    );
   }
+
+  /// The zoom used to center on the user's own position — clamped to the
+  /// active style tier's data ceiling (see `MapStyleLoader.dataMaxZoom`) so
+  /// the bundled fallback tier doesn't overzoom into a single illegible
+  /// blown-up tile fragment.
+  double get _focusZoom => math.min(15, _styleLoader.dataMaxZoom ?? 15);
 
   @override
   Widget build(BuildContext context) {

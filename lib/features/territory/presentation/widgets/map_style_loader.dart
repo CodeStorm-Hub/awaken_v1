@@ -32,6 +32,25 @@ class MapStyleLoader {
   static const _bundledFallbackAssetPath = 'assets/map/fallback_style.json';
   static const _bundledFallbackPlaceholder = '{{TILE_WORKER_BASE_URL}}';
 
+  /// Must match `assets/map/fallback_style.json`'s source `maxzoom`. The
+  /// bundled fallback tier only has data up to this zoom — animating the
+  /// camera past it (e.g. to a "zoomed into your GPS fix" level meant for
+  /// full-detail tiers) doesn't error, but overzooms a single low-res tile
+  /// into a giant, illegible solid-color fragment instead of showing a
+  /// recognizable degraded map. Found live: panning after a forced fallback
+  /// moved the position marker correctly (real interactive map, real
+  /// style), but the fill stayed a uniform color with no visible
+  /// coastline/borders anywhere on screen — a dead giveaway of overzoom,
+  /// confirmed by checking this tier never actually reaches its own
+  /// `maxzoom` bound in the affected call sites.
+  static const bundledFallbackMaxZoom = 6.0;
+
+  /// Highest zoom the *active* tier's data actually supports, or `null` for
+  /// tiers backed by full-detail hosted styles (no clamp needed). Callers
+  /// animating the camera to a level tuned for full detail (e.g. a GPS fix)
+  /// should clamp to this when non-null.
+  double? get dataMaxZoom => _tier == 2 ? bundledFallbackMaxZoom : null;
+
   String styleString = Env.mapStyleUrl;
   Key styleKey = const ValueKey('map-style-0');
   MapStyleLoadStatus status = MapStyleLoadStatus.loading;

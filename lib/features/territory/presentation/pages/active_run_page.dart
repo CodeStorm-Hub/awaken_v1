@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -171,7 +173,9 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     }
 
     if (_autoFollow) {
-      await controller.animateCamera(CameraUpdate.newLatLngZoom(current, 17));
+      await controller.animateCamera(
+        CameraUpdate.newLatLngZoom(current, _focusZoom),
+      );
     }
   }
 
@@ -180,9 +184,20 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     setState(() => _autoFollow = true);
     if (controller == null || _currentMarker == null) return;
     await controller.animateCamera(
-      CameraUpdate.newLatLngZoom(_currentMarker!.options.geometry!, 17),
+      CameraUpdate.newLatLngZoom(_currentMarker!.options.geometry!, _focusZoom),
     );
   }
+
+  /// The follow/recenter zoom, clamped to the active style tier's data
+  /// ceiling (see `MapStyleLoader.dataMaxZoom`) — otherwise the bundled
+  /// fallback tier overzooms into a single illegible blown-up tile
+  /// fragment instead of a legible degraded map. Found live on an emulator:
+  /// after a forced style-tier fallback, the map was interactive and the
+  /// position marker tracked correctly, but the screen showed one uniform
+  /// color with no visible coastline/borders anywhere, even after panning
+  /// — the signature of viewing a single low-zoom tile blown up far past
+  /// its native resolution.
+  double get _focusZoom => math.min(17, _styleLoader.dataMaxZoom ?? 17);
 
   Future<void> _capture(RunTrackingCubit cubit) async {
     if (_busy) return;
