@@ -199,6 +199,14 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
   /// its native resolution.
   double get _focusZoom => math.min(17, _styleLoader.dataMaxZoom ?? 17);
 
+  Future<void> _zoomIn() async {
+    await _controller?.animateCamera(CameraUpdate.zoomIn());
+  }
+
+  Future<void> _zoomOut() async {
+    await _controller?.animateCamera(CameraUpdate.zoomOut());
+  }
+
   Future<void> _capture(RunTrackingCubit cubit) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -358,6 +366,15 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                       ? 'Following your position'
                                       : 'Recenter',
                                   onTap: _recenter,
+                                ),
+                              ),
+                              Positioned(
+                                top: 64,
+                                right: 10,
+                                child: _ZoomControls(
+                                  scheme: scheme,
+                                  onZoomIn: _zoomIn,
+                                  onZoomOut: _zoomOut,
                                 ),
                               ),
                               if (_styleLoader.status ==
@@ -614,6 +631,43 @@ class _RoundMapButton extends StatelessWidget {
             child: Icon(icon, size: 18, color: scheme.onSurface),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Manual zoom in/out — pinch gestures already reach the full zoom range
+/// (`MapLibreMap`'s default `minMaxZoomPreference` is unbounded), so this is
+/// purely a tap-target/accessibility affordance for anyone who can't
+/// perform a pinch gesture.
+class _ZoomControls extends StatelessWidget {
+  const _ZoomControls({
+    required this.scheme,
+    required this.onZoomIn,
+    required this.onZoomOut,
+  });
+
+  final ColorScheme scheme;
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _RoundMapButton(icon: Icons.add, tooltip: 'Zoom in', onTap: onZoomIn),
+          _RoundMapButton(
+            icon: Icons.remove,
+            tooltip: 'Zoom out',
+            onTap: onZoomOut,
+          ),
+        ],
       ),
     );
   }

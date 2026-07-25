@@ -293,6 +293,14 @@ class _TerritoryPageState extends State<TerritoryPage> {
     );
   }
 
+  Future<void> _zoomIn() async {
+    await _controller?.animateCamera(CameraUpdate.zoomIn());
+  }
+
+  Future<void> _zoomOut() async {
+    await _controller?.animateCamera(CameraUpdate.zoomOut());
+  }
+
   /// The zoom used to center on the user's own position — clamped to the
   /// active style tier's data ceiling (see `MapStyleLoader.dataMaxZoom`) so
   /// the bundled fallback tier doesn't overzoom into a single illegible
@@ -477,6 +485,15 @@ class _TerritoryPageState extends State<TerritoryPage> {
                               ],
                             ),
                           ),
+                        ),
+                      ),
+                      Positioned(
+                        right: 14,
+                        bottom: 90,
+                        child: _ZoomControls(
+                          scheme: scheme,
+                          onZoomIn: _zoomIn,
+                          onZoomOut: _zoomOut,
                         ),
                       ),
                     ],
@@ -793,6 +810,50 @@ class _RoundIconButton extends StatelessWidget {
             child: Icon(icon, size: 22, color: scheme.onSurfaceVariant),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Manual zoom in/out — pinch gestures already reach the full zoom range
+/// (`MapLibreMap`'s default `minMaxZoomPreference` is unbounded), so this is
+/// purely a tap-target/accessibility affordance for anyone who can't
+/// perform a pinch gesture.
+class _ZoomControls extends StatelessWidget {
+  const _ZoomControls({
+    required this.scheme,
+    required this.onZoomIn,
+    required this.onZoomOut,
+  });
+
+  final ColorScheme scheme;
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _RoundIconButton(
+            icon: Icons.add,
+            tooltip: 'Zoom in',
+            onTap: onZoomIn,
+          ),
+          _RoundIconButton(
+            icon: Icons.remove,
+            tooltip: 'Zoom out',
+            onTap: onZoomOut,
+          ),
+        ],
       ),
     );
   }
