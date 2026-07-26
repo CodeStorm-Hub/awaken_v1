@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
@@ -51,89 +52,110 @@ class _AlarmListPageState extends State<AlarmListPage> {
             final n = alarms.length;
 
             return Stack(
-              // Stack defaults to StackFit.loose, which lets this Column
-              // shrink-wrap to its content's natural width instead of
-              // filling the screen — that shifted the whole page (title,
-              // empty state) left instead of centering/filling properly.
-              // StackFit.expand forces it to the Stack's full bounds; the
-              // FAB below is `Positioned` so it's unaffected either way.
               fit: StackFit.expand,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.battery_charging_full),
-                                tooltip: 'Alarm reliability settings',
-                                onPressed: () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const BatteryExemptionPage(),
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                      child: AppleGlassContainer(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        borderRadius: BorderRadius.circular(22),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Alarms',
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.5,
+                                    color: scheme.onSurface,
                                   ),
                                 ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.bug_report_outlined),
-                                tooltip: 'Run alarm reliability self-test',
-                                onPressed: () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const AlarmReliabilityTestPage(),
+                                const SizedBox(height: 1),
+                                Text(
+                                  n == 0
+                                      ? 'Nothing scheduled'
+                                      : '$n alarm${n == 1 ? '' : 's'} · tap to preview',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF8E8E93),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const CurrentUserAvatarButton(),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Alarms',
-                            style: theme.textTheme.headlineLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: -0.5,
+                              ],
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            n == 0
-                                ? 'Nothing scheduled'
-                                : '$n alarm${n == 1 ? '' : 's'} · tap one to preview the wake-up flow',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
+                            Row(
+                              children: [
+                                Tooltip(
+                                  message: 'Alarm reliability settings',
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    shape: const CircleBorder(),
+                                    child: InkWell(
+                                      customBorder: const CircleBorder(),
+                                      onTap: () => Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const BatteryExemptionPage(),
+                                        ),
+                                      ),
+                                      child: SizedBox(
+                                        width: 36,
+                                        height: 36,
+                                        child: Icon(
+                                          Icons.battery_charging_full,
+                                          size: 18,
+                                          color: scheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Tooltip(
+                                  message: 'Run self-test',
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    shape: const CircleBorder(),
+                                    child: InkWell(
+                                      customBorder: const CircleBorder(),
+                                      onTap: () => Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const AlarmReliabilityTestPage(),
+                                        ),
+                                      ),
+                                      child: SizedBox(
+                                        width: 36,
+                                        height: 36,
+                                        child: Icon(
+                                          Icons.bug_report_outlined,
+                                          size: 18,
+                                          color: scheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                const CurrentUserAvatarButton(),
+                              ],
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                     Expanded(
                       child: n == 0
                           ? _EmptyState(scheme: scheme, theme: theme)
-                          // A single (or few) alarm card left ~70% of the
-                          // screen blank below it with a plain ListView —
-                          // found in design critique, read as unfinished
-                          // rather than intentional. Centering (an earlier
-                          // fix) traded that for blank space *above* the
-                          // card instead — flagged directly against a live
-                          // screenshot as looking just as wrong, since it
-                          // pushes the single card away from the header it
-                          // belongs with. Top-aligned (this Column's default
-                          // `start`) reads as a normal growing list instead;
-                          // the ConstrainedBox still lets it scroll normally
-                          // once enough alarms are scheduled to overflow.
                           : Padding(
                               padding: const EdgeInsets.fromLTRB(
                                 16,
@@ -232,8 +254,7 @@ class _AlarmListPageState extends State<AlarmListPage> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _ScheduleSheet(
-        onSchedule: (mode, reps, minutes, days) async {
-          final scheduledTime = DateTime.now().add(Duration(minutes: minutes));
+        onSchedule: (mode, reps, scheduledTime, days) async {
           try {
             await cubit.schedule(
               AlarmSchedule(
@@ -250,13 +271,11 @@ class _AlarmListPageState extends State<AlarmListPage> {
             );
             return;
           }
+          final hourStr = scheduledTime.hour.toString().padLeft(2, '0');
+          final minStr = scheduledTime.minute.toString().padLeft(2, '0');
           messenger.showSnackBar(
             SnackBar(
-              content: Text(
-                'Alarm scheduled for '
-                '${scheduledTime.hour.toString().padLeft(2, '0')}:'
-                '${scheduledTime.minute.toString().padLeft(2, '0')}',
-              ),
+              content: Text('Alarm scheduled for $hourStr:$minStr'),
             ),
           );
         },
@@ -267,11 +286,6 @@ class _AlarmListPageState extends State<AlarmListPage> {
   Future<void> _toggleActive(BuildContext context, AlarmSchedule alarm) async {
     final messenger = ScaffoldMessenger.of(context);
     final cubit = context.read<AlarmCubit>();
-    // `on:` is driven straight from `alarm.isActive` (the merged native+Drift
-    // stream) — no local optimistic flip to revert — but a failed toggle was
-    // previously silent (fire-and-forget `VoidCallback`), leaving the user
-    // unsure whether tapping the switch did anything. Await + surface the
-    // error, matching the delete/schedule flows below.
     try {
       await cubit.setActive(alarm.id, !alarm.isActive);
     } catch (e) {
@@ -287,10 +301,6 @@ class _AlarmListPageState extends State<AlarmListPage> {
     final cubit = context.read<AlarmCubit>();
     final confirmed = await showDialog<bool>(
       context: context,
-      // Flutter's default barrier is a hardcoded Colors.black54 — using
-      // scheme.scrim instead keeps the barrier consistent with the rest of
-      // the Material 3 theme (it's the same tone the seed/dynamic color
-      // algorithm derives for exactly this purpose).
       barrierColor: scheme.scrim.withValues(alpha: 0.5),
       builder: (_) => AlertDialog(
         title: const Text('Delete alarm?'),
@@ -330,12 +340,6 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // `Expanded` only controls the outer Column's main (vertical) axis; on
-    // the cross axis this child still gets a loose width constraint, so
-    // without forcing full width here, this whole block shrink-wraps to
-    // its widest line of text and sits flush against the outer Column's
-    // `crossAxisAlignment.start` — i.e. off-center — instead of centering
-    // across the screen.
     return SizedBox(
       width: double.infinity,
       child: Padding(
@@ -376,11 +380,6 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-/// Staggered entrance for each alarm card (handoff's `m3x-rise` keyframe:
-/// fade + rise-up + slight scale-in, played once per card with a
-/// `60ms * index` stagger). Gated on `_played` — since `AlarmListPage`
-/// rebuilds its `ListView` on every toggle/delete, this must not replay
-/// on every parent rebuild, only on this card's first appearance.
 class _RiseIn extends StatefulWidget {
   const _RiseIn({required this.delay, required this.child});
 
@@ -457,112 +456,97 @@ class _AlarmCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final bg = on ? scheme.primaryContainer : scheme.surfaceContainerHigh;
-    final fg = on ? scheme.onPrimaryContainer : scheme.onSurfaceVariant;
+    final bg = on ? scheme.surfaceContainer : scheme.surfaceContainerHigh;
+    final fg = on ? scheme.onSurface : scheme.onSurfaceVariant;
     final chipBg = on
-        ? Colors.white.withValues(alpha: 0.55)
+        ? scheme.primary.withValues(alpha: 0.12)
         : scheme.surfaceContainer;
+    final chipFg = on ? scheme.primary : scheme.onSurfaceVariant;
 
-    return Material(
-      color: bg,
-      borderRadius: radius,
-      child: InkWell(
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
         borderRadius: radius,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-          // Delete used to sit alone in its own full-width row below
-          // everything, floating with no visual relationship to the chip
-          // line it deletes — flagged directly against a live screenshot.
-          // A first attempt stretched the right column to the card's full
-          // height and pushed delete to the bottom via `spaceBetween`, but
-          // that overshot past the chips down to the card's bottom edge
-          // (flagged again against a second screenshot). Fixed with an
-          // explicit gap sized to land the icon's glyph center — not just
-          // its larger tap-target box — level with the chips' own center.
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            // Was the default `center`, harmless while this row held only
-            // the time text — now that the chips moved in beside it (for
-            // the merged-semantics fix below), `center` would shift the
-            // switch down to align with the now-taller block. `start` keeps
-            // the switch pinned to the top, matching the original layout.
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Time + exercise + recurrence previously read as three
-              // separate swipe stops for TalkBack ("22:40" / "20 squats"
-              // / "One-time") — found in accessibility review. Merged
-              // into one node; the toggle stays outside this scope since
-              // it's a separately actionable control, not part of the
-              // static summary.
-              Semantics(
-                label:
-                    '$_timeLabel, ${alarm.requiredReps} '
-                    '${alarm.exerciseMode == ExerciseMode.squat ? 'squats' : 'push-ups'}, '
-                    '$_recurrenceLabel, alarm ${on ? 'on' : 'off'}',
-                child: ExcludeSemantics(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _timeLabel,
-                        style: TextStyle(
-                          fontSize: 44,
-                          height: 48 / 44,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -1,
-                          color: on
-                              ? scheme.onPrimaryContainer
-                              : scheme.onSurface,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          _Chip(
-                            bg: chipBg,
-                            fg: fg,
-                            icon: alarm.exerciseMode == ExerciseMode.squat
-                                ? Icons.accessibility_new
-                                : Icons.sports_gymnastics,
-                            label:
-                                '${alarm.requiredReps} ${alarm.exerciseMode == ExerciseMode.squat ? 'squats' : 'push-ups'}',
+        border: Border.all(
+          color: on
+              ? scheme.primary.withValues(alpha: 0.4)
+              : scheme.outline.withValues(alpha: 0.15),
+          width: on ? 1.5 : 1.0,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: radius,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                  label:
+                      '$_timeLabel, ${alarm.requiredReps} '
+                      '${alarm.exerciseMode == ExerciseMode.squat ? 'squats' : 'push-ups'}, '
+                      '$_recurrenceLabel, alarm ${on ? 'on' : 'off'}',
+                  child: ExcludeSemantics(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _timeLabel,
+                          style: TextStyle(
+                            fontSize: 44,
+                            height: 48 / 44,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: -1,
+                            color: on ? scheme.onSurface : scheme.onSurfaceVariant,
+                            fontFeatures: const [FontFeature.tabularFigures()],
                           ),
-                          _Chip(bg: chipBg, fg: fg, label: _recurrenceLabel),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  ExpressiveSwitch(value: on, onChanged: (_) => onToggle()),
-                  const SizedBox(height: 16),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    color: fg,
-                    onPressed: onDelete,
-                    tooltip: 'Delete alarm',
-                    // Default IconButton padding pads its box out past the
-                    // chip line even with the gap above tuned to land the
-                    // icon there — an explicit 44x44 box (WCAG 2.5.5's own
-                    // minimum, not shrunk below it) with zero extra
-                    // padding keeps the *visible glyph*, not a larger
-                    // padded box, level with the chips.
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size(44, 44),
-                      padding: EdgeInsets.zero,
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            _Chip(
+                              bg: chipBg,
+                              fg: chipFg,
+                              icon: alarm.exerciseMode == ExerciseMode.squat
+                                  ? Icons.accessibility_new
+                                  : Icons.sports_gymnastics,
+                              label:
+                                  '${alarm.requiredReps} ${alarm.exerciseMode == ExerciseMode.squat ? 'squats' : 'push-ups'}',
+                            ),
+                            _Chip(bg: chipBg, fg: chipFg, label: _recurrenceLabel),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    ExpressiveSwitch(value: on, onChanged: (_) => onToggle()),
+                    const SizedBox(height: 16),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      color: fg,
+                      onPressed: onDelete,
+                      tooltip: 'Delete alarm',
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(44, 44),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -668,8 +652,12 @@ class _ExpressiveFabState extends State<_ExpressiveFab> {
 class _ScheduleSheet extends StatefulWidget {
   const _ScheduleSheet({required this.onSchedule});
 
-  final void Function(ExerciseMode mode, int reps, int minutes, Set<int> days)
-  onSchedule;
+  final void Function(
+    ExerciseMode mode,
+    int reps,
+    DateTime scheduledTime,
+    Set<int> days,
+  ) onSchedule;
 
   @override
   State<_ScheduleSheet> createState() => _ScheduleSheetState();
@@ -678,206 +666,423 @@ class _ScheduleSheet extends StatefulWidget {
 class _ScheduleSheetState extends State<_ScheduleSheet> {
   var _mode = ExerciseMode.squat;
   var _reps = 20;
-  var _minutes = 1;
   var _days = <int>{};
+
+  late DateTime _selectedDateTime;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    final roundedMin = (now.minute / 5).ceil() * 5;
+    _selectedDateTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      now.hour,
+    ).add(Duration(minutes: roundedMin));
+  }
+
+  DateTime get _targetDateTime {
+    final now = DateTime.now();
+    var dt = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      _selectedDateTime.hour,
+      _selectedDateTime.minute,
+    );
+    if (dt.isBefore(now)) {
+      dt = dt.add(const Duration(days: 1));
+    }
+    return dt;
+  }
+
+  String _formatTargetSummary(DateTime scheduled) {
+    final now = DateTime.now();
+    final diff = scheduled.difference(now);
+    final hours = diff.inHours;
+    final minutes = diff.inMinutes % 60;
+
+    final isToday =
+        scheduled.day == now.day &&
+        scheduled.month == now.month &&
+        scheduled.year == now.year;
+    final dayText = isToday ? 'today' : 'tomorrow';
+
+    final h24 = scheduled.hour;
+    final h12 = h24 == 0 ? 12 : (h24 > 12 ? h24 - 12 : h24);
+    final amPm = h24 >= 12 ? 'PM' : 'AM';
+    final minStr = scheduled.minute.toString().padLeft(2, '0');
+
+    if (hours == 0 && minutes == 0) {
+      return 'Alarm set for $dayText at $h12:$minStr $amPm (in < 1 min)';
+    } else if (hours == 0) {
+      return 'Alarm set for $dayText at $h12:$minStr $amPm (in $minutes mins)';
+    } else {
+      return 'Alarm set for $dayText at $h12:$minStr $amPm (in ${hours}h ${minutes}m)';
+    }
+  }
+
+  String get _recurrenceSummary {
+    if (_days.isEmpty) return 'Never';
+    if (_days.length == 7) return 'Every day';
+    if (_days.length == 5 && !_days.contains(6) && !_days.contains(7)) {
+      return 'Weekdays';
+    }
+    if (_days.length == 2 && _days.contains(6) && _days.contains(7)) {
+      return 'Weekends';
+    }
+    final sorted = _days.toList()..sort();
+    return sorted.map((d) => _weekdayLabels[d - 1]).join(', ');
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final accentColor = scheme.primary;
+    final isDark = scheme.brightness == Brightness.dark;
 
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          color: scheme.surfaceContainer,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(
+            color: scheme.outline.withValues(alpha: 0.3),
+            width: 0.5,
+          ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 14),
-                decoration: BoxDecoration(
-                  color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-            ),
-            Text(
-              'Schedule alarm',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                letterSpacing: -0.3,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _ModeButton(
-                    label: 'Squats',
-                    icon: Icons.accessibility_new,
-                    selected: _mode == ExerciseMode.squat,
-                    onTap: () => setState(() => _mode = ExerciseMode.squat),
-                  ),
-                ),
-                const SizedBox(width: 3),
-                Expanded(
-                  child: _ModeButton(
-                    label: 'Push-ups',
-                    icon: Icons.sports_gymnastics,
-                    selected: _mode == ExerciseMode.pushup,
-                    onTap: () => setState(() => _mode = ExerciseMode.pushup),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _Stepper(
-              label: 'Reps',
-              value: '$_reps',
-              decrementLabel: 'Fewer reps',
-              incrementLabel: 'More reps',
-              radius: const BorderRadius.vertical(
-                top: Radius.circular(18),
-                bottom: Radius.circular(8),
-              ),
-              onDecrement: () =>
-                  setState(() => _reps = (_reps - 5).clamp(5, 100)),
-              onIncrement: () =>
-                  setState(() => _reps = (_reps + 5).clamp(5, 100)),
-            ),
-            const SizedBox(height: 3),
-            _Stepper(
-              label: 'Minutes from now',
-              value: '$_minutes',
-              decrementLabel: 'Sooner',
-              incrementLabel: 'Later',
-              radius: const BorderRadius.vertical(
-                top: Radius.circular(8),
-                bottom: Radius.circular(18),
-              ),
-              onDecrement: () =>
-                  setState(() => _minutes = (_minutes - 1).clamp(1, 720)),
-              onIncrement: () =>
-                  setState(() => _minutes = (_minutes + 1).clamp(1, 720)),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Repeat',
-              style: theme.textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: List.generate(7, (i) {
-                final day = i + 1;
-                final selected = _days.contains(day);
-                return Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(right: i == 6 ? 0 : 6),
-                    child: _DayToggle(
-                      label: _weekdayLabels[i],
-                      tooltip: _weekdayFullLabels[i],
-                      selected: selected,
-                      onTap: () => setState(() {
-                        final next = {..._days};
-                        selected ? next.remove(day) : next.add(day);
-                        _days = next;
-                      }),
-                    ),
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: 22),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(52),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(999),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w400,
+                          color: accentColor,
+                        ),
                       ),
                     ),
-                    onPressed: () {
-                      widget.onSchedule(_mode, _reps, _minutes, _days);
+                  ),
+                  Text(
+                    'Add Alarm',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface,
+                    ),
+                  ),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      widget.onSchedule(_mode, _reps, _targetDateTime, _days);
                       Navigator.of(context).pop();
                     },
-                    child: const Text('Schedule alarm'),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        'Save',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: accentColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 190,
+                child: CupertinoTheme(
+                  data: CupertinoThemeData(
+                    brightness: theme.brightness,
+                    textTheme: CupertinoTextThemeData(
+                      dateTimePickerTextStyle: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w500,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  child: CupertinoDatePicker(
+                    mode: CupertinoDatePickerMode.time,
+                    initialDateTime: _selectedDateTime,
+                    use24hFormat: false,
+                    onDateTimeChanged: (DateTime newDateTime) {
+                      setState(() {
+                        _selectedDateTime = newDateTime;
+                      });
+                    },
                   ),
                 ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF2C2C2E) : scheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: scheme.outline.withValues(alpha: 0.2),
+                    width: 0.5,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Exercise',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w400,
+                              color: scheme.onSurface,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              _IosModePill(
+                                label: 'Squats',
+                                selected: _mode == ExerciseMode.squat,
+                                onTap: () => setState(
+                                  () => _mode = ExerciseMode.squat,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              _IosModePill(
+                                label: 'Push-ups',
+                                selected: _mode == ExerciseMode.pushup,
+                                onTap: () => setState(
+                                  () => _mode = ExerciseMode.pushup,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(
+                      height: 1,
+                      indent: 16,
+                      endIndent: 16,
+                      color: scheme.outline.withValues(alpha: 0.2),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Reps',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w400,
+                              color: scheme.onSurface,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              _IosStepButton(
+                                icon: Icons.remove,
+                                onTap: () => setState(
+                                  () => _reps = (_reps - 5).clamp(5, 100),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 48,
+                                child: Text(
+                                  '$_reps',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w600,
+                                    color: accentColor,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures(),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              _IosStepButton(
+                                icon: Icons.add,
+                                onTap: () => setState(
+                                  () => _reps = (_reps + 5).clamp(5, 100),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(
+                      height: 1,
+                      indent: 16,
+                      endIndent: 16,
+                      color: scheme.outline.withValues(alpha: 0.2),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Repeat',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w400,
+                                  color: scheme.onSurface,
+                                ),
+                              ),
+                              Text(
+                                _recurrenceSummary,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w400,
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: List.generate(7, (i) {
+                              final day = i + 1;
+                              final selected = _days.contains(day);
+                              return Expanded(
+                                child: Padding(
+                                  padding: EdgeInsets.only(
+                                    right: i == 6 ? 0 : 4,
+                                  ),
+                                  child: _IosDayToggle(
+                                    label: _weekdayLabels[i],
+                                    tooltip: _weekdayFullLabels[i],
+                                    selected: selected,
+                                    onTap: () => setState(() {
+                                      final next = {..._days};
+                                      selected
+                                          ? next.remove(day)
+                                          : next.add(day);
+                                      _days = next;
+                                    }),
+                                  ),
+                                ),
+                              );
+                            }),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: accentColor.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.alarm_on, size: 18, color: accentColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _formatTargetSummary(_targetDateTime),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: accentColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _ModeButton extends StatelessWidget {
-  const _ModeButton({
+class _IosModePill extends StatelessWidget {
+  const _IosModePill({
     required this.label,
-    required this.icon,
     required this.selected,
     required this.onTap,
   });
 
   final String label;
-  final IconData icon;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: label,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutBack,
-          height: 52,
-          decoration: BoxDecoration(
-            color: selected ? scheme.primary : scheme.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(selected ? 999 : 12),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                selected ? Icons.check : icon,
-                size: 20,
-                color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontWeight: selected ? FontWeight.bold : FontWeight.w500,
-                  color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+    final accentColor = scheme.primary;
+    final isDark = scheme.brightness == Brightness.dark;
+    final unselectedBg = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : scheme.surfaceContainer;
+    final unselectedFg = isDark ? Colors.white70 : scheme.onSurfaceVariant;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? accentColor : unselectedBg,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? Colors.white : unselectedFg,
           ),
         ),
       ),
@@ -885,127 +1090,38 @@ class _ModeButton extends StatelessWidget {
   }
 }
 
-class _Stepper extends StatelessWidget {
-  const _Stepper({
-    required this.label,
-    required this.value,
-    required this.decrementLabel,
-    required this.incrementLabel,
-    required this.radius,
-    required this.onDecrement,
-    required this.onIncrement,
-  });
-
-  final String label;
-  final String value;
-  final String decrementLabel;
-  final String incrementLabel;
-  final BorderRadius radius;
-  final VoidCallback onDecrement;
-  final VoidCallback onIncrement;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
-        borderRadius: radius,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: scheme.onSurface, fontSize: 16)),
-          Row(
-            children: [
-              _StepButton(
-                icon: Icons.remove,
-                label: decrementLabel,
-                onTap: onDecrement,
-              ),
-              SizedBox(
-                width: 44,
-                child: Text(
-                  value,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: scheme.onSurface,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
-              _StepButton(
-                icon: Icons.add,
-                label: incrementLabel,
-                onTap: onIncrement,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StepButton extends StatefulWidget {
-  const _StepButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
+class _IosStepButton extends StatelessWidget {
+  const _IosStepButton({required this.icon, required this.onTap});
 
   final IconData icon;
-  final String label;
   final VoidCallback onTap;
 
   @override
-  State<_StepButton> createState() => _StepButtonState();
-}
-
-class _StepButtonState extends State<_StepButton> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final radius = BorderRadius.circular(_pressed ? 999 : 14);
-    return Tooltip(
-      message: widget.label,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapCancel: () => setState(() => _pressed = false),
-        onTapUp: (_) => setState(() => _pressed = false),
-        child: Material(
-          color: scheme.secondaryContainer,
-          borderRadius: radius,
-          child: InkWell(
-            borderRadius: radius,
-            onTap: widget.onTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOutBack,
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(borderRadius: radius),
-              child: Icon(
-                widget.icon,
-                size: 20,
-                color: scheme.onSecondaryContainer,
-              ),
-            ),
-          ),
+    final accentColor = scheme.primary;
+    final isDark = scheme.brightness == Brightness.dark;
+    final bg = isDark
+        ? Colors.white.withValues(alpha: 0.1)
+        : scheme.surfaceContainer;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: bg,
+          shape: BoxShape.circle,
         ),
+        child: Icon(icon, size: 18, color: accentColor),
       ),
     );
   }
 }
 
-class _DayToggle extends StatelessWidget {
-  const _DayToggle({
+class _IosDayToggle extends StatelessWidget {
+  const _IosDayToggle({
     required this.label,
     required this.tooltip,
     required this.selected,
@@ -1020,30 +1136,31 @@ class _DayToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final accentColor = scheme.primary;
+    final isDark = scheme.brightness == Brightness.dark;
+    final unselectedBg = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : scheme.surfaceContainer;
+    final unselectedFg = isDark ? Colors.white70 : scheme.onSurfaceVariant;
+
     return Tooltip(
       message: tooltip,
       child: GestureDetector(
         onTap: onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutBack,
-          height: 44,
+          duration: const Duration(milliseconds: 200),
+          height: 36,
           decoration: BoxDecoration(
-            color: selected ? scheme.tertiaryContainer : Colors.transparent,
-            borderRadius: BorderRadius.circular(selected ? 14 : 999),
-            // `outline`, not `outlineVariant` — this border is the only thing
-            // conveying "unselected day" (WCAG 1.4.11 needs 3:1 for
-            // functional boundaries; outlineVariant here measured ~1.6:1).
-            border: selected ? null : Border.all(color: scheme.outline),
+            color: selected ? accentColor : unselectedBg,
+            borderRadius: BorderRadius.circular(10),
           ),
           child: Center(
             child: Text(
               label,
               style: TextStyle(
-                fontWeight: selected ? FontWeight.bold : FontWeight.w500,
-                color: selected
-                    ? scheme.onTertiaryContainer
-                    : scheme.onSurfaceVariant,
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? Colors.white : unselectedFg,
               ),
             ),
           ),

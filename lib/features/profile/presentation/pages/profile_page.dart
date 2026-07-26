@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -43,40 +44,47 @@ class ProfilePage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-                child: Row(
-                  children: [
-                    Tooltip(
-                      message: 'Back',
-                      child: Material(
-                        color: scheme.surfaceContainerHigh,
-                        shape: const CircleBorder(),
-                        child: InkWell(
-                          customBorder: const CircleBorder(),
-                          onTap: () => Navigator.of(context).pop(),
-                          child: SizedBox(
-                            width: 44,
-                            height: 44,
-                            child: Icon(
-                              Icons.arrow_back,
-                              size: 22,
-                              color: scheme.onSurface,
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                child: AppleGlassContainer(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  borderRadius: BorderRadius.circular(22),
+                  child: Row(
+                    children: [
+                      Tooltip(
+                        message: 'Back',
+                        child: Material(
+                          color: Colors.transparent,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: () => Navigator.of(context).pop(),
+                            child: SizedBox(
+                              width: 36,
+                              height: 36,
+                              child: Icon(
+                                Icons.arrow_back_ios_new,
+                                size: 16,
+                                color: scheme.onSurface,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Profile',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.4,
-                        color: scheme.onSurface,
+                      const SizedBox(width: 8),
+                      Text(
+                        'Profile',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                          color: scheme.onSurface,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               Expanded(
@@ -90,19 +98,6 @@ class ProfilePage extends StatelessWidget {
                     final title = isAnonymous
                         ? 'Guest'
                         : (displayName ?? email ?? 'Account linked');
-                    // Once we have a real name, the second line becomes
-                    // "who" (their email) rather than repeating "synced" —
-                    // the sync state is already implied by having an
-                    // account at all.
-                    //
-                    // Anonymous sessions still sync to a real remote
-                    // `auth.uid()` (ensureSession() signs in anonymously,
-                    // not "offline") — the actual risk is losing access to
-                    // that account on uninstall/new device without a
-                    // linked email/Google identity, which is a different
-                    // claim than "device only". Found live: this line
-                    // hadn't been updated even after the sign-out dialog's
-                    // equivalent copy was fixed.
                     final subtitle = isAnonymous
                         ? 'Add an email or Google to keep your progress if you switch devices'
                         : (displayName != null && email != null
@@ -117,16 +112,12 @@ class ProfilePage extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: double.infinity,
+                          AppleGlassContainer(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 20,
                               vertical: 22,
                             ),
-                            decoration: BoxDecoration(
-                              color: scheme.surfaceContainerHigh,
-                              borderRadius: BorderRadius.circular(28),
-                            ),
+                            borderRadius: BorderRadius.circular(16),
                             child: Column(
                               children: [
                                 if (avatarUrl != null)
@@ -136,10 +127,6 @@ class ProfilePage extends StatelessWidget {
                                       width: 84,
                                       height: 84,
                                       fit: BoxFit.cover,
-                                      // The provider's photo is a nice-to-have,
-                                      // not load-bearing — fall back to the
-                                      // initial badge rather than an error icon
-                                      // if the CDN URL 404s/expires.
                                       errorBuilder:
                                           (context, error, stackTrace) =>
                                               _InitialAvatar(
@@ -163,34 +150,35 @@ class ProfilePage extends StatelessWidget {
                                     initial: initial,
                                     scheme: scheme,
                                   ),
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 10),
                                 Text(
                                   title,
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 18,
+                                    fontSize: 20,
                                     color: scheme.onSurface,
                                   ),
                                 ),
+                                const SizedBox(height: 2),
                                 Text(
                                   subtitle,
                                   textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: scheme.onSurfaceVariant,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF8E8E93),
                                   ),
                                 ),
                                 if (isAnonymous) ...[
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 14),
                                   SizedBox(
                                     width: double.infinity,
                                     child: FilledButton(
                                       style: FilledButton.styleFrom(
-                                        minimumSize: const Size.fromHeight(48),
+                                        minimumSize: const Size.fromHeight(44),
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(
-                                            999,
+                                            12,
                                           ),
                                         ),
                                       ),
@@ -220,89 +208,99 @@ class ProfilePage extends StatelessWidget {
                               ],
                             ),
                           ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 16),
                           Row(
                             children: [
                               Expanded(
                                 child: StatTile(
-                                  bg: scheme.primaryContainer,
-                                  fg: scheme.onPrimaryContainer,
+                                  bg: scheme.surfaceContainer,
+                                  fg: scheme.primary,
                                   value:
                                       '${(profile.ownedAreaSqm / 1000000).toStringAsFixed(2)} km²',
                                   label: 'Territory',
                                   hasError: profile.ownedAreaError,
                                   radius: const BorderRadius.horizontal(
-                                    left: Radius.circular(24),
+                                    left: Radius.circular(16),
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 3),
+                              const SizedBox(width: 2),
                               Expanded(
                                 child: StatTile(
-                                  bg: scheme.tertiaryContainer,
-                                  fg: scheme.onTertiaryContainer,
+                                  bg: scheme.surfaceContainer,
+                                  fg: const Color(0xFFFF9F0A),
                                   value: '${profile.streak}',
                                   label: 'Day streak',
                                   hasError: profile.streakError,
                                   radius: const BorderRadius.horizontal(
-                                    right: Radius.circular(24),
+                                    right: Radius.circular(16),
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 18),
-                          Text(
-                            'Settings',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: scheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          _SettingsRow(
-                            icon: Icons.bug_report,
-                            label: 'Alarm reliability',
-                            radius: const BorderRadius.vertical(
-                              top: Radius.circular(20),
-                              bottom: Radius.circular(8),
-                            ),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    const AlarmReliabilityTestPage(),
+                          const SizedBox(height: 22),
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4, bottom: 8),
+                            child: Text(
+                              'SETTINGS',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                                color: Color(0xFF8E8E93),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 3),
-                          _SettingsRow(
-                            icon: Icons.battery_charging_full,
-                            label: 'Battery & location',
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const BatteryExemptionPage(),
-                              ),
+                          AppleGlassContainer(
+                            borderRadius: BorderRadius.circular(14),
+                            child: Column(
+                              children: [
+                                _SettingsRow(
+                                  icon: Icons.bug_report_outlined,
+                                  label: 'Alarm reliability',
+                                  isFirst: true,
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const AlarmReliabilityTestPage(),
+                                    ),
+                                  ),
+                                ),
+                                Divider(
+                                  height: 1,
+                                  indent: 52,
+                                  color: scheme.outline,
+                                ),
+                                _SettingsRow(
+                                  icon: Icons.battery_charging_full,
+                                  label: 'Battery & location',
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const BatteryExemptionPage(),
+                                    ),
+                                  ),
+                                ),
+                                Divider(
+                                  height: 1,
+                                  indent: 52,
+                                  color: scheme.outline,
+                                ),
+                                _SettingsRow(
+                                  icon: Icons.palette_outlined,
+                                  label: 'Appearance',
+                                  isLast: true,
+                                  onTap: () => _showAppearanceDialog(context),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 3),
-                          _SettingsRow(
-                            icon: Icons.palette,
-                            label: 'Appearance',
-                            radius: const BorderRadius.vertical(
-                              top: Radius.circular(8),
-                              bottom: Radius.circular(20),
-                            ),
-                            onTap: () => _showAppearanceDialog(context),
-                          ),
-                          const SizedBox(height: 18),
-                          // Sign out is reversible (sign back in any time); Delete
-                          // account is not. Both previously used identical
-                          // red-text styling with no visual cue for the
-                          // difference in severity — found in design critique.
+                          const SizedBox(height: 24),
                           Center(
                             child: TextButton(
                               style: TextButton.styleFrom(
-                                foregroundColor: scheme.onSurfaceVariant,
+                                foregroundColor: const Color(0xFF8E8E93),
                               ),
                               onPressed: () => _showSignOutDialog(context),
                               child: const Text('Sign out'),
@@ -311,7 +309,7 @@ class ProfilePage extends StatelessWidget {
                           Center(
                             child: TextButton(
                               style: TextButton.styleFrom(
-                                foregroundColor: scheme.error,
+                                foregroundColor: Colors.redAccent,
                               ),
                               onPressed: () =>
                                   _showDeleteAccountDialog(context),
@@ -590,12 +588,13 @@ class _AuthDialogState extends State<_AuthDialog> {
     final isLink = _mode == _AuthDialogMode.link;
     return AlertDialog(
       title: Text(isLink ? 'Migrate to cloud' : 'Sign in'),
-      content: Form(
-        key: _formKey,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             TextFormField(
               controller: _emailController,
               enabled: !_submitting,
@@ -691,7 +690,8 @@ class _AuthDialogState extends State<_AuthDialog> {
           ],
         ),
       ),
-      actions: [
+    ),
+    actions: [
         TextButton(
           onPressed: _submitting ? null : () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
@@ -732,50 +732,58 @@ class _SettingsRow extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
-    this.radius = const BorderRadius.all(Radius.circular(8)),
+    this.isFirst = false,
+    this.isLast = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final BorderRadius radius;
+  final bool isFirst;
+  final bool isLast;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final borderRadius = BorderRadius.vertical(
+      top: Radius.circular(isFirst ? 14 : 0),
+      bottom: Radius.circular(isLast ? 14 : 0),
+    );
+
     return Material(
-      color: scheme.surfaceContainerHigh,
-      borderRadius: radius,
+      color: Colors.transparent,
+      borderRadius: borderRadius,
       child: InkWell(
-        borderRadius: radius,
+        borderRadius: borderRadius,
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
               Container(
-                width: 38,
-                height: 38,
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
-                  color: scheme.surfaceContainer,
-                  borderRadius: BorderRadius.circular(12),
+                  color: scheme.primary.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, size: 20, color: scheme.onSurfaceVariant),
+                child: Icon(icon, size: 18, color: scheme.primary),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Text(
                   label,
                   style: TextStyle(
-                    fontWeight: FontWeight.w500,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
                     color: scheme.onSurface,
                   ),
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: scheme.onSurfaceVariant,
+              const Icon(
+                CupertinoIcons.chevron_right,
+                size: 16,
+                color: Color(0xFF8E8E93),
               ),
             ],
           ),

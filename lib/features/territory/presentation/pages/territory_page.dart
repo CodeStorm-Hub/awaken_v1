@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/theme/expressive_widgets.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
 import '../../domain/entities/bounty_zone.dart';
@@ -189,15 +191,14 @@ class _TerritoryPageState extends State<TerritoryPage> {
     }
     if (!mounted || _controller == null) return;
 
-    final scheme = Theme.of(context).colorScheme;
     for (final zone in zones) {
       final ring = _circlePolygon(zone.centerLat, zone.centerLng, zone.radiusM);
       final fill = await controller.addFill(
         FillOptions(
           geometry: [ring],
-          fillColor: _colorToHex(scheme.tertiary),
-          fillOpacity: 0.2,
-          fillOutlineColor: _colorToHex(scheme.tertiary),
+          fillColor: _colorToHex(const Color(0xFFFFD700)),
+          fillOpacity: 0.25,
+          fillOutlineColor: _colorToHex(const Color(0xFFFFAB00)),
         ),
       );
       _bountyFillsByZoneId[zone.id] = [fill];
@@ -239,7 +240,6 @@ class _TerritoryPageState extends State<TerritoryPage> {
   Future<void> _redrawFills() async {
     final controller = _controller;
     if (controller == null) return;
-    final scheme = Theme.of(context).colorScheme;
 
     final allFills = _fillsByTerritoryId.values.expand((f) => f).toList();
     if (allFills.isNotEmpty) {
@@ -251,21 +251,20 @@ class _TerritoryPageState extends State<TerritoryPage> {
       if (!territory.isMine && !_showRivalTerritory) continue;
       final polygons = TerritoryMapStyle.territoryPolygonsToLatLng(territory);
       final fills = <Fill>[];
-      // One Fill per polygon *component* (not per ring) — a component's
-      // full ring list (outer boundary + any interior holes) goes into a
-      // single Fill's geometry, which is what renders a hole as an actual
-      // hole rather than a second opaque fill painted on top of it.
+      final fillColor = territory.isMine
+          ? const Color(0xFF1E66FF)
+          : const Color(0xFFFF2A6D);
+      final outlineColor = territory.isMine
+          ? const Color(0xFF00E5FF)
+          : const Color(0xFFFF5252);
+
       for (final rings in polygons) {
         final fill = await controller.addFill(
           FillOptions(
             geometry: rings,
-            fillColor: _colorToHex(
-              territory.isMine ? scheme.primary : scheme.tertiary,
-            ),
-            fillOpacity: 0.45,
-            fillOutlineColor: _colorToHex(
-              territory.isMine ? scheme.primary : scheme.tertiary,
-            ),
+            fillColor: _colorToHex(fillColor),
+            fillOpacity: 0.40,
+            fillOutlineColor: _colorToHex(outlineColor),
           ),
         );
         fills.add(fill);
@@ -341,291 +340,291 @@ class _TerritoryPageState extends State<TerritoryPage> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final topPadding = MediaQuery.of(context).padding.top;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    // Bottom offset to sit closely above the floating bottom navigation bar
+    final navBarOffset = bottomPadding + 36.0;
 
     return Scaffold(
       backgroundColor: scheme.surface,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Territory',
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
-                      color: scheme.onSurface,
-                    ),
-                  ),
-                  const CurrentUserAvatarButton(),
-                ],
+      body: Stack(
+        children: [
+          // Full-Bleed Edge-to-Edge Map Canvas
+          Positioned.fill(
+            child: MapLibreMap(
+              key: _styleLoader.styleKey,
+              styleString: _styleLoader.styleString,
+              initialCameraPosition: const CameraPosition(
+                target: LatLng(20, 0),
+                zoom: 2,
               ),
+              onMapCreated: _onMapCreated,
+              onStyleLoadedCallback: _onStyleLoaded,
+              onCameraIdle: _scheduleRefreshForCurrentView,
+              myLocationEnabled: false,
+              logoEnabled: false,
+              attributionButtonPosition: AttributionButtonPosition.bottomLeft,
             ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(28),
-                  child: Stack(
+          ),
+
+          if (_styleLoader.status == MapStyleLoadStatus.retrying)
+            Positioned(
+              top: topPadding + 64,
+              left: 14,
+              right: 14,
+              child: const MapStyleRetryingBanner(),
+            ),
+          if (_styleLoader.status == MapStyleLoadStatus.failed)
+            MapStyleFailureOverlay(onRetry: _styleLoader.retry),
+
+          // OSM Attribution
+          Positioned(
+            bottom: navBarOffset + 2,
+            right: 8,
+            child: const OsmAttribution(),
+          ),
+
+          // Top Floating Apple Glass Navigation Header & Status Banners
+          Positioned(
+            top: topPadding + 8,
+            left: 14,
+            right: 14,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AppleGlassContainer(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  borderRadius: BorderRadius.circular(22),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      MapLibreMap(
-                        key: _styleLoader.styleKey,
-                        styleString: _styleLoader.styleString,
-                        initialCameraPosition: const CameraPosition(
-                          target: LatLng(20, 0),
-                          zoom: 2,
-                        ),
-                        onMapCreated: _onMapCreated,
-                        onStyleLoadedCallback: _onStyleLoaded,
-                        onCameraIdle: _scheduleRefreshForCurrentView,
-                        myLocationEnabled: false,
-                        logoEnabled: false,
-                        attributionButtonPosition:
-                            AttributionButtonPosition.bottomLeft,
-                      ),
-                      if (_styleLoader.status == MapStyleLoadStatus.retrying)
-                        const MapStyleRetryingBanner(),
-                      if (_styleLoader.status == MapStyleLoadStatus.failed)
-                        MapStyleFailureOverlay(onRetry: _styleLoader.retry),
-                      // OSMF's attribution guidance allows a tap-to-reveal
-                      // info button only for a startup splash/one-time
-                      // interaction — the ongoing map view itself must show
-                      // attribution continuously. `attributionButtonPosition`
-                      // above is MapLibre's own tap-behind-an-info-icon
-                      // control, which doesn't satisfy that on its own; this
-                      // is the always-on text it needed alongside it.
-                      const Positioned(
-                        bottom: 4,
-                        right: 8,
-                        child: OsmAttribution(),
-                      ),
-                      Positioned(
-                        top: 14,
-                        left: 14,
-                        right: 14,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Row(
-                              children: [
-                                _OwnedAreaChip(scheme: scheme),
-                                const Spacer(),
-                                _TerritoryLegend(
-                                  scheme: scheme,
-                                  showRivalTerritory: _showRivalTerritory,
-                                ),
-                              ],
-                            ),
-                            const _SyncStatusBanner(),
-                            if (_atRisk.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              _AtRiskBanner(
-                                territories: _atRisk,
-                                scheme: scheme,
-                              ),
-                            ],
-                            if (_currentRival != null) ...[
-                              const SizedBox(height: 8),
-                              _RivalCard(rival: _currentRival!, scheme: scheme),
-                            ],
-                          ],
+                      Text(
+                        'Territory',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                          color: scheme.onSurface,
                         ),
                       ),
-                      Positioned(
-                        bottom: 14,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: scheme.surfaceContainerHigh,
-                              borderRadius: BorderRadius.circular(999),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.15),
-                                  blurRadius: 6,
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _RoundIconButton(
-                                  icon: Icons.my_location,
-                                  tooltip: 'Center map',
-                                  onTap: _recenter,
-                                ),
-                                FilledButton(
-                                  style: FilledButton.styleFrom(
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                  ),
-                                  onPressed: () async {
-                                    // Real bug found live: nothing refreshed
-                                    // territories on return from a run —
-                                    // `_refreshForCurrentView()` only fires
-                                    // on camera movement (`onCameraIdle`), so
-                                    // a just-captured territory stayed
-                                    // invisible until the user happened to
-                                    // pan/zoom the map. `submit_run()` also
-                                    // doesn't write to the local territories
-                                    // cache directly (only to the `runs`
-                                    // row) — the bbox pull below is what
-                                    // actually pulls the new/updated
-                                    // territory down.
-                                    await Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => const ActiveRunPage(),
-                                      ),
-                                    );
-                                    if (!context.mounted) return;
-                                    // Re-center on the user's *current*
-                                    // position before refreshing, not just
-                                    // whatever the camera happened to be
-                                    // pointed at before the run started —
-                                    // otherwise a just-captured territory
-                                    // could get correctly fetched but still
-                                    // never actually shown on screen if the
-                                    // viewport wasn't already near it (e.g.
-                                    // the map was panned away, or the
-                                    // initial GPS fix was still pending when
-                                    // the page first opened). `_locateSelf`
-                                    // already refreshes internally when it
-                                    // gets a fix; this explicit follow-up is
-                                    // the fallback for when it doesn't
-                                    // (denied/failed permission) — a
-                                    // harmless redundant refresh in the
-                                    // common case is a fair trade for never
-                                    // silently skipping one.
-                                    await _locateSelf();
-                                    await _refreshForCurrentView();
-                                    unawaited(_loadRivalAndDecayStatus());
-                                  },
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: const [
-                                      Icon(Icons.directions_run, size: 20),
-                                      SizedBox(width: 8),
-                                      Text('Start run'),
-                                    ],
-                                  ),
-                                ),
-                                // A badge dot when a non-default filter is
-                                // active (rival territory hidden) — found in
-                                // design critique: the icon alone gave no
-                                // indication of the current layers state.
-                                Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    _RoundIconButton(
-                                      icon: Icons.layers,
-                                      tooltip: _showRivalTerritory
-                                          ? 'Map layers'
-                                          : 'Map layers (rival territory hidden)',
-                                      onTap: () => _showLayersSheet(context),
-                                    ),
-                                    if (!_showRivalTerritory)
-                                      Positioned(
-                                        top: 4,
-                                        right: 4,
-                                        child: Container(
-                                          width: 9,
-                                          height: 9,
-                                          decoration: BoxDecoration(
-                                            color: scheme.tertiary,
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color:
-                                                  scheme.surfaceContainerHigh,
-                                              width: 1.5,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: 14,
-                        bottom: 90,
-                        child: _ZoomControls(
-                          scheme: scheme,
-                          onZoomIn: _zoomIn,
-                          onZoomOut: _zoomOut,
-                        ),
+                      Row(
+                        children: [
+                          _OwnedAreaChip(scheme: scheme),
+                          const SizedBox(width: 8),
+                          const CurrentUserAvatarButton(),
+                        ],
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _TerritoryLegend(
+                      scheme: scheme,
+                      showRivalTerritory: _showRivalTerritory,
+                    ),
+                  ],
+                ),
+                const _SyncStatusBanner(),
+                if (_atRisk.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _AtRiskBanner(
+                    territories: _atRisk,
+                    scheme: scheme,
+                  ),
+                ],
+                if (_currentRival != null) ...[
+                  const SizedBox(height: 8),
+                  _RivalCard(rival: _currentRival!, scheme: scheme),
+                ],
+              ],
+            ),
+          ),
+
+          // Bottom Floating Apple Glass Action Dock (Positioned closely above bottom nav bar)
+          Positioned(
+            bottom: navBarOffset + 6,
+            left: 16,
+            right: 16,
+            child: Center(
+              child: AppleGlassContainer(
+                blurAmount: 25,
+                padding: const EdgeInsets.all(6),
+                borderRadius: BorderRadius.circular(999),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _RoundIconButton(
+                      icon: Icons.my_location,
+                      tooltip: 'Center map',
+                      onTap: _recenter,
+                    ),
+                    const SizedBox(width: 6),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: scheme.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        minimumSize: const Size(0, 48),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 22,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                      onPressed: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ActiveRunPage(),
+                          ),
+                        );
+                        if (!context.mounted) return;
+                        await _locateSelf();
+                        await _refreshForCurrentView();
+                        unawaited(_loadRivalAndDecayStatus());
+                      },
+                      icon: const Icon(Icons.directions_run, size: 20),
+                      label: const Text(
+                        'CLAIM TERRITORY',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        _RoundIconButton(
+                          icon: Icons.layers,
+                          tooltip: _showRivalTerritory
+                              ? 'Map layers'
+                              : 'Map layers (rival territory hidden)',
+                          onTap: () => _showLayersSheet(context),
+                        ),
+                        if (!_showRivalTerritory)
+                          Positioned(
+                            top: 4,
+                            right: 4,
+                            child: Container(
+                              width: 9,
+                              height: 9,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF2A6D),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: scheme.surfaceContainerHigh,
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+
+          // Zoom Controls (Right Floating Bar, positioned above Action Dock)
+          Positioned(
+            right: 16,
+            bottom: navBarOffset + 64,
+            child: _ZoomControls(
+              scheme: scheme,
+              onZoomIn: _zoomIn,
+              onZoomOut: _zoomOut,
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Future<void> _showLayersSheet(BuildContext context) async {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: scheme.surfaceContainerLow,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
-            return SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 36,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 18),
-                        decoration: BoxDecoration(
-                          color: scheme.outlineVariant,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
+            return ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF1C1C1E).withValues(alpha: 0.88)
+                        : Colors.white.withValues(alpha: 0.90),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(28),
+                    ),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.15)
+                          : Colors.white.withValues(alpha: 0.6),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 36,
+                              height: 5,
+                              margin: const EdgeInsets.only(bottom: 18),
+                              decoration: BoxDecoration(
+                                color: scheme.onSurfaceVariant.withValues(alpha: 0.3),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                            ),
+                          ),
+                          Text(
+                            'Map layers',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: scheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text(
+                              'Show rival territory',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            subtitle: const Text(
+                              "Hide other players' captured land",
+                              style: TextStyle(color: Color(0xFF8E8E93)),
+                            ),
+                            value: _showRivalTerritory,
+                            onChanged: (value) {
+                              setSheetState(() => _showRivalTerritory = value);
+                              setState(() => _showRivalTerritory = value);
+                              unawaited(_redrawFills());
+                            },
+                          ),
+                        ],
                       ),
                     ),
-                    Text(
-                      'Map layers',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: scheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Show rival territory'),
-                      subtitle: const Text("Hide other players' captured land"),
-                      value: _showRivalTerritory,
-                      onChanged: (value) {
-                        setSheetState(() => _showRivalTerritory = value);
-                        setState(() => _showRivalTerritory = value);
-                        unawaited(_redrawFills());
-                      },
-                    ),
-                  ],
+                  ),
                 ),
               ),
             );
@@ -684,12 +683,9 @@ class _SyncStatusBanner extends StatelessWidget {
 
         return Padding(
           padding: const EdgeInsets.only(top: 8),
-          child: Container(
+          child: AppleGlassContainer(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(999),
-            ),
+            borderRadius: BorderRadius.circular(999),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -745,28 +741,23 @@ class _OwnedAreaChip extends StatelessWidget {
         final areaSqm = snapshot.data ?? 0;
         final label = '${(areaSqm / 1000000).toStringAsFixed(3)} km²';
         return Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: scheme.primaryContainer,
+            color: scheme.primary.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(999),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 2,
-              ),
-            ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.landscape, size: 17, color: scheme.onPrimaryContainer),
-              const SizedBox(width: 6),
+              Icon(Icons.shield, size: 13, color: scheme.primary),
+              const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: scheme.onPrimaryContainer,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.primary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ],
@@ -788,35 +779,33 @@ class _TerritoryLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 36,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(999),
-      ),
+    return AppleGlassContainer(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      borderRadius: BorderRadius.circular(999),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _LegendDot(color: scheme.primary),
-          const SizedBox(width: 5),
+          _LegendDot(color: const Color(0xFF00E5FF)),
+          const SizedBox(width: 6),
           Text(
-            'You',
+            'YOU',
             style: TextStyle(
               fontSize: 11,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
               color: scheme.onSurface,
             ),
           ),
           if (showRivalTerritory) ...[
-            const SizedBox(width: 10),
-            _LegendDot(color: scheme.tertiary),
-            const SizedBox(width: 5),
+            const SizedBox(width: 12),
+            _LegendDot(color: const Color(0xFFFF2A6D)),
+            const SizedBox(width: 6),
             Text(
-              'Others',
+              'RIVALS',
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
                 color: scheme.onSurface,
               ),
             ),
@@ -843,27 +832,48 @@ class _AtRiskBanner extends StatelessWidget {
         .inDays
         .clamp(0, 99);
     final label = territories.length == 1
-        ? "1 territory at risk — undefended, reverts in ${daysLeft}d"
-        : "${territories.length} territories at risk — soonest reverts in ${daysLeft}d";
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFE08C),
-        borderRadius: BorderRadius.circular(14),
-      ),
+        ? "1 territory undefended — reverts in ${daysLeft}d"
+        : "${territories.length} territories undefended — reverts in ${daysLeft}d";
+
+    return AppleGlassContainer(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      borderRadius: BorderRadius.circular(16),
+      borderColor: const Color(0xFFFF9500).withValues(alpha: 0.6),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.warning, size: 16, color: Color(0xFF2A1F00)),
-          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.all(5),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFF9500),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.shield_outlined, size: 14, color: Colors.black),
+          ),
+          const SizedBox(width: 10),
           Flexible(
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF2A1F00),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'DEFEND TERRITORY',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                    color: Color(0xFFFF9500),
+                  ),
+                ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -883,36 +893,55 @@ class _RivalCard extends StatelessWidget {
     final name = rival.rivalDisplayName ?? 'A rival';
     final areaLabel =
         '${(rival.areaTakenSqm / 1000000).toStringAsFixed(3)} km²';
-    final label = rival.asWinner
-        ? 'You took $areaLabel from $name'
-        : '$name took $areaLabel from you';
-    final bg = rival.asWinner ? scheme.primaryContainer : scheme.errorContainer;
-    final fg = rival.asWinner
-        ? scheme.onPrimaryContainer
-        : scheme.onErrorContainer;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(14),
-      ),
+    final isWinner = rival.asWinner;
+    final accentColor = isWinner ? scheme.primary : const Color(0xFFFF2A6D);
+    final label = isWinner
+        ? 'Captured $areaLabel from $name'
+        : '$name seized $areaLabel from you';
+
+    return AppleGlassContainer(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      borderRadius: BorderRadius.circular(16),
+      borderColor: accentColor.withValues(alpha: 0.5),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            rival.asWinner ? Icons.emoji_events : Icons.shield_moon,
-            size: 16,
-            color: fg,
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isWinner ? Icons.emoji_events : Icons.sports_mma,
+              size: 16,
+              color: accentColor,
+            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Flexible(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: fg,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isWinner ? 'VICTORY' : 'RIVAL ATTACK',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                    color: accentColor,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -950,11 +979,6 @@ class _RoundIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // The `tooltip` field was accepted but never actually used — no
-    // `Tooltip`, no `Semantics` label anywhere — so the locate/layers
-    // buttons had zero accessible name for TalkBack. Found in accessibility
-    // review. `Tooltip` both shows on long-press and supplies the
-    // Semantics label, so it fixes both the visual and a11y gap at once.
     return Tooltip(
       message: tooltip,
       child: Material(
@@ -963,10 +987,14 @@ class _RoundIconButton extends StatelessWidget {
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
-          child: SizedBox(
+          child: Container(
             width: 44,
             height: 44,
-            child: Icon(icon, size: 22, color: scheme.onSurfaceVariant),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: scheme.surfaceContainerHigh.withValues(alpha: 0.4),
+            ),
+            child: Icon(icon, size: 20, color: scheme.onSurface),
           ),
         ),
       ),
@@ -974,10 +1002,6 @@ class _RoundIconButton extends StatelessWidget {
   }
 }
 
-/// Manual zoom in/out — pinch gestures already reach the full zoom range
-/// (`MapLibreMap`'s default `minMaxZoomPreference` is unbounded), so this is
-/// purely a tap-target/accessibility affordance for anyone who can't
-/// perform a pinch gesture.
 class _ZoomControls extends StatelessWidget {
   const _ZoomControls({
     required this.scheme,
@@ -991,14 +1015,9 @@ class _ZoomControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(999),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6),
-        ],
-      ),
+    return AppleGlassContainer(
+      borderRadius: BorderRadius.circular(999),
+      padding: EdgeInsets.zero,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1006,6 +1025,11 @@ class _ZoomControls extends StatelessWidget {
             icon: Icons.add,
             tooltip: 'Zoom in',
             onTap: onZoomIn,
+          ),
+          Container(
+            width: 24,
+            height: 0.5,
+            color: scheme.outline.withValues(alpha: 0.3),
           ),
           _RoundIconButton(
             icon: Icons.remove,

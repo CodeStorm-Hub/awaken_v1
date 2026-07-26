@@ -36,7 +36,7 @@ abstract final class Env {
     // logcat, map renders solid black). Must explicitly check `isEmpty` too
     // — same pattern `_require` below already uses for required keys.
     final value = dotenv.maybeGet('MAP_STYLE_URL');
-    if (value == null || value.isEmpty) return 'https://tiles.openfreemap.org/styles/liberty';
+    if (value == null || value.isEmpty) return 'https://tiles.openfreemap.org/styles/dark';
     return value;
   }
 

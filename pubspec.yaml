@@ -14,6 +14,9 @@ dependencies:
   flutter_bloc: ^9.1.1
   equatable: ^2.0.7
 
+  # Cupertino Icons font
+  cupertino_icons: ^1.0.8
+
   # Dependency injection
   get_it: ^8.0.0
   injectable: ^2.5.0

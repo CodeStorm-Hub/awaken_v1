@@ -330,62 +330,76 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(24),
-                          child: Stack(
-                            children: [
-                              // Built exactly once — see the class doc comment on why this
-                              // must never sit inside a BlocBuilder scoped to RunTrackState.
-                              MapLibreMap(
-                                key: _styleLoader.styleKey,
-                                styleString: _styleLoader.styleString,
-                                initialCameraPosition: const CameraPosition(
-                                  target: LatLng(20, 0),
-                                  zoom: 2,
-                                ),
-                                onMapCreated: _onMapCreated,
-                                onStyleLoadedCallback: _onStyleLoaded,
-                                myLocationEnabled: false,
-                                logoEnabled: false,
-                                attributionButtonPosition:
-                                    AttributionButtonPosition.bottomLeft,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: scheme.primary.withValues(alpha: 0.4),
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: scheme.primary.withValues(alpha: 0.2),
+                                blurRadius: 16,
+                                spreadRadius: 1,
                               ),
-                              const Positioned(
-                                bottom: 4,
-                                right: 8,
-                                child: OsmAttribution(),
-                              ),
-                              Positioned(
-                                top: 10,
-                                right: 10,
-                                child: _RoundMapButton(
-                                  icon: _autoFollow
-                                      ? Icons.gps_fixed
-                                      : Icons.gps_not_fixed,
-                                  tooltip: _autoFollow
-                                      ? 'Following your position'
-                                      : 'Recenter',
-                                  onTap: _recenter,
-                                ),
-                              ),
-                              Positioned(
-                                top: 64,
-                                right: 10,
-                                child: _ZoomControls(
-                                  scheme: scheme,
-                                  onZoomIn: _zoomIn,
-                                  onZoomOut: _zoomOut,
-                                ),
-                              ),
-                              if (_styleLoader.status ==
-                                  MapStyleLoadStatus.retrying)
-                                const MapStyleRetryingBanner(),
-                              if (_styleLoader.status ==
-                                  MapStyleLoadStatus.failed)
-                                MapStyleFailureOverlay(
-                                  onRetry: _styleLoader.retry,
-                                ),
                             ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(22),
+                            child: Stack(
+                              children: [
+                                MapLibreMap(
+                                  key: _styleLoader.styleKey,
+                                  styleString: _styleLoader.styleString,
+                                  initialCameraPosition: const CameraPosition(
+                                    target: LatLng(20, 0),
+                                    zoom: 2,
+                                  ),
+                                  onMapCreated: _onMapCreated,
+                                  onStyleLoadedCallback: _onStyleLoaded,
+                                  myLocationEnabled: false,
+                                  logoEnabled: false,
+                                  attributionButtonPosition:
+                                      AttributionButtonPosition.bottomLeft,
+                                ),
+                                const Positioned(
+                                  bottom: 4,
+                                  right: 8,
+                                  child: OsmAttribution(),
+                                ),
+                                Positioned(
+                                  top: 10,
+                                  right: 10,
+                                  child: _RoundMapButton(
+                                    icon: _autoFollow
+                                        ? Icons.gps_fixed
+                                        : Icons.gps_not_fixed,
+                                    tooltip: _autoFollow
+                                        ? 'Following your position'
+                                        : 'Recenter',
+                                    onTap: _recenter,
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 64,
+                                  right: 10,
+                                  child: _ZoomControls(
+                                    scheme: scheme,
+                                    onZoomIn: _zoomIn,
+                                    onZoomOut: _zoomOut,
+                                  ),
+                                ),
+                                if (_styleLoader.status ==
+                                    MapStyleLoadStatus.retrying)
+                                  const MapStyleRetryingBanner(),
+                                if (_styleLoader.status ==
+                                    MapStyleLoadStatus.failed)
+                                  MapStyleFailureOverlay(
+                                    onRetry: _styleLoader.retry,
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -414,21 +428,23 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                       fg: scheme.onSurface,
                                       value: _fmtTime(elapsedSec),
                                       label: 'Time',
+                                      icon: Icons.timer_outlined,
                                       radius: const BorderRadius.horizontal(
-                                        left: Radius.circular(24),
+                                        left: Radius.circular(20),
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 3),
+                                  const SizedBox(width: 4),
                                   Expanded(
                                     child: StatTile(
-                                      bg: scheme.primaryContainer,
-                                      fg: scheme.onPrimaryContainer,
+                                      bg: scheme.surfaceContainerHigh,
+                                      fg: scheme.primary,
                                       value: distanceKm.toStringAsFixed(2),
-                                      label: 'Distance',
+                                      label: 'Distance (km)',
+                                      icon: Icons.place_outlined,
                                     ),
                                   ),
-                                  const SizedBox(width: 3),
+                                  const SizedBox(width: 4),
                                   Expanded(
                                     child: StatTile(
                                       bg: scheme.surfaceContainerHigh,
@@ -437,8 +453,9 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                           ? _fmtTime(paceSecPerKm)
                                           : '--:--',
                                       label: 'Pace /km',
+                                      icon: Icons.speed,
                                       radius: const BorderRadius.horizontal(
-                                        right: Radius.circular(24),
+                                        right: Radius.circular(20),
                                       ),
                                     ),
                                   ),

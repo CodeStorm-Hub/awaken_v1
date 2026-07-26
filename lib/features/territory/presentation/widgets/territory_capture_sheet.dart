@@ -28,8 +28,19 @@ class TerritoryCaptureSheet extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
+          color: scheme.surfaceContainer,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          border: Border.all(
+            color: scheme.primary.withValues(alpha: 0.5),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: scheme.primary.withValues(alpha: 0.25),
+              blurRadius: 20,
+              spreadRadius: 2,
+            ),
+          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -45,35 +56,45 @@ class TerritoryCaptureSheet extends StatelessWidget {
             ),
             ExpressiveFlower(
               size: 110,
-              color: scheme.primaryContainer,
+              color: scheme.primary.withValues(alpha: 0.2),
+              borderColor: scheme.primary,
               animatePop: true,
               child: Icon(
                 Icons.landscape,
                 size: 48,
-                color: scheme.onPrimaryContainer,
+                color: scheme.primary,
               ),
             ),
             const SizedBox(height: 16),
             Text(
-              'Territory captured!',
+              'VICTORY! TERRITORY CLAIMED',
               style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                letterSpacing: -0.4,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.5,
                 color: scheme.onSurface,
               ),
             ),
             const SizedBox(height: 6),
             Text(
-              '+$areaLabel added to your map',
-              style: TextStyle(fontSize: 16, color: scheme.onSurfaceVariant),
+              '+$areaLabel added to your empire',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: scheme.primary,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: scheme.tertiaryContainer,
+                color: scheme.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: scheme.outline.withValues(alpha: 0.3),
+                  width: 1,
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -81,7 +102,7 @@ class TerritoryCaptureSheet extends StatelessWidget {
                   Icon(
                     Icons.shield,
                     size: 15,
-                    color: scheme.onTertiaryContainer,
+                    color: scheme.primary,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -89,7 +110,7 @@ class TerritoryCaptureSheet extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: scheme.onTertiaryContainer,
+                      color: scheme.onSurface,
                     ),
                   ),
                 ],
@@ -103,24 +124,35 @@ class TerritoryCaptureSheet extends StatelessWidget {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: scheme.primaryContainer,
+                  color: const Color(0xFF2E2300),
                   borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: const Color(0xFFFFD700),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                      blurRadius: 8,
+                    ),
+                  ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.local_fire_department,
                       size: 15,
-                      color: scheme.onPrimaryContainer,
+                      color: Color(0xFFFFD700),
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Bounty zone — ${bountyMultiplier!.toStringAsFixed(0)}x credit applied',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: scheme.onPrimaryContainer,
+                      'BOUNTY ZONE — ${bountyMultiplier!.toStringAsFixed(0)}x credit applied',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                        color: Color(0xFFFFD700),
                       ),
                     ),
                   ],
@@ -132,13 +164,22 @@ class TerritoryCaptureSheet extends StatelessWidget {
               width: double.infinity,
               child: FilledButton(
                 style: FilledButton.styleFrom(
+                  backgroundColor: scheme.primary,
+                  foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(56),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Nice!'),
+                child: const Text(
+                  'CLAIM VICTORY',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 15,
+                    letterSpacing: 0.8,
+                  ),
+                ),
               ),
             ),
           ],

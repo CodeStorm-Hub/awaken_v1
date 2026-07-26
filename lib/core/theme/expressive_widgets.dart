@@ -1,9 +1,139 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
 /// Shared M3-Expressive-style building blocks used across the redesigned
 /// alarm/verification/onboarding screens (see the "Awaken Flutter Mobile
 /// App" Claude Design handoff, `m3x.css`). Core Flutter ships none of this
 /// — same rationale as `motion_tokens.dart`/`shape_tokens.dart`.
+
+/// An authentic Apple Glassmorphic container widget supporting both Light
+/// and Dark iOS appearances. Uses `BackdropFilter` (`ImageFilter.blur`),
+/// dynamic translucent surface tints, multi-layered ambient drop shadows,
+/// and subtle 0.5px glass highlight borders.
+class AppleGlassContainer extends StatelessWidget {
+  const AppleGlassContainer({
+    required this.child,
+    this.padding,
+    this.margin,
+    this.borderRadius,
+    this.blurAmount = 20.0,
+    this.borderColor,
+    this.borderWidth = 0.5,
+    this.onTap,
+    super.key,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final BorderRadius? borderRadius;
+  final double blurAmount;
+  final Color? borderColor;
+  final double borderWidth;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final effectiveRadius = borderRadius ?? BorderRadius.circular(16);
+
+    // Apple HIG Translucent Glossy Glass Tints
+    final glassColor = isDark
+        ? const Color(0xFF1E1E24).withValues(alpha: 0.65)
+        : Colors.white.withValues(alpha: 0.78);
+
+    final glassBorder = borderColor ??
+        (isDark
+            ? Colors.white.withValues(alpha: 0.25)
+            : Colors.white.withValues(alpha: 0.65));
+
+    final glassGradient = isDark
+        ? LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withValues(alpha: 0.16),
+              Colors.white.withValues(alpha: 0.03),
+              Colors.black.withValues(alpha: 0.22),
+            ],
+            stops: const [0.0, 0.45, 1.0],
+          )
+        : LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withValues(alpha: 0.88),
+              Colors.white.withValues(alpha: 0.72),
+            ],
+          );
+
+    final glassShadow = isDark
+        ? [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 20,
+              spreadRadius: 0,
+              offset: const Offset(0, 8),
+            ),
+            BoxShadow(
+              color: Colors.white.withValues(alpha: 0.05),
+              blurRadius: 1,
+              spreadRadius: 0,
+              offset: const Offset(0, -1),
+            ),
+          ]
+        : [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 16,
+              spreadRadius: 0,
+              offset: const Offset(0, 4),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 4,
+              spreadRadius: 0,
+              offset: const Offset(0, 1),
+            ),
+          ];
+
+    Widget content = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: glassColor,
+        gradient: glassGradient,
+        borderRadius: effectiveRadius,
+        border: Border.all(color: glassBorder, width: borderWidth),
+        boxShadow: glassShadow,
+      ),
+      child: child,
+    );
+
+    if (blurAmount > 0) {
+      content = ClipRRect(
+        borderRadius: effectiveRadius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blurAmount, sigmaY: blurAmount),
+          child: content,
+        ),
+      );
+    }
+
+    if (margin != null) {
+      content = Padding(padding: margin!, child: content);
+    }
+
+    if (onTap != null) {
+      return GestureDetector(
+        onTap: onTap,
+        child: content,
+      );
+    }
+
+    return content;
+  }
+}
 
 /// The "G" profile-avatar circle used in the top-right corner of Home,
 /// Territory, and Squad's app bars — previously duplicated three times as a
@@ -349,38 +479,64 @@ class StatTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final effectiveBg = hasError ? scheme.errorContainer : bg;
     final effectiveFg = hasError ? scheme.onErrorContainer : fg;
-    // Flat, no elevation — the handoff's own CSS for these tiles has no
-    // box-shadow. Elevation here previously cast a drop shadow into the
-    // 3px gap between adjacent tiles, reading as a stray colored seam.
-    return Material(
-      color: effectiveBg,
-      borderRadius: radius,
+
+    return Container(
+      decoration: BoxDecoration(
+        color: effectiveBg,
+        borderRadius: radius,
+        border: Border.all(
+          color: hasError ? scheme.error : scheme.outline.withValues(alpha: 0.15),
+          width: 1,
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (hasError)
-              Icon(Icons.error_outline, size: 22, color: effectiveFg)
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: scheme.error.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.error_outline, size: 20, color: effectiveFg),
+              )
             else if (icon != null)
-              Icon(icon, size: 22, color: effectiveFg),
-            Text(
-              hasError ? '—' : value,
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -1,
-                color: effectiveFg,
-                fontFeatures: const [FontFeature.tabularFigures()],
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: effectiveFg.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 20, color: effectiveFg),
+              ),
+            if (icon != null || hasError) const SizedBox(height: 6),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                hasError ? '—' : value,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                  color: effectiveFg,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ),
+            const SizedBox(height: 2),
             Text(
               hasError ? "Couldn't load" : label,
               textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: effectiveFg,
+                color: effectiveFg.withValues(alpha: 0.8),
               ),
             ),
           ],

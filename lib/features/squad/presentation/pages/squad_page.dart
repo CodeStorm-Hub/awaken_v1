@@ -45,70 +45,78 @@ class _SquadView extends StatelessWidget {
             return Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Squad',
-                            style: TextStyle(
-                              fontSize: 26,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
-                              color: scheme.onSurface,
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                  child: AppleGlassContainer(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    borderRadius: BorderRadius.circular(22),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Squad',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.5,
+                                color: scheme.onSurface,
+                              ),
                             ),
-                          ),
-                          Text(
-                            state.squad == null
-                                ? 'Not in a squad yet'
-                                : '${state.squad!.name} · ${state.leaderboard.length} members',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: scheme.onSurfaceVariant,
+                            const SizedBox(height: 1),
+                            Text(
+                              state.squad == null
+                                  ? 'Not in a squad yet'
+                                  : '${state.squad!.name} · ${state.leaderboard.length} members',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF8E8E93),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          Tooltip(
-                            message: 'Leaderboards',
-                            child: Material(
-                              color: scheme.surfaceContainerHigh,
-                              shape: const CircleBorder(),
-                              child: InkWell(
-                                customBorder: const CircleBorder(),
-                                onTap: () => showModalBottomSheet<void>(
-                                  context: context,
-                                  isScrollControlled: true,
-                                  backgroundColor: scheme.surfaceContainerLow,
-                                  shape: const RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.vertical(
-                                      top: Radius.circular(28),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            Tooltip(
+                              message: 'Leaderboards',
+                              child: Material(
+                                color: Colors.transparent,
+                                shape: const CircleBorder(),
+                                child: InkWell(
+                                  customBorder: const CircleBorder(),
+                                  onTap: () => showModalBottomSheet<void>(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    backgroundColor: scheme.surfaceContainerLow,
+                                    shape: const RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.vertical(
+                                        top: Radius.circular(24),
+                                      ),
                                     ),
+                                    builder: (_) => const _LeaderboardsSheet(),
                                   ),
-                                  builder: (_) => const _LeaderboardsSheet(),
-                                ),
-                                child: SizedBox(
-                                  width: 44,
-                                  height: 44,
-                                  child: Icon(
-                                    Icons.leaderboard,
-                                    size: 20,
-                                    color: scheme.onSurfaceVariant,
+                                  child: SizedBox(
+                                    width: 36,
+                                    height: 36,
+                                    child: Icon(
+                                      Icons.leaderboard,
+                                      size: 18,
+                                      color: scheme.onSurface,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          const CurrentUserAvatarButton(),
-                        ],
-                      ),
-                    ],
+                            const SizedBox(width: 6),
+                            const CurrentUserAvatarButton(),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 Expanded(child: _SquadBody(state: state)),
@@ -516,25 +524,22 @@ class _InviteCodeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
+    return AppleGlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(20),
-      ),
+      borderRadius: BorderRadius.circular(14),
       child: Row(
         children: [
-          Icon(Icons.qr_code, color: scheme.onPrimaryContainer),
+          Icon(Icons.qr_code, color: scheme.primary),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Invite code',
                   style: TextStyle(
                     fontSize: 12,
-                    color: scheme.onPrimaryContainer.withValues(alpha: 0.75),
+                    color: Color(0xFF8E8E93),
                   ),
                 ),
                 Text(
@@ -543,7 +548,7 @@ class _InviteCodeCard extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                     fontSize: 18,
                     letterSpacing: 2,
-                    color: scheme.onPrimaryContainer,
+                    color: scheme.onSurface,
                   ),
                 ),
               ],
@@ -551,7 +556,7 @@ class _InviteCodeCard extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'Copy',
-            icon: Icon(Icons.copy, color: scheme.onPrimaryContainer),
+            icon: Icon(Icons.copy, color: scheme.primary),
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: inviteCode));
               if (context.mounted) {
@@ -582,26 +587,37 @@ class _LeaderboardRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final radius = row.isYou
-        ? BorderRadius.circular(999)
-        : groupedItemRadius(index: index, count: count, outer: 20);
-    final bg = row.isYou ? scheme.primaryContainer : scheme.surfaceContainerLow;
-    final fg = row.isYou ? scheme.onPrimaryContainer : scheme.onSurface;
+        ? BorderRadius.circular(14)
+        : groupedItemRadius(index: index, count: count, outer: 14);
+    final bg = row.isYou
+        ? scheme.primary.withValues(alpha: 0.18)
+        : scheme.surfaceContainer;
+    final fg = row.isYou ? scheme.primary : scheme.onSurface;
     final rankBg = row.rank == 1
-        ? scheme.tertiaryContainer
+        ? const Color(0xFFFF9F0A).withValues(alpha: 0.2)
         : row.isYou
-        ? scheme.onPrimaryContainer
-        : scheme.surfaceContainerHigh;
+            ? scheme.primary.withValues(alpha: 0.25)
+            : scheme.surfaceContainerHigh;
     final rankFg = row.rank == 1
-        ? scheme.onTertiaryContainer
+        ? const Color(0xFFFF9F0A)
         : row.isYou
-        ? scheme.primaryContainer
-        : scheme.onSurfaceVariant;
+            ? scheme.primary
+            : const Color(0xFF8E8E93);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 3),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-        decoration: BoxDecoration(color: bg, borderRadius: radius),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: radius,
+          border: Border.all(
+            color: row.isYou
+                ? scheme.primary.withValues(alpha: 0.4)
+                : scheme.outline,
+            width: row.isYou ? 1.0 : 0.5,
+          ),
+        ),
         child: Row(
           children: [
             Expanded(

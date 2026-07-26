@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/expressive_widgets.dart';
 import '../../../alarm/presentation/pages/alarm_list_page.dart';
 import '../../../home/presentation/pages/home_page.dart';
 import '../../../squad/presentation/pages/squad_page.dart';
 import '../../../territory/presentation/pages/territory_page.dart';
 
-/// Material 3 adaptive navigation shell — `NavigationBar` on compact
-/// windows, `NavigationRail` at the M3 medium-window-size-class breakpoint
-/// (600dp) and above (foldables/tablets), per the UI/UX plan's
-/// unbuilt "adaptive/multi-pane" direction (see CLAUDE.md). Destinations
-/// match the Claude Design handoff's `showBottomNav` set: Home, Alarms,
-/// Territory, Squad — Profile is reached via the avatar button on each of
-/// those screens, not a nav destination itself.
+/// iOS adaptive navigation shell — iOS Cupertino TabBar styling on compact
+/// windows (<600dp), `NavigationRail` at the medium-window-size-class
+/// breakpoint (600dp) and above (foldables/tablets). Destinations match:
+/// Home, Alarms, Territory, Squad.
 class AppShellPage extends StatefulWidget {
   const AppShellPage({super.key});
 
@@ -23,10 +21,26 @@ class _AppShellPageState extends State<AppShellPage> {
   var _index = 0;
 
   static const _destinations = [
-    NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-    NavigationDestination(icon: Icon(Icons.alarm_outlined), selectedIcon: Icon(Icons.alarm), label: 'Alarms'),
-    NavigationDestination(icon: Icon(Icons.map_outlined), selectedIcon: Icon(Icons.map), label: 'Territory'),
-    NavigationDestination(icon: Icon(Icons.groups_outlined), selectedIcon: Icon(Icons.groups), label: 'Squad'),
+    NavigationDestination(
+      icon: Icon(Icons.home_outlined),
+      selectedIcon: Icon(Icons.home),
+      label: 'Home',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.alarm_outlined),
+      selectedIcon: Icon(Icons.alarm),
+      label: 'Alarms',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.map_outlined),
+      selectedIcon: Icon(Icons.map),
+      label: 'Territory',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.groups_outlined),
+      selectedIcon: Icon(Icons.groups),
+      label: 'Squad',
+    ),
   ];
 
   void _goTo(int index) => setState(() => _index = index);
@@ -52,14 +66,7 @@ class _AppShellPageState extends State<AppShellPage> {
   }
 }
 
-/// The shell's adaptive chrome (breakpoint switch + nav widgets), split out
-/// from [AppShellPage] so it's testable without needing every real feature
-/// page's own `getIt` dependencies (`HomePage`/`TerritoryPage`/etc. each
-/// pull in several use cases and, for `TerritoryPage`, a native
-/// `MapLibreMap` platform view — none of which a plain widget test can
-/// stand up without heavy mocking). Tests exercise this directly with a
-/// trivial `body` instead. Not otherwise meant to be reused — `body` is
-/// still the full `IndexedStack` of real pages in production.
+/// The shell's adaptive chrome (breakpoint switch + nav widgets).
 @visibleForTesting
 class AdaptiveNavScaffold extends StatelessWidget {
   const AdaptiveNavScaffold({
@@ -79,7 +86,10 @@ class AdaptiveNavScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isMediumOrWider = MediaQuery.sizeOf(context).width >= mediumWindowBreakpoint;
+    final isMediumOrWider =
+        MediaQuery.sizeOf(context).width >= mediumWindowBreakpoint;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     if (isMediumOrWider) {
       return Scaffold(
@@ -90,7 +100,13 @@ class AdaptiveNavScaffold extends StatelessWidget {
               onDestinationSelected: onDestinationSelected,
               labelType: NavigationRailLabelType.all,
               destinations: destinations
-                  .map((d) => NavigationRailDestination(icon: d.icon, selectedIcon: d.selectedIcon, label: Text(d.label)))
+                  .map(
+                    (d) => NavigationRailDestination(
+                      icon: d.icon,
+                      selectedIcon: d.selectedIcon,
+                      label: Text(d.label),
+                    ),
+                  )
                   .toList(),
             ),
             const VerticalDivider(width: 1),
@@ -101,11 +117,51 @@ class AdaptiveNavScaffold extends StatelessWidget {
     }
 
     return Scaffold(
+      extendBody: true,
       body: body,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: onDestinationSelected,
-        destinations: destinations,
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: AppleGlassContainer(
+            blurAmount: 25,
+            borderRadius: BorderRadius.circular(28),
+            padding: EdgeInsets.zero,
+            child: NavigationBarTheme(
+              data: NavigationBarThemeData(
+                backgroundColor: Colors.transparent,
+                indicatorColor: scheme.primary.withValues(alpha: 0.15),
+                labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.primary,
+                    );
+                  }
+                  return const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF8E8E93),
+                  );
+                }),
+                iconTheme: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return IconThemeData(color: scheme.primary, size: 22);
+                  }
+                  return const IconThemeData(color: Color(0xFF8E8E93), size: 22);
+                }),
+              ),
+              child: NavigationBar(
+                selectedIndex: selectedIndex,
+                onDestinationSelected: onDestinationSelected,
+                destinations: destinations,
+                elevation: 0,
+                height: 64,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
