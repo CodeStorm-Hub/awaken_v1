@@ -107,6 +107,15 @@ class _TerritoryPageState extends State<TerritoryPage> {
           CameraUpdate.newLatLngZoom(_center, _focusZoom),
         );
         await _syncCurrentPositionMarker();
+        // Explicit, rather than relying on `animateCamera` reliably
+        // triggering `onCameraIdle` on its own (plugin behavior this
+        // shouldn't have to depend on). Real gap found live: `initState`
+        // calls this concurrently with the native map's own async style
+        // load — if the style finishes first, `_onStyleLoaded`'s initial
+        // refresh runs against the still-default (unrelated) camera
+        // position, and without this explicit follow-up, nothing ever
+        // corrects it for the region the user is actually in.
+        await _refreshForCurrentView();
       }
     } catch (_) {
       // Best-effort centering only — a failed/denied fix just keeps the
@@ -476,6 +485,25 @@ class _TerritoryPageState extends State<TerritoryPage> {
                                       ),
                                     );
                                     if (!context.mounted) return;
+                                    // Re-center on the user's *current*
+                                    // position before refreshing, not just
+                                    // whatever the camera happened to be
+                                    // pointed at before the run started —
+                                    // otherwise a just-captured territory
+                                    // could get correctly fetched but still
+                                    // never actually shown on screen if the
+                                    // viewport wasn't already near it (e.g.
+                                    // the map was panned away, or the
+                                    // initial GPS fix was still pending when
+                                    // the page first opened). `_locateSelf`
+                                    // already refreshes internally when it
+                                    // gets a fix; this explicit follow-up is
+                                    // the fallback for when it doesn't
+                                    // (denied/failed permission) — a
+                                    // harmless redundant refresh in the
+                                    // common case is a fair trade for never
+                                    // silently skipping one.
+                                    await _locateSelf();
                                     await _refreshForCurrentView();
                                     unawaited(_loadRivalAndDecayStatus());
                                   },
