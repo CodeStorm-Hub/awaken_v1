@@ -13,16 +13,20 @@ abstract final class TerritoryMapper {
       id: row.id,
       ownerId: row.ownerId,
       areaSqm: row.areaSqm,
-      rings: ringsFromMultiPolygonGeoJson(row.geoJson),
+      polygons: polygonsFromMultiPolygonGeoJson(row.geoJson),
       isMine: currentUserId != null && currentUserId == row.ownerId,
     );
   }
 
-  /// Outer ring of each polygon component of a GeoJSON `MultiPolygon`
-  /// (`{"type":"MultiPolygon","coordinates":[[[[lng,lat],...]], ...]}`).
-  /// Holes (additional rings past the first per polygon) are dropped — v1
-  /// doesn't render territory holes (see `Territory.rings` doc).
-  static List<List<LatLng>> ringsFromMultiPolygonGeoJson(String geoJson) {
+  /// Every ring of every polygon component of a GeoJSON `MultiPolygon`
+  /// (`{"type":"MultiPolygon","coordinates":[[[[lng,lat],...], [hole...]], ...]}`)
+  /// — index 0 of each component is its outer boundary, any further rings
+  /// are interior holes. Previously only the outer ring was kept and holes
+  /// were dropped; now the full ring list per component is preserved so the
+  /// map layer can render true holes instead of a solid fill.
+  static List<List<List<LatLng>>> polygonsFromMultiPolygonGeoJson(
+    String geoJson,
+  ) {
     final decoded = jsonDecode(geoJson) as Map<String, Object?>;
     final type = decoded['type'] as String?;
     final coordinates = decoded['coordinates'] as List<Object?>?;
@@ -35,15 +39,15 @@ abstract final class TerritoryMapper {
       }).toList();
     }
 
+    List<List<LatLng>> polygonToRings(Object? polygon) {
+      return (polygon! as List<Object?>).map(ringToLatLng).toList();
+    }
+
     if (type == 'MultiPolygon') {
-      return coordinates.map((polygon) {
-        final outerRing = (polygon! as List<Object?>).first;
-        return ringToLatLng(outerRing);
-      }).toList();
+      return coordinates.map(polygonToRings).toList();
     }
     if (type == 'Polygon') {
-      final outerRing = coordinates.first;
-      return [ringToLatLng(outerRing)];
+      return [polygonToRings(coordinates)];
     }
     return const [];
   }
@@ -54,22 +58,24 @@ abstract final class TerritoryMapper {
   /// bbox column.
   static ({double minLat, double minLng, double maxLat, double maxLng})?
   boundsOf(String geoJson) {
-    final rings = ringsFromMultiPolygonGeoJson(geoJson);
+    final polygons = polygonsFromMultiPolygonGeoJson(geoJson);
     double? minLat, minLng, maxLat, maxLng;
-    for (final ring in rings) {
-      for (final point in ring) {
-        minLat = minLat == null
-            ? point.latitude
-            : (point.latitude < minLat ? point.latitude : minLat);
-        maxLat = maxLat == null
-            ? point.latitude
-            : (point.latitude > maxLat ? point.latitude : maxLat);
-        minLng = minLng == null
-            ? point.longitude
-            : (point.longitude < minLng ? point.longitude : minLng);
-        maxLng = maxLng == null
-            ? point.longitude
-            : (point.longitude > maxLng ? point.longitude : maxLng);
+    for (final rings in polygons) {
+      for (final ring in rings) {
+        for (final point in ring) {
+          minLat = minLat == null
+              ? point.latitude
+              : (point.latitude < minLat ? point.latitude : minLat);
+          maxLat = maxLat == null
+              ? point.latitude
+              : (point.latitude > maxLat ? point.latitude : maxLat);
+          minLng = minLng == null
+              ? point.longitude
+              : (point.longitude < minLng ? point.longitude : minLng);
+          maxLng = maxLng == null
+              ? point.longitude
+              : (point.longitude > maxLng ? point.longitude : maxLng);
+        }
       }
     }
     if (minLat == null) return null;

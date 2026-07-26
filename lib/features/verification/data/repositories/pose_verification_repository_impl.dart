@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:injectable/injectable.dart';
 
+import '../../../../core/constants/app_constants.dart';
 import '../../../alarm/domain/entities/alarm_schedule.dart';
 import '../../domain/entities/body_pose.dart';
 import '../../domain/entities/verification_state.dart';
@@ -30,6 +31,18 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
   /// queuing up a backlog.
   bool _processingFrame = false;
 
+  /// Explicit processing-FPS ceiling (`AppConstants.targetPoseProcessingFps`
+  /// — defined since the plan's original design but never actually
+  /// enforced anywhere). `_processingFrame` alone only bounds throughput to
+  /// "as fast as ML Kit inference completes" — on a fast device with quick
+  /// inference, that can still process/emit well past the intended budget,
+  /// driving more `VerificationState` emissions (and therefore widget
+  /// rebuilds) than needed. This adds a real minimum-interval gate on top.
+  static const _minFrameInterval = Duration(
+    milliseconds: 1000 ~/ AppConstants.targetPoseProcessingFps,
+  );
+  DateTime? _lastProcessedAt;
+
   /// Bumped on every `start()`/`stop()` — a frame captured just before a
   /// stop/restart can still be mid-flight in `_poseDetector.process()` when
   /// the next session's `start()` resets `_repCounter`/`_state`; without
@@ -44,6 +57,7 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
   @override
   Future<void> start({required ExerciseMode exercise, required int targetReps}) async {
     _generation++;
+    _lastProcessedAt = null;
     _repCounter = exercise == ExerciseMode.squat
         ? AngleRepCounter.squat()
         : AngleRepCounter.pushup();
@@ -78,6 +92,11 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
 
   Future<void> _onFrame(CameraImage image) async {
     if (_processingFrame) return;
+    final now = DateTime.now();
+    final lastProcessedAt = _lastProcessedAt;
+    if (lastProcessedAt != null && now.difference(lastProcessedAt) < _minFrameInterval) {
+      return;
+    }
     final controller = _camera.controller;
     if (controller == null) return;
 
@@ -85,6 +104,7 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
     if (inputImage == null) return;
 
     _processingFrame = true;
+    _lastProcessedAt = now;
     final generation = _generation;
     try {
       final poses = await _poseDetector.process(inputImage);

@@ -325,7 +325,18 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     // special-case (`_pushRun`) calls `submit_run()` synchronously here and
     // updates the local row before this returns. If offline, the row stays
     // queued in the outbox and this just falls through to the pending case.
-    await _syncWorker.drainOutbox();
+    //
+    // `skipConnectivityCheck: true` — real bug found live: `connectivity_
+    // plus`'s local network-interface check can report a stale/false
+    // "offline" right after a transition, which made this fall through to
+    // the pending case even while genuinely online (a captured territory
+    // silently never appeared, only "will sync once back online"). This is
+    // the one call site where that matters — the user is actively watching
+    // right now, so it's always worth actually trying the real network
+    // call instead of trusting the local heuristic first. A genuinely
+    // offline attempt still fails fast and falls back to the normal
+    // backoff/retry path.
+    await _syncWorker.drainOutbox(skipConnectivityCheck: true);
 
     final row = await (_db.select(
       _db.runs,

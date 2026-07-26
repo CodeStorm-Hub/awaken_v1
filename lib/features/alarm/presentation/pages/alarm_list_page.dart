@@ -171,11 +171,10 @@ class _AlarmListPageState extends State<AlarmListPage> {
                                                       index: index,
                                                       count: n,
                                                     ),
-                                                    onToggle: () => context
-                                                        .read<AlarmCubit>()
-                                                        .setActive(
-                                                          alarm.id,
-                                                          !alarm.isActive,
+                                                    onToggle: () =>
+                                                        _toggleActive(
+                                                          context,
+                                                          alarm,
                                                         ),
                                                     onDelete: () =>
                                                         _confirmDelete(
@@ -263,6 +262,23 @@ class _AlarmListPageState extends State<AlarmListPage> {
         },
       ),
     );
+  }
+
+  Future<void> _toggleActive(BuildContext context, AlarmSchedule alarm) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final cubit = context.read<AlarmCubit>();
+    // `on:` is driven straight from `alarm.isActive` (the merged native+Drift
+    // stream) — no local optimistic flip to revert — but a failed toggle was
+    // previously silent (fire-and-forget `VoidCallback`), leaving the user
+    // unsure whether tapping the switch did anything. Await + surface the
+    // error, matching the delete/schedule flows below.
+    try {
+      await cubit.setActive(alarm.id, !alarm.isActive);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not update alarm: $e')),
+      );
+    }
   }
 
   Future<void> _confirmDelete(BuildContext context, AlarmSchedule alarm) async {

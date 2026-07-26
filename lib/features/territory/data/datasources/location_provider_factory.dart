@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:geolocator/geolocator.dart' as geolocator;
 import 'package:injectable/injectable.dart';
 import 'package:kalman_dr/kalman_dr.dart';
@@ -38,18 +40,42 @@ class GeolocatorLocationProviderFactory implements LocationProviderFactory {
         permission == geolocator.LocationPermission.deniedForever) {
       return null;
     }
-    final position = await geolocator.Geolocator.getCurrentPosition(
-      locationSettings: const geolocator.LocationSettings(
-        accuracy: geolocator.LocationAccuracy.medium,
-      ),
+
+    // Real bug found live: this used to call `Geolocator.getCurrentPosition()`
+    // directly, which on Android is allowed to return a cached recent fix
+    // from `FusedLocationProviderClient` rather than forcing a new
+    // acquisition — that showed up as `TerritoryPage` centering on a
+    // completely different location than what `ActiveRunPage` displayed
+    // seconds later for the *same* device, since `ActiveRunPage` reads a
+    // continuous position stream (via [create]) instead. Routing this
+    // one-shot call through the exact same [LocationProvider] stream —
+    // taking its first emission — means both screens always read from the
+    // identical underlying source, so they can no longer disagree.
+    final provider = create();
+    try {
+      await provider.start();
+    } catch (_) {
+      await provider.dispose();
+      return null;
+    }
+    final completer = Completer<GeoPosition?>();
+    late final StreamSubscription<GeoPosition> subscription;
+    subscription = provider.positions.listen(
+      (position) {
+        if (!completer.isCompleted) completer.complete(position);
+      },
+      onError: (Object _) {
+        if (!completer.isCompleted) completer.complete(null);
+      },
     );
-    return GeoPosition(
-      latitude: position.latitude,
-      longitude: position.longitude,
-      accuracy: position.accuracy,
-      speed: position.speed,
-      heading: position.heading,
-      timestamp: position.timestamp,
-    );
+    try {
+      return await completer.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => null,
+      );
+    } finally {
+      await subscription.cancel();
+      await provider.dispose();
+    }
   }
 }

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart';
 import 'package:injectable/injectable.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../local/database.dart';
@@ -77,31 +80,43 @@ class PullDownSync {
 
     await _db.transaction(() async {
       for (final row in remoteRows) {
-        final remoteUpdatedAt = DateTime.parse(row['updated_at']! as String);
-        final id = row['id']! as String;
-        final local = await (_db.select(_db.alarms)..where((t) => t.id.equals(id))).getSingleOrNull();
-        // Last-writer-wins by `updated_at`: a local row newer than what the
-        // server just returned means a not-yet-pushed local edit is still
-        // sitting in the outbox — applying the older remote value would
-        // clobber it right before the outbox pushes it anyway.
-        if (local != null && !remoteUpdatedAt.isAfter(local.updatedAt)) continue;
+        // A single malformed row (unexpected null/shape) must not abort the
+        // whole transaction — that would roll back every other good row in
+        // this batch *and* keep the watermark from advancing, so the same
+        // poison row would be re-fetched and re-fail on every future drain
+        // cycle forever. Caught here, before it escapes the transaction, so
+        // the good rows still commit and the watermark still advances past
+        // the bad one (see `_maxUpdatedAt` below, which covers all of
+        // `remoteRows` regardless of per-row outcome).
+        try {
+          final remoteUpdatedAt = DateTime.parse(row['updated_at']! as String);
+          final id = row['id']! as String;
+          final local = await (_db.select(_db.alarms)..where((t) => t.id.equals(id))).getSingleOrNull();
+          // Last-writer-wins by `updated_at`: a local row newer than what the
+          // server just returned means a not-yet-pushed local edit is still
+          // sitting in the outbox — applying the older remote value would
+          // clobber it right before the outbox pushes it anyway.
+          if (local != null && !remoteUpdatedAt.isAfter(local.updatedAt)) continue;
 
-        if (row['deleted_at'] != null) {
-          await (_db.delete(_db.alarms)..where((t) => t.id.equals(id))).go();
-          continue;
+          if (row['deleted_at'] != null) {
+            await (_db.delete(_db.alarms)..where((t) => t.id.equals(id))).go();
+            continue;
+          }
+          await _db.into(_db.alarms).insertOnConflictUpdate(
+                AlarmsCompanion.insert(
+                  id: id,
+                  scheduledTime: DateTime.parse(row['scheduled_time']! as String),
+                  exerciseMode: row['exercise_mode']! as String,
+                  requiredReps: row['required_reps']! as int,
+                  penaltyMultiplier: Value((row['penalty_multiplier']! as num).toDouble()),
+                  isActive: Value(row['is_active']! as bool),
+                  recurringDays: Value((row['recurring_days'] as String?) ?? ''),
+                  updatedAt: remoteUpdatedAt,
+                ),
+              );
+        } catch (e, st) {
+          unawaited(Sentry.captureException(e, stackTrace: st));
         }
-        await _db.into(_db.alarms).insertOnConflictUpdate(
-              AlarmsCompanion.insert(
-                id: id,
-                scheduledTime: DateTime.parse(row['scheduled_time']! as String),
-                exerciseMode: row['exercise_mode']! as String,
-                requiredReps: row['required_reps']! as int,
-                penaltyMultiplier: Value((row['penalty_multiplier']! as num).toDouble()),
-                isActive: Value(row['is_active']! as bool),
-                recurringDays: Value((row['recurring_days'] as String?) ?? ''),
-                updatedAt: remoteUpdatedAt,
-              ),
-            );
       }
     });
 
@@ -140,27 +155,34 @@ class PullDownSync {
 
     await _db.transaction(() async {
       for (final row in remoteRows) {
-        final remoteUpdatedAt = DateTime.parse(row['updated_at']! as String);
-        final id = row['id']! as String;
-        final local = await (_db.select(_db.sessions)..where((t) => t.id.equals(id))).getSingleOrNull();
-        if (local != null && !remoteUpdatedAt.isAfter(local.updatedAt)) continue;
+        // See the matching comment in `_pullAlarms` — a per-row catch keeps
+        // one malformed row from rolling back the whole batch and stalling
+        // the watermark forever.
+        try {
+          final remoteUpdatedAt = DateTime.parse(row['updated_at']! as String);
+          final id = row['id']! as String;
+          final local = await (_db.select(_db.sessions)..where((t) => t.id.equals(id))).getSingleOrNull();
+          if (local != null && !remoteUpdatedAt.isAfter(local.updatedAt)) continue;
 
-        if (row['deleted_at'] != null) {
-          await (_db.delete(_db.sessions)..where((t) => t.id.equals(id))).go();
-          continue;
+          if (row['deleted_at'] != null) {
+            await (_db.delete(_db.sessions)..where((t) => t.id.equals(id))).go();
+            continue;
+          }
+          final completedAt = row['completed_at'] as String?;
+          await _db.into(_db.sessions).insertOnConflictUpdate(
+                SessionsCompanion.insert(
+                  id: id,
+                  alarmId: Value(row['alarm_id'] as String?),
+                  exerciseMode: row['exercise_mode']! as String,
+                  repsCompleted: row['reps_completed']! as int,
+                  startedAt: DateTime.parse(row['started_at']! as String),
+                  completedAt: Value(completedAt == null ? null : DateTime.parse(completedAt)),
+                  updatedAt: remoteUpdatedAt,
+                ),
+              );
+        } catch (e, st) {
+          unawaited(Sentry.captureException(e, stackTrace: st));
         }
-        final completedAt = row['completed_at'] as String?;
-        await _db.into(_db.sessions).insertOnConflictUpdate(
-              SessionsCompanion.insert(
-                id: id,
-                alarmId: Value(row['alarm_id'] as String?),
-                exerciseMode: row['exercise_mode']! as String,
-                repsCompleted: row['reps_completed']! as int,
-                startedAt: DateTime.parse(row['started_at']! as String),
-                completedAt: Value(completedAt == null ? null : DateTime.parse(completedAt)),
-                updatedAt: remoteUpdatedAt,
-              ),
-            );
       }
     });
 

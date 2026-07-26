@@ -13,6 +13,45 @@ intersect a finding.
 
 ## 1. What was implemented this session
 
+### Territory capture — real bugs found via live user bug report (2026-07-26, outside the original review)
+User reported a completed, closed-loop run not showing up as captured territory, with screenshots.
+Two compounding bugs found and fixed:
+- **`SyncWorker.drainOutbox()`'s connectivity pre-check could false-negative.** It gates on
+  `ConnectivityWatcher.isOnline` — a local `connectivity_plus` network-interface check, not actual
+  reachability, which can report stale/wrong right after a network transition.
+  `RunTrackingRepositoryImpl.captureRun()`'s synchronous best-effort push (right after a run is
+  saved, while the user is actively watching) relied on this gate and silently fell through to the
+  "will sync once back online" pending state even while genuinely online. Fixed with a
+  `skipConnectivityCheck` param on `drainOutbox()`, used only at this interactive call site — the
+  periodic/background drain keeps the optimization. (`sync_worker.dart`,
+  `run_tracking_repository_impl.dart`.)
+- **`TerritoryPage` never refreshed on return from a run.** Even with a successful `submit_run()`,
+  the local territories cache only refreshes on camera movement (`onCameraIdle`) — a captured
+  territory stayed invisible until the user happened to pan/zoom. `submit_run()` also doesn't write
+  the local territories cache directly (only the `runs` row); the bbox pull is what actually brings
+  the new/updated territory down. Fixed by awaiting the `Navigator.push` to `ActiveRunPage` and
+  refreshing territories + rival/at-risk state immediately on return. (`territory_page.dart`.)
+- **`TerritoryPage` and `ActiveRunPage` could show two different "current location"s for the same
+  device**, caught from a second user report with screenshots. Root cause:
+  `LocationProviderFactory.getCurrentPosition()` (used to center the territory map) called
+  `Geolocator.getCurrentPosition()` directly — a one-shot call Android's `FusedLocationProviderClient`
+  is documented to allow answering from a cached recent fix instead of forcing a new acquisition —
+  while `ActiveRunPage` reads a continuous position *stream* (via the same factory's `create()`),
+  which can't serve a stale cached value the same way. Fixed by routing the one-shot call through
+  the identical `LocationProvider` stream (taking its first emission, 10s timeout), so both screens
+  now always read from the same underlying source and can no longer disagree. Side benefit: this
+  also closes a minor anti-cheat inconsistency — the live stream already discards
+  platform-flagged-mocked positions (H7); the one-shot call previously didn't.
+  (`location_provider_factory.dart`.)
+
+**Verification:** `flutter analyze` and the full `flutter test` suite (57 tests) both clean after
+each fix. The connectivity/refresh-on-return fixes were **not** confirmed via a live end-to-end
+capture — the Android emulator used this session discards all `adb emu geo fix`-injected positions
+(`GeolocatorLocationProvider._onPosition`'s `isMocked` anti-cheat filter, by design) and separately
+had `FusedLocationProvider` throttling injected fixes ("too fast"/"too close") even when spaced out,
+so a real closed-loop run couldn't be driven through the emulator this session. **The user should
+verify on their own device** (where the original report came from) after rebuilding.
+
 ### Alarm feature (`lib/features/alarm/`)
 - **Preview is now side-effect-free.** `AlarmListPage` opens `AlarmRingPage(isPreview: true)`;
   `AlarmRepositoryImpl.completeWorkout(..., isPreview: false)` returns immediately via
@@ -315,9 +354,18 @@ Organized by area, in rough priority order within each area.
       screens or large text scale — fixed `Row`/`Expanded` throughout `active_run_page.dart` and
       `territory_page.dart`. (Same underlying pattern recurs in Squad's invite/member/leaderboard
       layouts — not separately itemized.)
-- [ ] **Polygon interior rings (holes) still not modeled.** `territory.dart` explicitly documents
-      "holes are not modeled in v1" — rival cutouts inside owned territory still render as solid
-      fill rather than a true hole.
+- [x] **Polygon interior rings (holes) now modeled and rendered.** `Territory.rings` (flattened
+      outer-ring-only list) replaced with `Territory.polygons` (`List<List<List<LatLng>>>` — one
+      entry per MultiPolygon component, each itself the full ring list: index 0 outer boundary, any
+      further rings are interior holes). `TerritoryMapper.polygonsFromMultiPolygonGeoJson` now keeps
+      every ring instead of dropping all but the first. `territory_page.dart._redrawFills` now
+      creates one `Fill` per polygon *component* with its complete ring list as that Fill's
+      `geometry` (confirmed via `maplibre_gl_platform_interface`'s source that `FillOptions.geometry`
+      is exactly `List<List<LatLng>>` — one ring list per fill — which is what makes a hole render
+      as an actual hole instead of a second opaque fill painted on top), instead of the old
+      one-Fill-per-ring loop. New `test/features/territory/data/mappers/territory_mapper_test.dart`
+      (6 tests) locks in hole/no-hole/multi-component parsing and `boundsOf` correctness — there was
+      no prior test coverage for this mapper at all.
 - [x] **Debounce added to viewport bbox refresh.** `onCameraIdle` now calls
       `_scheduleRefreshForCurrentView()` (400ms `Timer`, cancelled/reset per idle event) instead of
       firing `_refreshForCurrentView()` directly — a rapid pan/zoom/pan sequence now fires one
@@ -329,20 +377,41 @@ Organized by area, in rough priority order within each area.
       incremental pull for `runs`.
 
 ### Backend — territory correctness (found in second pass, `submit_run()`/`territories_in_bbox()`)
-- [ ] **`captured_area_sqm` is still the full submitted polygon's area, not net-new area.** Also,
-      the variable named `v_delta_sqm` (line 204) is actually the merged territory's *total* area,
-      not a real delta — the naming itself is misleading in the migration.
-      (`20260726000013_submit_run_decay_bounty_rivalry_location.sql:159,204,241`.)
-- [ ] **Own-territory merge still only unions ONE intersecting own row** (`limit 1` at the query),
-      not all of them — bridging multiple own territory rows can still leave overlapping/double-
-      counted rows. (Same migration, lines 191-209.)
+- [x] **`captured_area_sqm` now genuinely net-new; own-territory merge now unions ALL intersecting
+      rows, not just one.** Both fixed together in
+      `20260726000016_submit_run_net_new_area_and_full_own_merge.sql` (applied live on
+      `qxxkydisyqnodskmymla`), since a correct net-new calculation needs the same all-intersecting-
+      rows lookup as the merge fix: own rows are now found via a locked id-array query, unioned
+      (`v_own_union`), and `captured_area_sqm` = `ST_Area(ST_Difference(new polygon, v_own_union))`
+      — a run entirely over already-owned land now correctly reports 0 new area instead of the full
+      polygon. The merge now folds *every* touched own row into one canonical row (soft-deleting
+      the rest), not just the first (`limit 1`) match. `v_delta_sqm` renamed to
+      `v_territory_area_sqm` (it always held the merged territory's total area, not a delta — the
+      old name was misleading, not itself a bug; semantics unchanged). The bounty bonus and
+      unclaimed-land leaderboard credit both read the same `v_captured_area_sqm` variable, so they
+      were fixed for free. **Verified**: two isolated `ST_Difference` sanity checks via
+      `execute_sql` (50%-overlap → net-new is exactly half; 100%-overlap re-run → net-new is
+      exactly 0), plus `get_advisors` shows no new findings (only pre-existing ones: intentional
+      `SECURITY DEFINER` RPCs, anonymous-sign-ins-by-design, leaked-password-protection still off
+      per item below). **Not verified**: a live end-to-end `submit_run()` RPC call through the app
+      (would need a real device/emulator run reaching a real closed loop over previously-owned
+      territory) — the fix is proven at the geometry-math level, not through the full app flow.
 - [ ] **No `EXCLUDE` constraint or advisory lock preventing overlapping own/rival rows under
       concurrency.** Only row-level `for update` locks on *already-intersecting* rows at query time
       — doesn't prevent concurrent inserts of new overlapping geometry.
-- [ ] **`territories_in_bbox()` still has no server-side row-count cap or coordinate-bounds
-      validation** — `row_limit` defaults to 500 but nothing clamps a caller-supplied larger value,
-      and lat/lng inputs aren't range-checked. (`20260726000015_territories_in_bbox_antimeridian_
-      safe.sql:11-49`.)
+- [x] **`territories_in_bbox()` now has a server-side hard row cap and coordinate-bounds
+      validation.** Fixed in `20260726000017_territories_in_bbox_cap_and_bounds.sql` (applied live).
+      Converted `language sql` → `language plpgsql` to allow `raise exception` (matching
+      `submit_run()`'s own bounds-check style): out-of-range lat (`< -90`/`> 90`) or lng
+      (`< -180`/`> 180`), or inverted lat bounds, now raises instead of silently matching nothing or
+      erroring deep inside PostGIS. `row_limit` is now clamped server-side via
+      `greatest(1, least(row_limit, 500))` regardless of what the caller passes — a caller-supplied
+      huge value can no longer force an unbounded scan/return. `min_lng > max_lng` (the existing,
+      intentional antimeridian-wraparound case) is deliberately still accepted, not rejected.
+      **Verified live** via `execute_sql`: valid bbox returns normally; `min_lat = -100` correctly
+      raises `'invalid latitude bounds'`; `row_limit = 999999999` no longer errors (silently
+      clamped); the antimeridian wraparound case (`min_lng=170, max_lng=-170`) still works.
+      `get_advisors` shows no new findings.
 
 ### Alarm — small, no hardware needed
 - [x] **`penaltyGraceWindow` constant removed** (was unused, `app_constants.dart:12`) — user chose
@@ -389,8 +458,19 @@ Organized by area, in rough priority order within each area.
       `skeleton_painter.dart:35-39`.
 
 ### Sync / outbox — found in second pass
-- [ ] **`SyncStatus` stream is still unused by any UI.** No widget/bloc/cubit subscribes to
-      `SyncWorker`'s status stream — sync failures/backlog are invisible to the user.
+- [x] **`SyncStatus` now surfaced in the UI** — new `_SyncStatusBanner` on `TerritoryPage`
+      (`StreamBuilder<SyncStatus>` on `SyncWorker.status`), hidden on `idle`, shows
+      syncing/offline/error with a manual "Retry" button on error. Prompted by a live user bug
+      report (captured territory never appeared) where DB inspection via Supabase MCP confirmed
+      `runs`/`territories` had 0 rows server-side — the capture was stuck silently in the local
+      outbox with no way for the user to see it. Also fixed a real bug found while wiring this up:
+      `SyncWorker.status` was a plain broadcast stream with no replay — a UI that mounted after the
+      last status change (the exact case here, `TerritoryPage` opening well after the last drain
+      cycle) would show nothing until the *next* transition. Same class of bug as
+      `SquadRepositoryImpl._mySquadController` (see `engineering_gotchas` memory) — this stream had
+      just never had a consumer before to hit it. Fixed via `_emitStatus()` tracking `_lastStatus`
+      and an `async*` getter that replays it to new subscribers before continuing live.
+      (`sync_worker.dart`, `territory_page.dart`.)
 - [ ] **A single malformed row during pull still aborts the entire pull pass** for that table (no
       per-row try/catch in `_pullAlarms`/`_pullSessions`), so the watermark never advances past a
       poison row and the same failure repeats every drain cycle. (`pull_down_sync.dart:79-105,142-165`.)
@@ -497,10 +577,20 @@ Most of the "highest-priority missing tests" list from the review is still open 
 incidentally covered by the fixes above (e.g. `AdaptiveNavScaffold`'s new tests). Not itemized
 individually here since it's a large, mostly-net-new-test-writing effort rather than a "fix a bug"
 list — worth a dedicated pass if/when you want deeper regression coverage, especially:
-- Backend pgTAP/SQL harness for `submit_run()` anti-cheat, idempotency, RLS denial cases (currently
-  verified live/manually per-migration during this session, not committed as repeatable tests).
-- Sync/account-transition tests (User A offline writes → sign-out → User B login, ownership
-  mismatch rejection) — the fix is in, but there's no regression test locking in the behavior.
+- [x] **Sync/account-transition regression test added** —
+  `test/sync/local/clear_all_local_data_test.dart` (2 tests): seeds every table
+  `AppDatabase.clearAllLocalData()` is documented to cover (alarms, sessions, runs, territories,
+  user_stats, run_checkpoints, sync_meta, sync_outbox), asserts the seed landed, wipes, asserts
+  everything is empty — plus an idempotency check on an already-empty database. Exercises
+  `clearAllLocalData()` directly against a real in-memory sqlite3 instance rather than mocking
+  `AuthRepositoryImpl`'s full dependency graph, since the property that matters ("every
+  locally-cached table is empty after the wipe") doesn't need any of that.
+- [ ] **Backend pgTAP/SQL harness for `submit_run()` anti-cheat, idempotency, RLS denial cases** —
+  still open, deliberately not attempted this pass. This is real new testing infrastructure (enable
+  the pgTAP extension, write `.sql` test files, wire a runner), not a quick addition alongside the
+  Dart regression test above — currently still only verified live/manually per-migration (see this
+  session's `execute_sql`-based sanity checks for items #12-14 above), not committed as repeatable
+  tests. Worth a dedicated pass.
 - Squad private-channel/Presence tests.
 - Device-dependent alarm/territory reliability matrices (Appium/hardware-gated, out of scope here).
 
@@ -532,16 +622,20 @@ bugfix found via live emulator testing) and manual zoom in/out buttons on both m
 
 Remaining from the original order:
 
-10. Per-row try/catch in `pull_down_sync.dart` so one bad row doesn't wedge the whole pull forever.
-11. Alarm toggle switch: await `setActive()` and revert the UI on failure.
-12. Backend: fix `captured_area_sqm`/`v_delta_sqm` to be genuinely net-new area, not full-polygon
-    area — this is a real correctness bug in what users see as their capture reward.
-13. Backend: union ALL intersecting own-territory rows in `submit_run()`'s merge, not just one.
-14. Backend: add a hard row cap + coordinate-bounds check to `territories_in_bbox()`.
+10. [x] Per-row try/catch in `pull_down_sync.dart` — fixed (caught inside the transaction loop, per
+    table, with Sentry reporting; watermark now advances past a poison row instead of stalling).
+11. [x] Alarm toggle switch: await `setActive()` and revert the UI on failure — fixed
+    (`_toggleActive`, try/catch + SnackBar, matching the delete/schedule pattern).
+12. [x] Backend: `captured_area_sqm`/`v_delta_sqm` — fixed, net-new area, applied live + verified
+    (see "Backend — territory correctness" above).
+13. [x] Backend: union ALL intersecting own-territory rows — fixed in the same migration as #12.
+14. [x] Backend: hard row cap + coordinate-bounds check on `territories_in_bbox()` — fixed and
+    verified live.
 15. Enable leaked-password protection in the Supabase Auth dashboard (not a code change).
-16. Polygon holes rendering (bigger — touches the map layer + possibly the mapper).
-17. Regression tests for the sync/account-transition and submit_run anti-cheat behavior already
-    implemented but not locked in by a test.
+16. [x] Polygon holes rendering — fixed (`Territory.polygons`, mapper, `_redrawFills`) + 6 new tests.
+17. [~] Regression tests — sync/account-transition done (`clear_all_local_data_test.dart`,
+    2 tests). `submit_run()` anti-cheat pgTAP harness is real new test infrastructure, deliberately
+    deferred (see "Testing" section above).
 
 Then, when ready to invest in the harder items:
 18. Verification camera-stack `ValueNotifier`/`RepaintBoundary` isolation + FPS throttle — a real

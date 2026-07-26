@@ -27,7 +27,25 @@ class SyncWorker {
   final PullDownSync _pullDownSync;
 
   final _statusController = StreamController<SyncStatus>.broadcast();
-  Stream<SyncStatus> get status => _statusController.stream;
+  SyncStatus _lastStatus = SyncStatus.idle;
+
+  /// Replays the current status to a new subscriber before continuing with
+  /// live updates — a plain broadcast stream doesn't replay past events, so
+  /// a UI that only just opened (e.g. `TerritoryPage`, mounted well after
+  /// the last drain cycle) would otherwise show nothing until the *next*
+  /// status change, even while a sync failure or backlog is sitting there
+  /// right now. Same class of bug as `SquadRepositoryImpl._mySquadController`
+  /// (see engineering_gotchas memory) — this stream had never been consumed
+  /// by any UI at all before, so it hadn't been hit yet.
+  Stream<SyncStatus> get status async* {
+    yield _lastStatus;
+    yield* _statusController.stream;
+  }
+
+  void _emitStatus(SyncStatus status) {
+    _lastStatus = status;
+    _statusController.add(status);
+  }
 
   StreamSubscription<bool>? _connectivitySub;
   Timer? _wakeTimer;
@@ -49,7 +67,7 @@ class SyncWorker {
       if (online) {
         unawaited(drainOutbox());
       } else {
-        _statusController.add(SyncStatus.offline);
+        _emitStatus(SyncStatus.offline);
       }
     });
     _wakeTimer ??= Timer.periodic(_wakeInterval, (_) => unawaited(drainOutbox()));
@@ -80,12 +98,29 @@ class SyncWorker {
     }
   }
 
-  Future<void> drainOutbox() async {
+  /// [skipConnectivityCheck] bypasses the `ConnectivityWatcher.isOnline`
+  /// pre-check (a local OS connectivity-plugin read — reachable network
+  /// interface, not actual Supabase reachability). That check is a cheap
+  /// optimization for the periodic/connectivity-triggered background drain
+  /// (avoid a doomed attempt while genuinely offline), but `connectivity_plus`
+  /// can report a stale/false `none` right after a network transition — a
+  /// real bug found live: a user closed a loop with good connectivity, but
+  /// `RunTrackingRepositoryImpl.captureRun()`'s synchronous best-effort push
+  /// (right after the run is saved, while the user is actively watching)
+  /// hit this false negative and silently fell through to the "will sync
+  /// once back online" pending state despite being online the whole time —
+  /// the captured territory never appeared. `captureRun()` now passes
+  /// `skipConnectivityCheck: true` for that call: attempt the real network
+  /// call directly rather than trusting the local heuristic first. A
+  /// genuinely offline attempt still fails fast (`SocketException`,
+  /// classified transient) and falls back to the normal backoff/retry path
+  /// — no worse than before in that case, just one extra failed round trip.
+  Future<void> drainOutbox({bool skipConnectivityCheck = false}) async {
     if (_draining || _paused) return;
     _draining = true;
     try {
-      if (!await _connectivity.isOnline) {
-        _statusController.add(SyncStatus.offline);
+      if (!skipConnectivityCheck && !await _connectivity.isOnline) {
+        _emitStatus(SyncStatus.offline);
         return;
       }
 
@@ -120,11 +155,11 @@ class SyncWorker {
           .get();
 
       if (due.isEmpty) {
-        _statusController.add(SyncStatus.idle);
+        _emitStatus(SyncStatus.idle);
         return;
       }
 
-      _statusController.add(SyncStatus.syncing);
+      _emitStatus(SyncStatus.syncing);
       var hadFailure = false;
       final failedEntities = <String>{};
       for (final entry in due) {
@@ -139,7 +174,7 @@ class SyncWorker {
           await _applyFailure(entry, e);
         }
       }
-      _statusController.add(hadFailure ? SyncStatus.error : SyncStatus.idle);
+      _emitStatus(hadFailure ? SyncStatus.error : SyncStatus.idle);
     } finally {
       _draining = false;
     }

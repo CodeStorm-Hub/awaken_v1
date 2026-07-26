@@ -19,6 +19,8 @@ import '../../domain/usecases/get_territories_at_risk.dart';
 import '../../domain/usecases/refresh_territories.dart';
 import '../../domain/usecases/watch_owned_area.dart';
 import '../../domain/usecases/watch_territories.dart';
+import '../../../../sync/outbox/sync_worker.dart';
+import '../../../../sync/sync_status.dart';
 import '../widgets/map_style_loader.dart';
 import '../widgets/map_style_overlays.dart';
 import '../widgets/osm_attribution.dart';
@@ -238,12 +240,16 @@ class _TerritoryPageState extends State<TerritoryPage> {
 
     for (final territory in _lastTerritories) {
       if (!territory.isMine && !_showRivalTerritory) continue;
-      final rings = TerritoryMapStyle.territoryRingsToLatLng(territory);
+      final polygons = TerritoryMapStyle.territoryPolygonsToLatLng(territory);
       final fills = <Fill>[];
-      for (final ring in rings) {
+      // One Fill per polygon *component* (not per ring) — a component's
+      // full ring list (outer boundary + any interior holes) goes into a
+      // single Fill's geometry, which is what renders a hole as an actual
+      // hole rather than a second opaque fill painted on top of it.
+      for (final rings in polygons) {
         final fill = await controller.addFill(
           FillOptions(
-            geometry: [ring],
+            geometry: rings,
             fillColor: _colorToHex(
               territory.isMine ? scheme.primary : scheme.tertiary,
             ),
@@ -405,6 +411,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
                                 ),
                               ],
                             ),
+                            const _SyncStatusBanner(),
                             if (_atRisk.isNotEmpty) ...[
                               const SizedBox(height: 8),
                               _AtRiskBanner(
@@ -450,11 +457,28 @@ class _TerritoryPageState extends State<TerritoryPage> {
                                       borderRadius: BorderRadius.circular(999),
                                     ),
                                   ),
-                                  onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const ActiveRunPage(),
-                                    ),
-                                  ),
+                                  onPressed: () async {
+                                    // Real bug found live: nothing refreshed
+                                    // territories on return from a run —
+                                    // `_refreshForCurrentView()` only fires
+                                    // on camera movement (`onCameraIdle`), so
+                                    // a just-captured territory stayed
+                                    // invisible until the user happened to
+                                    // pan/zoom the map. `submit_run()` also
+                                    // doesn't write to the local territories
+                                    // cache directly (only to the `runs`
+                                    // row) — the bbox pull below is what
+                                    // actually pulls the new/updated
+                                    // territory down.
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const ActiveRunPage(),
+                                      ),
+                                    );
+                                    if (!context.mounted) return;
+                                    await _refreshForCurrentView();
+                                    unawaited(_loadRivalAndDecayStatus());
+                                  },
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: const [
@@ -587,6 +611,97 @@ class _TerritoryPageState extends State<TerritoryPage> {
 String _colorToHex(Color color) {
   final argb = color.toARGB32().toRadixString(16).padLeft(8, '0');
   return '#${argb.substring(2)}';
+}
+
+/// Surfaces `SyncWorker.status` — previously defined but never consumed by
+/// any UI, so a stuck/failed sync (e.g. a captured run stuck in the local
+/// outbox, never reaching the server) was completely invisible to the user.
+/// Hidden on `idle` (nothing pending); `error` gets a manual retry button
+/// rather than silently waiting on the next backoff/periodic drain.
+class _SyncStatusBanner extends StatelessWidget {
+  const _SyncStatusBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return StreamBuilder<SyncStatus>(
+      stream: getIt<SyncWorker>().status,
+      builder: (context, snapshot) {
+        final status = snapshot.data;
+        if (status == null || status == SyncStatus.idle) {
+          return const SizedBox.shrink();
+        }
+
+        final (icon, label, bg, fg) = switch (status) {
+          SyncStatus.syncing => (
+            null,
+            'Syncing…',
+            scheme.surfaceContainerHigh,
+            scheme.onSurfaceVariant,
+          ),
+          SyncStatus.offline => (
+            Icons.cloud_off,
+            "Offline — will sync when you're back online",
+            scheme.surfaceContainerHigh,
+            scheme.onSurfaceVariant,
+          ),
+          SyncStatus.error => (
+            Icons.sync_problem,
+            "Couldn't sync some changes",
+            scheme.errorContainer,
+            scheme.onErrorContainer,
+          ),
+          SyncStatus.idle => (null, '', scheme.surface, scheme.onSurface),
+        };
+
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (status == SyncStatus.syncing)
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: fg),
+                  )
+                else
+                  Icon(icon, size: 16, color: fg),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(fontSize: 12, color: fg),
+                  ),
+                ),
+                if (status == SyncStatus.error) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => unawaited(getIt<SyncWorker>().drainOutbox()),
+                    child: Text(
+                      'Retry',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: fg,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _OwnedAreaChip extends StatelessWidget {

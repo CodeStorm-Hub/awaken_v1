@@ -77,20 +77,41 @@ class _VerificationViewState extends State<_VerificationView>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+      // Scoped to `_ViewKind`, not raw `VerificationStatus` — the camera
+      // view covers 5 distinct statuses (calibrating/noPoseDetected/
+      // counting/complete) that change on essentially every processed
+      // frame during a real session. Rebuilding on every status change
+      // used to rebuild `_CameraView` — and with it `CameraPreview`, its
+      // `Transform` wrapper, and the whole overlay subtree — on every
+      // single rep-counter update. Since `_CameraView` no longer takes
+      // `state` as a prop (each piece that needs live state now reads it
+      // itself via its own narrowly-scoped `BlocBuilder`, see below),
+      // building it once per camera-view entry is enough; nothing forces
+      // the camera texture to rebuild for the rest of the session.
       body: BlocBuilder<VerificationCubit, VerificationState>(
+        buildWhen: (previous, current) =>
+            _viewKindOf(previous.status) != _viewKindOf(current.status),
         builder: (context, state) {
-          return switch (state.status) {
-            VerificationStatus.permissionDenied =>
-              const _PermissionDeniedView(),
-            VerificationStatus.cameraError => const _CameraErrorView(),
-            VerificationStatus.initializing => const _InitializingView(),
-            _ => _CameraView(state: state),
+          return switch (_viewKindOf(state.status)) {
+            _ViewKind.permissionDenied => const _PermissionDeniedView(),
+            _ViewKind.cameraError => const _CameraErrorView(),
+            _ViewKind.initializing => const _InitializingView(),
+            _ViewKind.camera => const _CameraView(),
           };
         },
       ),
     );
   }
 }
+
+enum _ViewKind { permissionDenied, cameraError, initializing, camera }
+
+_ViewKind _viewKindOf(VerificationStatus status) => switch (status) {
+  VerificationStatus.permissionDenied => _ViewKind.permissionDenied,
+  VerificationStatus.cameraError => _ViewKind.cameraError,
+  VerificationStatus.initializing => _ViewKind.initializing,
+  _ => _ViewKind.camera,
+};
 
 class _InitializingView extends StatelessWidget {
   const _InitializingView();
@@ -166,9 +187,7 @@ class _CameraErrorView extends StatelessWidget {
 }
 
 class _CameraView extends StatelessWidget {
-  const _CameraView({required this.state});
-
-  final VerificationState state;
+  const _CameraView();
 
   @override
   Widget build(BuildContext context) {
@@ -186,36 +205,51 @@ class _CameraView extends StatelessWidget {
         ? Size.zero
         : Size(previewSize.height, previewSize.width);
 
+    // This widget is now built exactly once per camera-view entry (see the
+    // `buildWhen` on the `BlocBuilder` in `_VerificationViewState` above) —
+    // none of the fields it reads here depend on `VerificationState`, only
+    // on the (already-initialized, stable) camera controller. Every piece
+    // below that *does* need live state reads it itself via its own
+    // narrowly-scoped `BlocBuilder`, instead of this whole subtree
+    // (camera texture included) rebuilding on every processed frame like
+    // it used to.
     return Stack(
       fit: StackFit.expand,
       children: [
-        Transform(
-          alignment: Alignment.center,
-          // Mirror the front-camera preview to match what the user expects
-          // to see (a "mirror", not a flipped selfie).
-          transform: Matrix4.rotationY(3.14159),
-          child: CameraPreview(controller),
-        ),
-        CustomPaint(
-          painter: SkeletonPainter(
-            pose: state.currentPose,
-            imageSize: imageSize,
+        // `RepaintBoundary` isolates the camera texture's compositing layer
+        // from the overlay widgets below, which repaint far more often
+        // (the skeleton painter tracks essentially every processed frame).
+        RepaintBoundary(
+          child: Transform(
+            alignment: Alignment.center,
+            // Mirror the front-camera preview to match what the user
+            // expects to see (a "mirror", not a flipped selfie).
+            transform: Matrix4.rotationY(3.14159),
+            child: CameraPreview(controller),
           ),
         ),
-        SafeArea(
+        RepaintBoundary(
+          child: BlocBuilder<VerificationCubit, VerificationState>(
+            // No `buildWhen` — this is the one piece expected to track
+            // every processed frame's pose, and it's a cheap `CustomPaint`
+            // rebuild, not the whole camera subtree.
+            builder: (context, state) => CustomPaint(
+              painter: SkeletonPainter(
+                pose: state.currentPose,
+                imageSize: imageSize,
+              ),
+            ),
+          ),
+        ),
+        const SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(20),
             child: Column(
               children: [
-                Center(child: _StatusBanner(state: state)),
-                if (state.status != VerificationStatus.calibrating &&
-                    state.status != VerificationStatus.initializing &&
-                    state.status != VerificationStatus.permissionDenied) ...[
-                  const SizedBox(height: 14),
-                  _RepSegments(state: state),
-                ],
-                const Spacer(),
-                _RepCounter(state: state),
+                Center(child: _StatusBanner()),
+                _RepSegments(),
+                Spacer(),
+                _RepCounter(),
               ],
             ),
           ),
@@ -226,9 +260,7 @@ class _CameraView extends StatelessWidget {
 }
 
 class _StatusBanner extends StatefulWidget {
-  const _StatusBanner({required this.state});
-
-  final VerificationState state;
+  const _StatusBanner();
 
   @override
   State<_StatusBanner> createState() => _StatusBannerState();
@@ -272,7 +304,15 @@ class _StatusBannerState extends State<_StatusBanner>
 
   @override
   Widget build(BuildContext context) {
-    final state = widget.state;
+    return BlocBuilder<VerificationCubit, VerificationState>(
+      buildWhen: (previous, current) =>
+          previous.status != current.status ||
+          previous.calibrationRepsRemaining != current.calibrationRepsRemaining,
+      builder: (context, state) => _buildBanner(context, state),
+    );
+  }
+
+  Widget _buildBanner(BuildContext context, VerificationState state) {
     final message = switch (state.status) {
       VerificationStatus.noPoseDetected =>
         "Can't see you clearly — step back or find better light.",
@@ -342,65 +382,97 @@ class _StatusBannerState extends State<_StatusBanner>
 }
 
 class _RepSegments extends StatelessWidget {
-  const _RepSegments({required this.state});
-
-  final VerificationState state;
+  const _RepSegments();
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    if (state.targetReps <= 0) return const SizedBox.shrink();
-    return Row(
-      children: List.generate(state.targetReps, (i) {
-        final filled = i < state.completedReps;
-        return Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(right: i == state.targetReps - 1 ? 0 : 3),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              height: 5,
-              decoration: BoxDecoration(
-                color: filled
-                    ? scheme.primaryContainer
-                    : Colors.white.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
+    return BlocBuilder<VerificationCubit, VerificationState>(
+      buildWhen: (previous, current) =>
+          previous.status != current.status ||
+          previous.completedReps != current.completedReps ||
+          previous.targetReps != current.targetReps,
+      builder: (context, state) {
+        // Previously an `if` in the parent decided whether to show this
+        // section (and its leading spacer) at all — folded in here now
+        // that the parent no longer holds `state` to make that call.
+        final visible =
+            state.targetReps > 0 &&
+            state.status != VerificationStatus.calibrating &&
+            state.status != VerificationStatus.initializing &&
+            state.status != VerificationStatus.permissionDenied;
+        if (!visible) return const SizedBox.shrink();
+
+        final scheme = Theme.of(context).colorScheme;
+        return Padding(
+          padding: const EdgeInsets.only(top: 14),
+          child: Row(
+            children: List.generate(state.targetReps, (i) {
+              final filled = i < state.completedReps;
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    right: i == state.targetReps - 1 ? 0 : 3,
+                  ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: filled
+                          ? scheme.primaryContainer
+                          : Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+              );
+            }),
           ),
         );
-      }),
+      },
     );
   }
 }
 
 class _RepCounter extends StatefulWidget {
-  const _RepCounter({required this.state});
-
-  final VerificationState state;
+  const _RepCounter();
 
   @override
   State<_RepCounter> createState() => _RepCounterState();
 }
 
 class _RepCounterState extends State<_RepCounter> {
-  int _lastReps = 0;
   bool _bump = false;
 
-  @override
-  void didUpdateWidget(covariant _RepCounter oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.state.completedReps > _lastReps) {
-      _lastReps = widget.state.completedReps;
-      setState(() => _bump = true);
-      Future.delayed(const Duration(milliseconds: 260), () {
-        if (mounted) setState(() => _bump = false);
-      });
-    }
+  void _triggerBump() {
+    setState(() => _bump = true);
+    Future.delayed(const Duration(milliseconds: 260), () {
+      if (mounted) setState(() => _bump = false);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = widget.state;
+    // `BlocConsumer` instead of the old `didUpdateWidget`-based rep-crossed-
+    // a-threshold detection — this widget's `State` now persists across
+    // rebuilds driven by a `BlocBuilder` further up rather than receiving a
+    // brand-new `_RepCounter(state: ...)` instance each time, so comparing
+    // `widget.state` between old/new instances no longer applies. The
+    // `listener` triggers the bump animation as a side effect exactly when
+    // `completedReps` increases; `builder` renders.
+    return BlocConsumer<VerificationCubit, VerificationState>(
+      listenWhen: (previous, current) =>
+          current.completedReps > previous.completedReps,
+      listener: (context, state) => _triggerBump(),
+      buildWhen: (previous, current) =>
+          previous.completedReps != current.completedReps ||
+          previous.targetReps != current.targetReps ||
+          previous.status != current.status ||
+          previous.exerciseMode != current.exerciseMode,
+      builder: (context, state) => _buildContent(context, state),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, VerificationState state) {
     final scheme = Theme.of(context).colorScheme;
     final pct = state.isComplete
         ? 1.0
