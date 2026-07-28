@@ -42,147 +42,149 @@ class TerritoryCaptureSheet extends StatelessWidget {
             ),
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                color: scheme.outlineVariant,
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
-            ExpressiveFlower(
-              size: 110,
-              color: scheme.primary.withValues(alpha: 0.2),
-              borderColor: scheme.primary,
-              animatePop: true,
-              child: Icon(
-                Icons.landscape,
-                size: 48,
-                color: scheme.primary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'VICTORY! TERRITORY CLAIMED',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.5,
-                color: scheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '+$areaLabel added to your empire',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: scheme.primary,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: scheme.outline.withValues(alpha: 0.3),
-                  width: 1,
+        // Same overflow fallback as `WorkoutCelebrationSheet` — a modal
+        // bottom sheet with no scroll fallback just clips/overflows at
+        // large text scale instead of shrinking, and this sheet's only exit
+        // ("CLAIM VICTORY") would be unreachable below the fold.
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(999),
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.shield,
-                    size: 15,
-                    color: scheme.primary,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Land is yours until a rival captures it',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurface,
-                    ),
-                  ),
-                ],
+              ExpressiveFlower(
+                size: 110,
+                color: scheme.primary.withValues(alpha: 0.2),
+                borderColor: scheme.primary,
+                animatePop: true,
+                child: Icon(Icons.landscape, size: 48, color: scheme.primary),
               ),
-            ),
-            if (bountyMultiplier != null && bountyMultiplier! > 1.0) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
+              Text(
+                'VICTORY! TERRITORY CLAIMED',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                  color: scheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '+$areaLabel added to your empire',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.primary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2E2300),
+                  color: scheme.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: const Color(0xFFFFD700),
-                    width: 1.5,
+                    color: scheme.outline.withValues(alpha: 0.3),
+                    width: 1,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFFD700).withValues(alpha: 0.3),
-                      blurRadius: 8,
-                    ),
-                  ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.local_fire_department,
-                      size: 15,
-                      color: Color(0xFFFFD700),
-                    ),
+                    Icon(Icons.shield, size: 15, color: scheme.primary),
                     const SizedBox(width: 6),
                     Text(
-                      'BOUNTY ZONE — ${bountyMultiplier!.toStringAsFixed(0)}x credit applied',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.5,
-                        color: Color(0xFFFFD700),
+                      'Land is yours until a rival captures it',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurface,
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
-            const SizedBox(height: 22),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: scheme.primary,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(56),
-                  shape: RoundedRectangleBorder(
+              if (bountyMultiplier != null && bountyMultiplier! > 1.0) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2E2300),
                     borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: const Color(0xFFFFD700),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.local_fire_department,
+                        size: 15,
+                        color: Color(0xFFFFD700),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'BOUNTY ZONE — ${bountyMultiplier!.toStringAsFixed(0)}x credit applied',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                          color: Color(0xFFFFD700),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text(
-                  'CLAIM VICTORY',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 15,
-                    letterSpacing: 0.8,
+              ],
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: scheme.primary,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(56),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text(
+                    'CLAIM VICTORY',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                      letterSpacing: 0.8,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

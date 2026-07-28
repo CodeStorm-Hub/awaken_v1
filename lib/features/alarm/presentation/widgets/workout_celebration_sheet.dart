@@ -30,96 +30,103 @@ class WorkoutCelebrationSheet extends StatelessWidget {
           color: scheme.surfaceContainerLow,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                color: scheme.outlineVariant,
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
-            ExpressiveFlower(
-              size: 116,
-              color: scheme.primaryContainer,
-              animatePop: true,
-              child: Icon(
-                Icons.emoji_events,
-                size: 52,
-                color: scheme.onPrimaryContainer,
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'Alarm dismissed!',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                letterSpacing: -0.4,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              "Nice work — that's how mornings are won.",
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            StreamBuilder<int>(
-              stream: getIt<WatchCurrentStreak>()(),
-              builder: (context, snapshot) {
-                final streak = snapshot.data ?? 0;
-                return Row(
-                  children: [
-                    Expanded(
-                      child: _StatChip(
-                        bg: scheme.secondaryContainer,
-                        fg: scheme.onSecondaryContainer,
-                        radius: const BorderRadius.horizontal(
-                          left: Radius.circular(20),
-                          right: Radius.circular(8),
-                        ),
-                        value: '$repsCompleted',
-                        label: _exerciseNoun(alarm.exerciseMode),
-                      ),
-                    ),
-                    const SizedBox(width: 3),
-                    Expanded(
-                      child: _StatChip(
-                        bg: scheme.tertiaryContainer,
-                        fg: scheme.onTertiaryContainer,
-                        radius: const BorderRadius.horizontal(
-                          left: Radius.circular(8),
-                          right: Radius.circular(20),
-                        ),
-                        icon: Icons.local_fire_department,
-                        value: '$streak',
-                        label: 'day streak',
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 22),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(56),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
+        // At large system text scale this content's intrinsic height can
+        // exceed the screen, and a modal bottom sheet with no scroll
+        // fallback just clips/overflows rather than shrinking — this is a
+        // celebratory dead-end sheet with only one way out ("Nice!"), so an
+        // unreachable button below the fold would strand the user.
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(999),
                 ),
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Nice!'),
               ),
-            ),
-          ],
+              ExpressiveFlower(
+                size: 116,
+                color: scheme.primaryContainer,
+                animatePop: true,
+                child: Icon(
+                  Icons.emoji_events,
+                  size: 52,
+                  color: scheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Alarm dismissed!',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                "Nice work — that's how mornings are won.",
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              StreamBuilder<int>(
+                stream: getIt<WatchCurrentStreak>()(),
+                builder: (context, snapshot) {
+                  final streak = snapshot.data ?? 0;
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: _StatChip(
+                          bg: scheme.secondaryContainer,
+                          fg: scheme.onSecondaryContainer,
+                          radius: const BorderRadius.horizontal(
+                            left: Radius.circular(20),
+                            right: Radius.circular(8),
+                          ),
+                          value: '$repsCompleted',
+                          label: _exerciseNoun(alarm.exerciseMode),
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      Expanded(
+                        child: _StatChip(
+                          bg: scheme.tertiaryContainer,
+                          fg: scheme.onTertiaryContainer,
+                          radius: const BorderRadius.horizontal(
+                            left: Radius.circular(8),
+                            right: Radius.circular(20),
+                          ),
+                          icon: Icons.local_fire_department,
+                          value: '$streak',
+                          label: 'day streak',
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(56),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Nice!'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

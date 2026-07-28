@@ -67,7 +67,21 @@ class HomeCubit extends Cubit<HomeState> {
   late final StreamSubscription<double> _areaSub;
   late final StreamSubscription<int?> _rankSub;
   late final StreamSubscription<Squad?> _squadSub;
-  late final StreamSubscription<List<RecentActivityEntry>> _activitySub;
+  late StreamSubscription<List<RecentActivityEntry>> _activitySub;
+
+  /// Re-subscribes after `recentActivityError` — previously there was no
+  /// way to recover from a failed fetch short of restarting the app,
+  /// unlike every error state elsewhere in the app (Squad, Profile's auth
+  /// actions), which all offer a retry.
+  void retryRecentActivity() {
+    unawaited(_activitySub.cancel());
+    emit(state.copyWith(recentActivityError: false));
+    _activitySub = _watchRecentActivity().listen(
+      (v) =>
+          emit(state.copyWith(recentActivity: v, recentActivityError: false)),
+      onError: (_) => emit(state.copyWith(recentActivityError: true)),
+    );
+  }
 
   @override
   Future<void> close() async {

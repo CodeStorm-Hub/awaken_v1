@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -36,13 +38,6 @@ class HomePage extends StatelessWidget {
     if (recurringDays.length == 7) return ' · Every day';
     final sorted = recurringDays.toList()..sort();
     return ' · ${sorted.map((d) => _weekdayAbbrLabels[d - 1]).join(', ')}';
-  }
-
-  String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
   }
 
   @override
@@ -86,13 +81,7 @@ class HomePage extends StatelessWidget {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    _greeting(),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Color(0xFF8E8E93),
-                                    ),
-                                  ),
+                                  const _GreetingText(),
                                   Text(
                                     'Awaken',
                                     style: TextStyle(
@@ -107,15 +96,28 @@ class HomePage extends StatelessWidget {
                               Row(
                                 children: [
                                   Container(
-                                    height: 30,
+                                    // A hard `height:` forces the child Row
+                                    // into that exact cross-axis size — at
+                                    // large system text scale the Text
+                                    // below needs more than 30dp and
+                                    // overflows (`RenderFlex`) instead of
+                                    // the pill growing. `constraints` with
+                                    // only a minimum lets it grow.
+                                    constraints: const BoxConstraints(
+                                      minHeight: 30,
+                                    ),
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 10,
+                                      vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFFF9F0A).withValues(alpha: 0.15),
+                                      color: const Color(
+                                        0xFFFF9F0A,
+                                      ).withValues(alpha: 0.15),
                                       borderRadius: BorderRadius.circular(999),
                                     ),
                                     child: Row(
+                                      mainAxisSize: MainAxisSize.min,
                                       children: [
                                         const Icon(
                                           Icons.local_fire_department,
@@ -155,13 +157,13 @@ class HomePage extends StatelessWidget {
                               ),
                               const SizedBox(height: 12),
                               if (home.streak == 0 && home.ownedAreaSqm == 0)
-                                const Padding(
-                                  padding: EdgeInsets.only(bottom: 8),
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
                                   child: Text(
                                     "Dismiss an alarm or capture territory to build your stats.",
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Color(0xFF8E8E93),
+                                      color: secondaryLabelColor(context),
                                     ),
                                   ),
                                 ),
@@ -216,39 +218,20 @@ class HomePage extends StatelessWidget {
                                 onOpenSquad: onOpenSquad,
                               ),
                               const SizedBox(height: 14),
-                              const Padding(
-                                padding: EdgeInsets.only(left: 2, bottom: 6),
-                                child: Text(
-                                  'ACHIEVEMENTS',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
-                                    color: Color(0xFF8E8E93),
-                                  ),
-                                ),
-                              ),
+                              const _SectionLabel('ACHIEVEMENTS'),
                               _AchievementsRow(
                                 streak: home.streak,
                                 ownedAreaSqm: home.ownedAreaSqm,
                                 hasSquad: home.squad != null,
                               ),
                               const SizedBox(height: 14),
-                              const Padding(
-                                padding: EdgeInsets.only(left: 2, bottom: 6),
-                                child: Text(
-                                  'RECENT ACTIVITY',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
-                                    color: Color(0xFF8E8E93),
-                                  ),
-                                ),
-                              ),
+                              const _SectionLabel('RECENT ACTIVITY'),
                               _RecentActivitySection(
                                 activity: home.recentActivity,
                                 hasError: home.recentActivityError,
+                                onRetry: () => context
+                                    .read<HomeCubit>()
+                                    .retryRecentActivity(),
                               ),
                             ],
                           ),
@@ -286,21 +269,9 @@ class _AchievementsRow extends StatelessWidget {
         label: '4d Streak',
         unlocked: streak >= 4,
       ),
-      (
-        icon: Icons.landscape,
-        label: 'Territory',
-        unlocked: ownedAreaSqm > 0,
-      ),
-      (
-        icon: Icons.groups,
-        label: 'Squad',
-        unlocked: hasSquad,
-      ),
-      (
-        icon: Icons.emoji_events,
-        label: '30d Streak',
-        unlocked: streak >= 30,
-      ),
+      (icon: Icons.landscape, label: 'Territory', unlocked: ownedAreaSqm > 0),
+      (icon: Icons.groups, label: 'Squad', unlocked: hasSquad),
+      (icon: Icons.emoji_events, label: '30d Streak', unlocked: streak >= 30),
     ];
     return AppleGlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -328,7 +299,7 @@ class _AchievementsRow extends StatelessWidget {
                       size: 18,
                       color: a.unlocked
                           ? scheme.primary
-                          : const Color(0xFF8E8E93),
+                          : secondaryLabelColor(context),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -337,7 +308,9 @@ class _AchievementsRow extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
-                      color: a.unlocked ? scheme.onSurface : const Color(0xFF8E8E93),
+                      color: a.unlocked
+                          ? scheme.onSurface
+                          : secondaryLabelColor(context),
                     ),
                   ),
                 ],
@@ -354,10 +327,12 @@ class _RecentActivitySection extends StatelessWidget {
   const _RecentActivitySection({
     required this.activity,
     required this.hasError,
+    required this.onRetry,
   });
 
   final List<RecentActivityEntry> activity;
   final bool hasError;
+  final VoidCallback onRetry;
 
   String _relativeTime(DateTime dt) {
     final diff = DateTime.now().difference(dt);
@@ -373,15 +348,22 @@ class _RecentActivitySection extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     if (hasError) {
-      return Text(
-        "Couldn't load recent activity.",
-        style: TextStyle(fontSize: 13, color: scheme.error),
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              "Couldn't load recent activity.",
+              style: TextStyle(fontSize: 13, color: scheme.error),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Try again')),
+        ],
       );
     }
     if (activity.isEmpty) {
-      return const Text(
+      return Text(
         'No activity yet — dismiss an alarm or capture territory.',
-        style: TextStyle(fontSize: 12, color: Color(0xFF8E8E93)),
+        style: TextStyle(fontSize: 12, color: secondaryLabelColor(context)),
       );
     }
     return Column(
@@ -423,9 +405,9 @@ class _RecentActivitySection extends StatelessWidget {
                 ),
                 Text(
                   _relativeTime(a.occurredAt),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: Color(0xFF8E8E93),
+                    color: secondaryLabelColor(context),
                   ),
                 ),
               ],
@@ -462,11 +444,7 @@ class _NextAlarmCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(
-                      Icons.alarm,
-                      size: 14,
-                      color: scheme.primary,
-                    ),
+                    Icon(Icons.alarm, size: 14, color: scheme.primary),
                     const SizedBox(width: 6),
                     Text(
                       'NEXT ALARM',
@@ -494,9 +472,9 @@ class _NextAlarmCard extends StatelessWidget {
                   subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF8E8E93),
+                    color: secondaryLabelColor(context),
                   ),
                 ),
               ],
@@ -580,6 +558,78 @@ class _QuickActionsPill extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Previously computed once per `HomePage.build()` and never re-evaluated —
+/// a user who opened the app just before a morning/afternoon/evening
+/// rollover and left it foregrounded (this tab stays mounted via the shell's
+/// `IndexedStack`) would keep seeing the stale greeting indefinitely. Ticks
+/// on a coarse timer rather than depending on some other rebuild happening
+/// to occur near the rollover.
+/// The small uppercase section header ("ACHIEVEMENTS", "RECENT ACTIVITY")
+/// — extracted since its color depends on `context` (`secondaryLabelColor`),
+/// so it's no longer expressible as a top-level `const` literal the way it
+/// was before, and this keeps that at one definition instead of two.
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, bottom: 6),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+          color: secondaryLabelColor(context),
+        ),
+      ),
+    );
+  }
+}
+
+class _GreetingText extends StatefulWidget {
+  const _GreetingText();
+
+  @override
+  State<_GreetingText> createState() => _GreetingTextState();
+}
+
+class _GreetingTextState extends State<_GreetingText> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String get _greeting {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _greeting,
+      style: TextStyle(fontSize: 11, color: secondaryLabelColor(context)),
     );
   }
 }

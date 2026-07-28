@@ -70,6 +70,49 @@ class AlarmSchedule extends Equatable {
     return null; // unreachable while recurringDays is non-empty
   }
 
+  /// First fire time for a newly created alarm — the counterpart to
+  /// [nextOccurrenceAfter] used at scheduling time, when there's no existing
+  /// instance to call it on yet. For an empty [recurringDays] this is the
+  /// next today/tomorrow slot at [timeOfDay]'s hour/minute (today if still
+  /// ahead of [from], else tomorrow) — the one-shot semantics the schedule
+  /// sheet already relied on. For a non-empty set it delegates to
+  /// [nextOccurrenceAfter] via a throwaway probe instance so both paths stay
+  /// on one source of truth: previously the schedule sheet computed a
+  /// today/tomorrow slot unconditionally and ignored the selected weekdays
+  /// entirely, so e.g. picking "Saturday" only on a Monday scheduled the
+  /// first ring for Tuesday instead of the coming Saturday.
+  static DateTime firstOccurrence({
+    required DateTime timeOfDay,
+    required Set<int> recurringDays,
+    required DateTime from,
+  }) {
+    if (recurringDays.isEmpty) {
+      var dt = DateTime(
+        from.year,
+        from.month,
+        from.day,
+        timeOfDay.hour,
+        timeOfDay.minute,
+      );
+      if (!dt.isAfter(from)) dt = dt.add(const Duration(days: 1));
+      return dt;
+    }
+    final probe = AlarmSchedule(
+      id: '',
+      scheduledTime: DateTime(
+        from.year,
+        from.month,
+        from.day,
+        timeOfDay.hour,
+        timeOfDay.minute,
+      ),
+      exerciseMode: ExerciseMode.squat,
+      requiredReps: 0,
+      recurringDays: recurringDays,
+    );
+    return probe.nextOccurrenceAfter(from)!;
+  }
+
   AlarmSchedule copyWith({
     DateTime? scheduledTime,
     ExerciseMode? exerciseMode,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -137,7 +138,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 }
 
-class _MarketingCarousel extends StatelessWidget {
+class _MarketingCarousel extends StatefulWidget {
   const _MarketingCarousel({
     required this.cardIndex,
     required this.onCardIndexChanged,
@@ -151,94 +152,178 @@ class _MarketingCarousel extends StatelessWidget {
   final VoidCallback onFinishedMarketing;
 
   @override
+  State<_MarketingCarousel> createState() => _MarketingCarouselState();
+}
+
+class _MarketingCarouselState extends State<_MarketingCarousel> {
+  late final PageController _pageController = PageController(
+    initialPage: widget.cardIndex,
+  );
+
+  @override
+  void didUpdateWidget(covariant _MarketingCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The "Next"/"Skip" buttons still drive `cardIndex` from the parent
+    // (`_OnboardingPageState`) — sync the page view to match whenever that
+    // happens without a swipe. The `.round()` comparison avoids fighting an
+    // in-flight swipe: `page` is fractional mid-gesture, and re-animating
+    // to the same integer page it's already settling on would visibly
+    // stutter.
+    if (widget.cardIndex != oldWidget.cardIndex &&
+        widget.cardIndex != _pageController.page?.round()) {
+      unawaited(
+        _pageController.animateToPage(
+          widget.cardIndex,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final card = _cards[cardIndex];
-    final isLast = cardIndex == _cards.length - 1;
+    final card = _cards[widget.cardIndex];
+    final isLast = widget.cardIndex == _cards.length - 1;
 
     return Scaffold(
       backgroundColor: card.bg(scheme),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-          child: Column(
-            children: [
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ExpressiveFlower(
-                      size: 150,
-                      color: card.flower(scheme),
-                      animatePop: true,
-                      child: Icon(card.icon, size: 64, color: card.bg(scheme)),
+        child: Column(
+          children: [
+            Expanded(
+              // Previously only the "Next" button could advance — no swipe
+              // gesture at all, which reads as the screen being frozen
+              // given how universally expected that gesture is on a
+              // marketing carousel. `PageView` restores it (and, for free,
+              // swipe-back to a previous card) while `onCardIndexChanged`
+              // keeps `_OnboardingPageState` as the single source of truth
+              // for the current index, same as before.
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: _cards.length,
+                onPageChanged: widget.onCardIndexChanged,
+                itemBuilder: (context, i) {
+                  final pageCard = _cards[i];
+                  return Container(
+                    color: pageCard.bg(scheme),
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    // At large system text scale (or on a short device),
+                    // the flower + title + body previously overflowed
+                    // (`RenderFlex`) — this had no scroll fallback and the
+                    // two `SizedBox(width: 290)`s were a fixed width, not a
+                    // max, so they didn't even let text reflow narrower on
+                    // small screens. `ConstrainedBox(maxWidth:)` still caps
+                    // the reading width on wide/tablet screens; the
+                    // `LayoutBuilder`/`ConstrainedBox(minHeight:)` pair
+                    // keeps the short-content case centered exactly as
+                    // before, the same pattern used by `AlarmListPage`'s
+                    // empty state.
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return SingleChildScrollView(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: constraints.maxHeight,
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                ExpressiveFlower(
+                                  size: 150,
+                                  color: pageCard.flower(scheme),
+                                  animatePop: true,
+                                  child: Icon(
+                                    pageCard.icon,
+                                    size: 64,
+                                    color: pageCard.bg(scheme),
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 290,
+                                  ),
+                                  child: Text(
+                                    pageCard.title,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 32,
+                                      height: 38 / 32,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.6,
+                                      color: pageCard.fg(scheme),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 290,
+                                  ),
+                                  child: Text(
+                                    pageCard.body,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: pageCard
+                                          .fg(scheme)
+                                          .withValues(alpha: 0.8),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: 290,
-                      child: Text(
-                        card.title,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 32,
-                          height: 38 / 32,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.6,
-                          color: card.fg(scheme),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: 290,
-                      child: Text(
-                        card.body,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: card.fg(scheme).withValues(alpha: 0.8),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 40,
-                  vertical: 12,
-                ),
-                child: Row(
-                  children: List.generate(_cards.length, (i) {
-                    final active = i == cardIndex;
-                    return Expanded(
-                      flex: active ? 3 : 1,
-                      child: AnimatedContainer(
-                        duration: MediaQuery.disableAnimationsOf(context)
-                            ? Duration.zero
-                            : const Duration(milliseconds: 500),
-                        curve: Curves.easeOutCubic,
-                        margin: const EdgeInsets.symmetric(horizontal: 2.5),
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: active
-                              ? card.fg(scheme)
-                              : card.fg(scheme).withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(40, 12, 40, 0),
+              child: Row(
+                children: List.generate(_cards.length, (i) {
+                  final active = i == widget.cardIndex;
+                  return Expanded(
+                    flex: active ? 3 : 1,
+                    child: AnimatedContainer(
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 500),
+                      curve: Curves.easeOutCubic,
+                      margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: active
+                            ? card.fg(scheme)
+                            : card.fg(scheme).withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(999),
                       ),
-                    );
-                  }),
-                ),
+                    ),
+                  );
+                }),
               ),
-              Row(
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+              child: Row(
                 children: [
                   if (!isLast) ...[
                     TextButton(
                       style: TextButton.styleFrom(
                         foregroundColor: card.fg(scheme).withValues(alpha: 0.7),
                       ),
-                      onPressed: onSkip,
+                      onPressed: widget.onSkip,
                       child: const Text('Skip'),
                     ),
                     const SizedBox(width: 4),
@@ -254,9 +339,12 @@ class _MarketingCarousel extends StatelessWidget {
                         ),
                       ),
                       onPressed: isLast
-                          ? onFinishedMarketing
-                          : () => onCardIndexChanged(
-                              (cardIndex + 1).clamp(0, _cards.length - 1),
+                          ? widget.onFinishedMarketing
+                          : () => widget.onCardIndexChanged(
+                              (widget.cardIndex + 1).clamp(
+                                0,
+                                _cards.length - 1,
+                              ),
                             ),
                       child: isLast
                           ? const Text('Continue')
@@ -272,8 +360,8 @@ class _MarketingCarousel extends StatelessWidget {
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -308,6 +396,10 @@ class _NotificationRationaleCard extends StatelessWidget {
                   ExpressiveFlower(
                     size: 64,
                     color: scheme.secondaryContainer,
+                    // See `alarm_list_page.dart`'s identical fix — light
+                    // theme's `secondaryContainer` is nearly invisible
+                    // against the page surface without a border.
+                    borderColor: scheme.outline,
                     child: Icon(
                       Icons.notifications_active,
                       size: 30,

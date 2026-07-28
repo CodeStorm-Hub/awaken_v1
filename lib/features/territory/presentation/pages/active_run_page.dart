@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
@@ -243,6 +245,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
           result.capturedAreaSqm ?? result.territoryAreaSqm ?? 0;
       final areaSqm = baseAreaSqm + (result.bonusAreaSqm ?? 0);
       final areaLabel = '${(areaSqm / 1000000).toStringAsFixed(3)} km²';
+      unawaited(HapticFeedback.mediumImpact());
       await showModalBottomSheet<void>(
         context: context,
         isDismissible: false,
@@ -259,9 +262,53 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     }
   }
 
-  Future<void> _abandon(RunTrackingCubit cubit) async {
+  /// Confirms before discarding tracked progress — a back gesture or "Stop
+  /// without capturing" previously abandoned the run (distance, time, the
+  /// whole tracked path) with zero confirmation, the only unconfirmed
+  /// destructive action in the app (compare: deleting an *alarm* confirms).
+  Future<bool> _confirmAbandon(
+    BuildContext context,
+    RunTrackingCubit cubit,
+  ) async {
+    final state = cubit.state;
+    if (!state.isTracking) return true;
+    final distanceKm = (state.distanceMeters / 1000).toStringAsFixed(2);
+    final elapsedSec = state.elapsed.inSeconds;
+    final m = (elapsedSec ~/ 60).toString().padLeft(2, '0');
+    final s = (elapsedSec % 60).toString().padLeft(2, '0');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Discard this run?'),
+        content: Text(
+          "You'll lose $distanceKm km and $m:$s tracked so far — this run "
+          "won't be saved.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep running'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  Future<void> _abandon(BuildContext context, RunTrackingCubit cubit) async {
+    if (!await _confirmAbandon(context, cubit)) return;
     await cubit.abandon();
-    if (mounted) Navigator.of(context).pop();
+    // Checked on the passed-in `context`, not `State.mounted` — this
+    // `context` can belong to a nested builder (the "Stop without
+    // capturing" call site) that unmounts independently of the page itself.
+    if (context.mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -272,7 +319,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _abandon(cubit);
+        if (!didPop) _abandon(context, cubit);
       },
       child: Scaffold(
         backgroundColor: scheme.surface,
@@ -349,19 +396,30 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                             borderRadius: BorderRadius.circular(22),
                             child: Stack(
                               children: [
-                                MapLibreMap(
-                                  key: _styleLoader.styleKey,
-                                  styleString: _styleLoader.styleString,
-                                  initialCameraPosition: const CameraPosition(
-                                    target: LatLng(20, 0),
-                                    zoom: 2,
+                                // A static label, not one driven by
+                                // `RunTrackState` — the map is deliberately
+                                // built exactly once and never inside a
+                                // `BlocBuilder` (see this file's class doc
+                                // comment on why); the live distance/time/
+                                // loop-status figures are already announced
+                                // via the `StatTile` texts below this map,
+                                // which already track state live.
+                                Semantics(
+                                  label: 'Live run route map',
+                                  child: MapLibreMap(
+                                    key: _styleLoader.styleKey,
+                                    styleString: _styleLoader.styleString,
+                                    initialCameraPosition: const CameraPosition(
+                                      target: LatLng(20, 0),
+                                      zoom: 2,
+                                    ),
+                                    onMapCreated: _onMapCreated,
+                                    onStyleLoadedCallback: _onStyleLoaded,
+                                    myLocationEnabled: false,
+                                    logoEnabled: false,
+                                    attributionButtonPosition:
+                                        AttributionButtonPosition.bottomLeft,
                                   ),
-                                  onMapCreated: _onMapCreated,
-                                  onStyleLoadedCallback: _onStyleLoaded,
-                                  myLocationEnabled: false,
-                                  logoEnabled: false,
-                                  attributionButtonPosition:
-                                      AttributionButtonPosition.bottomLeft,
                                 ),
                                 const Positioned(
                                   bottom: 4,
@@ -404,203 +462,261 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                         ),
                       ),
                     ),
-                    BlocBuilder<RunTrackingCubit, RunTrackState>(
-                      builder: (context, state) {
-                        final loopClosed = state.isLoopClosed;
-                        final distanceKm = state.distanceMeters / 1000;
-                        final elapsedSec = state.elapsed.inSeconds;
-                        final paceSecPerKm = distanceKm > 0.01
-                            ? (elapsedSec / distanceKm).round()
-                            : 0;
-                        final loopProgress = (state.distanceMeters / 400)
-                            .clamp(0, 1)
-                            .toDouble();
+                    // At large system text scale this block's intrinsic
+                    // height can exceed the space the sibling `Expanded` map
+                    // leaves it, which previously overflowed (`RenderFlex`)
+                    // rather than yielding — `Flexible` + `SingleChildScrollView`
+                    // lets it shrink and scroll internally instead. The map
+                    // widget itself is untouched — it stays built exactly
+                    // once inside its own `Expanded`, per this page's
+                    // no-rebuild-on-tick performance note.
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: BlocBuilder<RunTrackingCubit, RunTrackState>(
+                          builder: (context, state) {
+                            final loopClosed = state.isLoopClosed;
+                            final distanceKm = state.distanceMeters / 1000;
+                            final elapsedSec = state.elapsed.inSeconds;
+                            final paceSecPerKm = distanceKm > 0.01
+                                ? (elapsedSec / distanceKm).round()
+                                : 0;
+                            final loopProgress = (state.distanceMeters / 400)
+                                .clamp(0, 1)
+                                .toDouble();
 
-                        return Column(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: StatTile(
-                                      bg: scheme.surfaceContainerHigh,
-                                      fg: scheme.onSurface,
-                                      value: _fmtTime(elapsedSec),
-                                      label: 'Time',
-                                      icon: Icons.timer_outlined,
-                                      radius: const BorderRadius.horizontal(
-                                        left: Radius.circular(20),
+                            return Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    12,
+                                    16,
+                                    0,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: StatTile(
+                                          bg: scheme.surfaceContainerHigh,
+                                          fg: scheme.onSurface,
+                                          value: _fmtTime(elapsedSec),
+                                          label: 'Time',
+                                          icon: Icons.timer_outlined,
+                                          radius: const BorderRadius.horizontal(
+                                            left: Radius.circular(20),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: StatTile(
-                                      bg: scheme.surfaceContainerHigh,
-                                      fg: scheme.primary,
-                                      value: distanceKm.toStringAsFixed(2),
-                                      label: 'Distance (km)',
-                                      icon: Icons.place_outlined,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: StatTile(
-                                      bg: scheme.surfaceContainerHigh,
-                                      fg: scheme.onSurface,
-                                      value: paceSecPerKm > 0
-                                          ? _fmtTime(paceSecPerKm)
-                                          : '--:--',
-                                      label: 'Pace /km',
-                                      icon: Icons.speed,
-                                      radius: const BorderRadius.horizontal(
-                                        right: Radius.circular(20),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: StatTile(
+                                          bg: scheme.surfaceContainerHigh,
+                                          fg: scheme.primary,
+                                          value: distanceKm.toStringAsFixed(2),
+                                          label: 'Distance (km)',
+                                          icon: Icons.place_outlined,
+                                        ),
                                       ),
-                                    ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: StatTile(
+                                          bg: scheme.surfaceContainerHigh,
+                                          fg: scheme.onSurface,
+                                          value: paceSecPerKm > 0
+                                              ? _fmtTime(paceSecPerKm)
+                                              : '--:--',
+                                          label: 'Pace /km',
+                                          icon: Icons.speed,
+                                          radius: const BorderRadius.horizontal(
+                                            right: Radius.circular(20),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                              child: TweenAnimationBuilder<double>(
-                                tween: Tween(
-                                  begin: 0,
-                                  end: loopClosed ? 1 : loopProgress,
                                 ),
-                                duration: const Duration(milliseconds: 400),
-                                curve: Curves.easeOut,
-                                builder: (context, animatedProgress, _) {
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 18,
-                                      vertical: 14,
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    12,
+                                    16,
+                                    0,
+                                  ),
+                                  child: TweenAnimationBuilder<double>(
+                                    tween: Tween(
+                                      begin: 0,
+                                      end: loopClosed ? 1 : loopProgress,
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: scheme.surfaceContainerLow,
-                                      borderRadius: BorderRadius.circular(18),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
+                                    duration: const Duration(milliseconds: 400),
+                                    curve: Curves.easeOut,
+                                    builder: (context, animatedProgress, _) {
+                                      return Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 18,
+                                          vertical: 14,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: scheme.surfaceContainerLow,
+                                          borderRadius: BorderRadius.circular(
+                                            18,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            Icon(
-                                              loopClosed
-                                                  ? Icons.check_circle
-                                                  : Icons.route,
-                                              size: 22,
-                                              color: loopClosed
-                                                  ? scheme.primary
-                                                  : scheme.onSurfaceVariant,
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Text(
-                                                loopClosed
-                                                    ? 'Loop closed — ready to capture!'
-                                                    : 'Keep going — return near your start point to close the loop.',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.w500,
-                                                  color: scheme.onSurface,
+                                            Row(
+                                              children: [
+                                                Icon(
+                                                  loopClosed
+                                                      ? Icons.check_circle
+                                                      : Icons.route,
+                                                  size: 22,
+                                                  color: loopClosed
+                                                      ? scheme.primary
+                                                      : scheme.onSurfaceVariant,
                                                 ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Text(
+                                                    loopClosed
+                                                        ? 'Loop closed — ready to capture!'
+                                                        // Distinct copy once the
+                                                        // minimum-distance bar
+                                                        // below is already full —
+                                                        // otherwise a straight
+                                                        // out-and-back run pins
+                                                        // the bar at 100% (it
+                                                        // only tracks distance,
+                                                        // not proximity to
+                                                        // start) with no
+                                                        // explanation of why the
+                                                        // loop still isn't
+                                                        // closing.
+                                                        : loopProgress >= 1
+                                                        ? 'Minimum distance covered — head back toward your start point.'
+                                                        : 'Keep going — return near your start point to close the loop.',
+                                                    style: TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      color: scheme.onSurface,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 10),
+                                            ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                              child: LinearProgressIndicator(
+                                                value: animatedProgress,
+                                                minHeight: 6,
+                                                backgroundColor: scheme
+                                                    .surfaceContainerHighest,
+                                                color: loopClosed
+                                                    ? scheme.primary
+                                                    : scheme.tertiary,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              loopClosed
+                                                  ? 'Min. distance covered'
+                                                  : 'Min. distance: '
+                                                        '${state.distanceMeters.clamp(0, 400).toStringAsFixed(0)}'
+                                                        '/400 m',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: scheme.onSurfaceVariant,
                                               ),
                                             ),
                                           ],
                                         ),
-                                        const SizedBox(height: 10),
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            999,
-                                          ),
-                                          child: LinearProgressIndicator(
-                                            value: animatedProgress,
-                                            minHeight: 6,
-                                            backgroundColor:
-                                                scheme.surfaceContainerHighest,
-                                            color: loopClosed
-                                                ? scheme.primary
-                                                : scheme.tertiary,
-                                          ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    16,
+                                    16,
+                                    20,
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      TweenAnimationBuilder<double>(
+                                        tween: Tween(
+                                          begin: 0.96,
+                                          end: loopClosed ? 1 : 0.96,
                                         ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                16,
-                                16,
-                                16,
-                                20,
-                              ),
-                              child: Column(
-                                children: [
-                                  TweenAnimationBuilder<double>(
-                                    tween: Tween(
-                                      begin: 0.96,
-                                      end: loopClosed ? 1 : 0.96,
-                                    ),
-                                    duration: const Duration(milliseconds: 350),
-                                    curve: Curves.easeOutBack,
-                                    builder: (context, scale, child) =>
-                                        Transform.scale(
-                                          scale: scale,
-                                          child: child,
+                                        duration: const Duration(
+                                          milliseconds: 350,
                                         ),
-                                    child: SizedBox(
-                                      width: double.infinity,
-                                      child: FilledButton(
-                                        style: FilledButton.styleFrom(
-                                          minimumSize: const Size.fromHeight(
-                                            60,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              999,
+                                        curve: Curves.easeOutBack,
+                                        builder: (context, scale, child) =>
+                                            Transform.scale(
+                                              scale: scale,
+                                              child: child,
                                             ),
+                                        child: SizedBox(
+                                          width: double.infinity,
+                                          child: FilledButton(
+                                            style: FilledButton.styleFrom(
+                                              minimumSize:
+                                                  const Size.fromHeight(60),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(999),
+                                              ),
+                                            ),
+                                            onPressed: (loopClosed && !_busy)
+                                                ? () => _capture(cubit)
+                                                : null,
+                                            child: _busy
+                                                ? const SizedBox(
+                                                    width: 22,
+                                                    height: 22,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                          strokeWidth: 2.5,
+                                                        ),
+                                                  )
+                                                : Row(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .center,
+                                                    children: const [
+                                                      Icon(
+                                                        Icons.flag,
+                                                        size: 22,
+                                                      ),
+                                                      SizedBox(width: 8),
+                                                      Text(
+                                                        'Close loop & capture',
+                                                      ),
+                                                    ],
+                                                  ),
                                           ),
                                         ),
-                                        onPressed: (loopClosed && !_busy)
-                                            ? () => _capture(cubit)
-                                            : null,
-                                        child: _busy
-                                            ? const SizedBox(
-                                                width: 22,
-                                                height: 22,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                      strokeWidth: 2.5,
-                                                    ),
-                                              )
-                                            : Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: const [
-                                                  Icon(Icons.flag, size: 22),
-                                                  SizedBox(width: 8),
-                                                  Text('Close loop & capture'),
-                                                ],
-                                              ),
                                       ),
-                                    ),
+                                      TextButton(
+                                        onPressed: _busy
+                                            ? null
+                                            : () => _abandon(context, cubit),
+                                        child: const Text(
+                                          'Stop without capturing',
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  TextButton(
-                                    onPressed: _busy
-                                        ? null
-                                        : () => _abandon(cubit),
-                                    child: const Text('Stop without capturing'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        );
-                      },
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -705,13 +821,18 @@ class _GpsQualityChip extends StatelessWidget {
       GpsQuality.poor => 'GPS weak',
     };
     return Container(
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      // A hard `height:` forces the child Row into that exact cross-axis
+      // size — at large system text scale the label needs more than 32dp
+      // and overflows (`RenderFlex`) instead of the chip growing.
+      // `constraints` with only a minimum lets it grow.
+      constraints: const BoxConstraints(minHeight: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: scheme.primaryContainer,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.gps_fixed, size: 15, color: scheme.onPrimaryContainer),
           const SizedBox(width: 5),
@@ -809,6 +930,7 @@ class _PulsingDot extends StatefulWidget {
 class _PulsingDotState extends State<_PulsingDot>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  var _startedAnimating = false;
 
   @override
   void initState() {
@@ -816,7 +938,21 @@ class _PulsingDotState extends State<_PulsingDot>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1300),
-    )..repeat(reverse: true);
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // "Reduce motion" — same crash/fix pattern as `_RingingBellState` in
+    // `alarm_ring_page.dart` and `_StatusBannerState` in
+    // `verification_page.dart`: `MediaQuery.disableAnimationsOf` can't be
+    // called from `initState`, and the `_startedAnimating` latch keeps a
+    // later dependency change from restarting an already-running loop.
+    if (!_startedAnimating && !MediaQuery.disableAnimationsOf(context)) {
+      _startedAnimating = true;
+      _controller.repeat(reverse: true);
+    }
   }
 
   @override

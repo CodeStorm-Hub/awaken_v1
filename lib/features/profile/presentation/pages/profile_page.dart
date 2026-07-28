@@ -61,9 +61,11 @@ class ProfilePage extends StatelessWidget {
                           child: InkWell(
                             customBorder: const CircleBorder(),
                             onTap: () => Navigator.of(context).pop(),
+                            // Was 36x36 — below WCAG 2.5.5's 44x44 minimum;
+                            // icon stays the same visual size.
                             child: SizedBox(
-                              width: 36,
-                              height: 36,
+                              width: 44,
+                              height: 44,
                               child: Icon(
                                 Icons.arrow_back_ios_new,
                                 size: 16,
@@ -103,9 +105,11 @@ class ProfilePage extends StatelessWidget {
                         : (displayName != null && email != null
                               ? email
                               : 'Progress syncs across devices');
-                    final initial = isAnonymous
-                        ? 'G'
-                        : (displayName ?? email ?? 'A')[0].toUpperCase();
+                    final initial = avatarInitial(
+                      isAnonymous: isAnonymous,
+                      displayName: displayName,
+                      email: email,
+                    );
 
                     return SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
@@ -164,9 +168,9 @@ class ProfilePage extends StatelessWidget {
                                 Text(
                                   subtitle,
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13,
-                                    color: Color(0xFF8E8E93),
+                                    color: secondaryLabelColor(context),
                                   ),
                                 ),
                                 if (isAnonymous) ...[
@@ -240,15 +244,15 @@ class ProfilePage extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 22),
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4, bottom: 8),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4, bottom: 8),
                             child: Text(
                               'SETTINGS',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: 0.5,
-                                color: Color(0xFF8E8E93),
+                                color: secondaryLabelColor(context),
                               ),
                             ),
                           ),
@@ -300,7 +304,7 @@ class ProfilePage extends StatelessWidget {
                           Center(
                             child: TextButton(
                               style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFF8E8E93),
+                                foregroundColor: secondaryLabelColor(context),
                               ),
                               onPressed: () => _showSignOutDialog(context),
                               child: const Text('Sign out'),
@@ -391,8 +395,16 @@ Future<void> _showSignOutDialog(BuildContext context) async {
       ],
     ),
   );
-  if (confirmed == true) {
+  if (confirmed != true) return;
+
+  try {
     await getIt<SignOut>()(const NoParams());
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(friendlyAuthErrorMessage(e))));
+    }
   }
 }
 
@@ -501,8 +513,12 @@ class _AuthDialogState extends State<_AuthDialog> {
       if (_mode == _AuthDialogMode.link) {
         await getIt<LinkWithEmail>()(email: email, password: password);
         if (mounted) {
+          // Captured before `pop()` — `ScaffoldMessenger.of(context)` after
+          // popping this dialog's own context can resolve against an
+          // element that's no longer in the tree for that frame.
+          final messenger = ScaffoldMessenger.of(context);
           Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             const SnackBar(
               content: Text(
                 'Check your email to confirm linking your account.',
@@ -513,10 +529,9 @@ class _AuthDialogState extends State<_AuthDialog> {
       } else {
         await getIt<SignInWithPassword>()(email: email, password: password);
         if (mounted) {
+          final messenger = ScaffoldMessenger.of(context);
           Navigator.of(context).pop();
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Signed in.')));
+          messenger.showSnackBar(const SnackBar(content: Text('Signed in.')));
         }
       }
     } catch (e) {
@@ -535,16 +550,18 @@ class _AuthDialogState extends State<_AuthDialog> {
       if (_mode == _AuthDialogMode.link) {
         await getIt<LinkWithGoogle>()(const NoParams());
         if (mounted) {
+          final messenger = ScaffoldMessenger.of(context);
           Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             const SnackBar(content: Text('Account linked with Google.')),
           );
         }
       } else {
         await getIt<SignInWithGoogle>()(const NoParams());
         if (mounted) {
+          final messenger = ScaffoldMessenger.of(context);
           Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             const SnackBar(content: Text('Signed in with Google.')),
           );
         }
@@ -595,103 +612,107 @@ class _AuthDialogState extends State<_AuthDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-            TextFormField(
-              controller: _emailController,
-              enabled: !_submitting,
-              keyboardType: TextInputType.emailAddress,
-              autofillHints: const [AutofillHints.email],
-              decoration: const InputDecoration(labelText: 'Email'),
-              validator: _validateEmail,
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _passwordController,
-              enabled: !_submitting,
-              obscureText: _obscurePassword,
-              autofillHints: [
-                isLink ? AutofillHints.newPassword : AutofillHints.password,
-              ],
-              decoration: InputDecoration(
-                labelText: 'Password',
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                  ),
-                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                  onPressed: () =>
-                      setState(() => _obscurePassword = !_obscurePassword),
-                ),
+              TextFormField(
+                controller: _emailController,
+                enabled: !_submitting,
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email],
+                decoration: const InputDecoration(labelText: 'Email'),
+                validator: _validateEmail,
               ),
-              validator: _validatePassword,
-              onFieldSubmitted: (_) => _submitEmail(),
-            ),
-            if (!isLink) ...[
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: _submitting ? null : _forgotPassword,
-                  child: const Text('Forgot password?'),
-                ),
-              ),
-            ] else
               const SizedBox(height: 8),
-            if (_error != null) ...[
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  _error!,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                    fontSize: 13,
+              TextFormField(
+                controller: _passwordController,
+                enabled: !_submitting,
+                obscureText: _obscurePassword,
+                autofillHints: [
+                  isLink ? AutofillHints.newPassword : AutofillHints.password,
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                    tooltip: _obscurePassword
+                        ? 'Show password'
+                        : 'Hide password',
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
                   ),
+                ),
+                validator: _validatePassword,
+                onFieldSubmitted: (_) => _submitEmail(),
+              ),
+              if (!isLink) ...[
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _submitting ? null : _forgotPassword,
+                    child: const Text('Forgot password?'),
+                  ),
+                ),
+              ] else
+                const SizedBox(height: 8),
+              if (_error != null) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _submitting ? null : _submitEmail,
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(isLink ? 'Continue with email' : 'Sign in'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const GoogleLogo(size: 18),
+                  onPressed: _submitting ? null : _submitGoogle,
+                  label: Text(
+                    isLink ? 'Continue with Google' : 'Sign in with Google',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: _submitting
+                    ? null
+                    : () => setState(() {
+                        _mode = isLink
+                            ? _AuthDialogMode.signIn
+                            : _AuthDialogMode.link;
+                        _error = null;
+                      }),
+                child: Text(
+                  isLink
+                      ? 'Already have an account? Sign in'
+                      : "Don't have an account? Migrate to cloud",
                 ),
               ),
             ],
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _submitting ? null : _submitEmail,
-                child: _submitting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(isLink ? 'Continue with email' : 'Sign in'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                icon: const GoogleLogo(size: 18),
-                onPressed: _submitting ? null : _submitGoogle,
-                label: Text(
-                  isLink ? 'Continue with Google' : 'Sign in with Google',
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            TextButton(
-              onPressed: _submitting
-                  ? null
-                  : () => setState(() {
-                      _mode = isLink
-                          ? _AuthDialogMode.signIn
-                          : _AuthDialogMode.link;
-                      _error = null;
-                    }),
-              child: Text(
-                isLink
-                    ? 'Already have an account? Sign in'
-                    : "Don't have an account? Migrate to cloud",
-              ),
-            ),
-          ],
+          ),
         ),
       ),
-    ),
-    actions: [
+      actions: [
         TextButton(
           onPressed: _submitting ? null : () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
@@ -715,6 +736,10 @@ class _InitialAvatar extends StatelessWidget {
     return ExpressiveFlower(
       size: 84,
       color: scheme.secondaryContainer,
+      // See `alarm_list_page.dart`'s identical fix — light theme's
+      // `secondaryContainer` is nearly invisible against the page surface
+      // without a border.
+      borderColor: scheme.outline,
       child: Text(
         initial,
         style: TextStyle(
@@ -780,10 +805,10 @@ class _SettingsRow extends StatelessWidget {
                   ),
                 ),
               ),
-              const Icon(
+              Icon(
                 CupertinoIcons.chevron_right,
                 size: 16,
-                color: Color(0xFF8E8E93),
+                color: secondaryLabelColor(context),
               ),
             ],
           ),

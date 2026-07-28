@@ -71,10 +71,16 @@ class _SquadView extends StatelessWidget {
                             Text(
                               state.squad == null
                                   ? 'Not in a squad yet'
-                                  : '${state.squad!.name} · ${state.leaderboard.length} members',
-                              style: const TextStyle(
+                                  // `leaderboard` only lists members who've
+                                  // captured territory — a squad whose other
+                                  // members haven't yet would misreport "0
+                                  // members" while the user is standing in
+                                  // one. Drop the count entirely rather than
+                                  // show a number known to undercount.
+                                  : state.squad!.name,
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: Color(0xFF8E8E93),
+                                color: secondaryLabelColor(context),
                               ),
                             ),
                           ],
@@ -99,9 +105,12 @@ class _SquadView extends StatelessWidget {
                                     ),
                                     builder: (_) => const _LeaderboardsSheet(),
                                   ),
+                                  // Was 36x36 — below WCAG 2.5.5's 44x44
+                                  // minimum; icon stays the same visual
+                                  // size.
                                   child: SizedBox(
-                                    width: 36,
-                                    height: 36,
+                                    width: 44,
+                                    height: 44,
                                     child: Icon(
                                       Icons.leaderboard,
                                       size: 18,
@@ -144,6 +153,7 @@ class _SquadBody extends StatelessWidget {
       case SquadStatus.error:
         return _SquadErrorView(
           message: state.errorMessage ?? 'Something went wrong.',
+          onRetry: () => context.read<SquadCubit>().retry(),
         );
       case SquadStatus.loaded:
         return _SquadLoadedView(state: state);
@@ -166,6 +176,10 @@ class _NoSquadView extends StatelessWidget {
             ExpressiveFlower(
               size: 84,
               color: scheme.secondaryContainer,
+              // See `alarm_list_page.dart`'s identical fix — light theme's
+              // `secondaryContainer` is nearly invisible against the page
+              // surface without a border.
+              borderColor: scheme.outline,
               child: Icon(
                 Icons.groups,
                 size: 36,
@@ -225,70 +239,49 @@ class _NoSquadView extends StatelessWidget {
 
 Future<void> _showCreateSquadDialog(BuildContext context) async {
   final cubit = context.read<SquadCubit>();
-  final controller = TextEditingController();
-  final name = await showDialog<String>(
+  final messenger = ScaffoldMessenger.of(context);
+  final created = await showDialog<bool>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Create a squad'),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        textCapitalization: TextCapitalization.words,
-        decoration: const InputDecoration(hintText: 'Squad name'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () =>
-              Navigator.of(dialogContext).pop(controller.text.trim()),
-          child: const Text('Create'),
-        ),
-      ],
+    builder: (_) => _TextPromptDialog(
+      title: 'Create a squad',
+      hintText: 'Squad name',
+      submitLabel: 'Create',
+      textCapitalization: TextCapitalization.words,
+      onSubmit: cubit.createSquad,
     ),
   );
-  if (name != null && name.isNotEmpty) {
-    await cubit.createSquad(name);
+  if (created == true) {
+    messenger.showSnackBar(const SnackBar(content: Text('Squad created.')));
   }
 }
 
 Future<void> _showJoinSquadDialog(BuildContext context) async {
   final cubit = context.read<SquadCubit>();
-  final controller = TextEditingController();
-  final code = await showDialog<String>(
+  final messenger = ScaffoldMessenger.of(context);
+  final joined = await showDialog<bool>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Join a squad'),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        textCapitalization: TextCapitalization.characters,
-        decoration: const InputDecoration(hintText: 'Invite code'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () =>
-              Navigator.of(dialogContext).pop(controller.text.trim()),
-          child: const Text('Join'),
-        ),
-      ],
+    builder: (_) => _TextPromptDialog(
+      title: 'Join a squad',
+      hintText: 'Invite code',
+      submitLabel: 'Join',
+      textCapitalization: TextCapitalization.characters,
+      onSubmit: cubit.joinSquad,
     ),
   );
-  if (code != null && code.isNotEmpty) {
-    await cubit.joinSquad(code);
+  if (joined == true) {
+    messenger.showSnackBar(const SnackBar(content: Text('Joined squad.')));
   }
 }
 
+/// Reserved for a genuine failure of the underlying squad stream (see
+/// `SquadCubit._subscribeToMySquad`'s doc comment) — a failed create/join no
+/// longer routes here, so both real recovery paths stay available instead of
+/// only the one the user happened not to be using.
 class _SquadErrorView extends StatelessWidget {
-  const _SquadErrorView({required this.message});
+  const _SquadErrorView({required this.message, required this.onRetry});
 
   final String message;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -307,13 +300,138 @@ class _SquadErrorView extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: () => _showCreateSquadDialog(context),
-              child: const Text('Try again'),
+            FilledButton(onPressed: onRetry, child: const Text('Retry')),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                OutlinedButton(
+                  onPressed: () => _showCreateSquadDialog(context),
+                  child: const Text('Create a squad'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: () => _showJoinSquadDialog(context),
+                  child: const Text('Join with code'),
+                ),
+              ],
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Shared dialog shape for create-squad/join-squad/report-member — a
+/// disposed `TextEditingController`, a submit lock so a failed or slow
+/// network call can't be double-fired, inline validation, and an inline
+/// error message on failure instead of the dialog vanishing with only a
+/// SnackBar (or, previously for create/join, the whole page falling back to
+/// a generic error screen — see `_SquadErrorView`'s doc comment).
+class _TextPromptDialog extends StatefulWidget {
+  const _TextPromptDialog({
+    required this.title,
+    required this.hintText,
+    required this.submitLabel,
+    required this.onSubmit,
+    this.textCapitalization = TextCapitalization.none,
+    this.maxLines = 1,
+  });
+
+  final String title;
+  final String hintText;
+  final String submitLabel;
+  final Future<void> Function(String value) onSubmit;
+  final TextCapitalization textCapitalization;
+  final int maxLines;
+
+  @override
+  State<_TextPromptDialog> createState() => _TextPromptDialogState();
+}
+
+class _TextPromptDialogState extends State<_TextPromptDialog> {
+  final _controller = TextEditingController();
+  var _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    final value = _controller.text.trim();
+    if (value.isEmpty) {
+      setState(() => _error = 'This field is required.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await widget.onSubmit(value);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _error = friendlySquadErrorMessage(e);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            enabled: !_submitting,
+            maxLines: widget.maxLines,
+            textCapitalization: widget.textCapitalization,
+            decoration: InputDecoration(hintText: widget.hintText),
+            onSubmitted: (_) => _submit(),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting
+              ? null
+              : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          child: _submitting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(widget.submitLabel),
+        ),
+      ],
     );
   }
 }
@@ -535,11 +653,11 @@ class _InviteCodeCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Invite code',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF8E8E93),
+                    color: secondaryLabelColor(context),
                   ),
                 ),
                 Text(
@@ -596,13 +714,13 @@ class _LeaderboardRow extends StatelessWidget {
     final rankBg = row.rank == 1
         ? const Color(0xFFFF9F0A).withValues(alpha: 0.2)
         : row.isYou
-            ? scheme.primary.withValues(alpha: 0.25)
-            : scheme.surfaceContainerHigh;
+        ? scheme.primary.withValues(alpha: 0.25)
+        : scheme.surfaceContainerHigh;
     final rankFg = row.rank == 1
         ? const Color(0xFFFF9F0A)
         : row.isYou
-            ? scheme.primary
-            : const Color(0xFF8E8E93);
+        ? scheme.primary
+        : secondaryLabelColor(context);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 3),
@@ -637,12 +755,23 @@ class _LeaderboardRow extends StatelessWidget {
                           color: rankBg,
                           shape: BoxShape.circle,
                         ),
+                        // `FittedBox` shrinks the rank number to fit the
+                        // fixed 32x32 circle at large system text scale
+                        // instead of painting outside it — `Center` alone
+                        // doesn't constrain an oversized child, only
+                        // positions it.
                         child: Center(
-                          child: Text(
-                            '${row.rank}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: rankFg,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: Text(
+                                '${row.rank}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: rankFg,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -743,45 +872,22 @@ Future<void> _showReportMemberDialog(
   required String displayName,
 }) async {
   final cubit = context.read<SquadCubit>();
-  final controller = TextEditingController();
-  final reason = await showDialog<String>(
+  final messenger = ScaffoldMessenger.of(context);
+  final reported = await showDialog<bool>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text('Report $displayName'),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        maxLines: 3,
-        decoration: const InputDecoration(hintText: 'What happened?'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () =>
-              Navigator.of(dialogContext).pop(controller.text.trim()),
-          child: const Text('Submit report'),
-        ),
-      ],
+    builder: (_) => _TextPromptDialog(
+      title: 'Report $displayName',
+      hintText: 'What happened?',
+      submitLabel: 'Submit report',
+      maxLines: 3,
+      onSubmit: (reason) =>
+          cubit.reportMember(reportedUserId: userId, reason: reason),
     ),
   );
-  if (reason == null || reason.isEmpty) return;
-
-  try {
-    await cubit.reportMember(reportedUserId: userId, reason: reason);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Report submitted. Thank you.')),
-      );
-    }
-  } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(friendlySquadErrorMessage(e))));
-    }
+  if (reported == true) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Report submitted. Thank you.')),
+    );
   }
 }
 

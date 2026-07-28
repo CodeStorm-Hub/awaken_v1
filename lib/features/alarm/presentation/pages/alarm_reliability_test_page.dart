@@ -35,11 +35,29 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
   Duration? _measuredDelay;
   StreamSubscription<AlarmState>? _sub;
   Timer? _timeoutTimer;
+  AlarmCubit? _cubit;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _cubit = context.read<AlarmCubit>();
+  }
 
   @override
   void dispose() {
     _sub?.cancel();
     _timeoutTimer?.cancel();
+    // A test alarm that never fired (timed out, or the user just navigated
+    // away mid-wait) previously stayed scheduled forever — it rang like any
+    // other alarm the next time its slot came around, demanding a real
+    // camera-verified squat with no context that it was only a diagnostic.
+    // One that *did* fire is left alone: it's a normal one-shot alarm at
+    // that point and gets cleaned up the same way any other completed
+    // one-shot dismissal does.
+    final id = _testAlarmId;
+    if (id != null && _phase == _TestPhase.waiting) {
+      unawaited(_cubit?.cancel(id));
+    }
     super.dispose();
   }
 
@@ -54,14 +72,22 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
       _measuredDelay = null;
     });
 
-    await cubit.schedule(
-      AlarmSchedule(
-        id: id,
-        scheduledTime: scheduledFor,
-        exerciseMode: ExerciseMode.squat,
-        requiredReps: 1,
-      ),
-    );
+    try {
+      await cubit.schedule(
+        AlarmSchedule(
+          id: id,
+          scheduledTime: scheduledFor,
+          exerciseMode: ExerciseMode.squat,
+          requiredReps: 1,
+        ),
+      );
+    } catch (_) {
+      // Previously left the page stuck on "Test running…" until the
+      // timeout grace period elapsed and it reported a misleading FAIL —
+      // a schedule failure is a distinct, immediate outcome.
+      if (mounted) setState(() => _phase = _TestPhase.timedOut);
+      return;
+    }
 
     _sub?.cancel();
     _sub = cubit.stream.listen((state) {
@@ -77,6 +103,7 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
     _timeoutTimer?.cancel();
     _timeoutTimer = Timer(_testDelay + _timeoutGrace, () {
       if (_phase == _TestPhase.waiting && mounted) {
+        unawaited(cubit.cancel(id));
         setState(() => _phase = _TestPhase.timedOut);
       }
     });
@@ -232,7 +259,11 @@ class _StatusContainer extends StatelessWidget {
               _TestPhase.idle => 'Not started.',
               _TestPhase.waiting => 'Waiting for alarm…',
               _TestPhase.passed =>
-                'PASS — fired ${measuredDelay!.inSeconds}s after scheduling.',
+                // `measuredDelay` is `now - scheduledFor` — the delay past
+                // the *scheduled fire time*, not past when the test was
+                // started ("after scheduling" read as the latter and made
+                // an on-time ~60s-delay test misleadingly report "0s").
+                'PASS — fired ${measuredDelay!.inSeconds}s after the scheduled time.',
               _TestPhase.timedOut =>
                 'FAIL — alarm did not fire within the expected window. Check '
                     'battery-exemption settings and OEM autostart permissions.',

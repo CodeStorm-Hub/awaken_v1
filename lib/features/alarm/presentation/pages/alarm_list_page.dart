@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
@@ -85,9 +86,9 @@ class _AlarmListPageState extends State<AlarmListPage> {
                                   n == 0
                                       ? 'Nothing scheduled'
                                       : '$n alarm${n == 1 ? '' : 's'} · tap to preview',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 11,
-                                    color: Color(0xFF8E8E93),
+                                    color: secondaryLabelColor(context),
                                   ),
                                 ),
                               ],
@@ -107,9 +108,12 @@ class _AlarmListPageState extends State<AlarmListPage> {
                                               const BatteryExemptionPage(),
                                         ),
                                       ),
+                                      // Was 36x36 — below WCAG 2.5.5's
+                                      // 44x44 minimum; icon stays the same
+                                      // visual size.
                                       child: SizedBox(
-                                        width: 36,
-                                        height: 36,
+                                        width: 44,
+                                        height: 44,
                                         child: Icon(
                                           Icons.battery_charging_full,
                                           size: 18,
@@ -133,9 +137,12 @@ class _AlarmListPageState extends State<AlarmListPage> {
                                               const AlarmReliabilityTestPage(),
                                         ),
                                       ),
+                                      // Was 36x36 — below WCAG 2.5.5's
+                                      // 44x44 minimum; icon stays the same
+                                      // visual size.
                                       child: SizedBox(
-                                        width: 36,
-                                        height: 36,
+                                        width: 44,
+                                        height: 44,
                                         child: Icon(
                                           Icons.bug_report_outlined,
                                           size: 18,
@@ -183,6 +190,23 @@ class _AlarmListPageState extends State<AlarmListPage> {
                                               builder: (context) {
                                                 final alarm = alarms[index];
                                                 return _RiseIn(
+                                                  // Keyed by alarm id, not
+                                                  // position — without this,
+                                                  // deleting/reordering an
+                                                  // alarm shifted every
+                                                  // element below it down one
+                                                  // index, and `_RiseIn`'s
+                                                  // `State` (keyed
+                                                  // positionally by default)
+                                                  // stayed attached to that
+                                                  // index rather than
+                                                  // following its alarm,
+                                                  // replaying the entry
+                                                  // animation on the wrong
+                                                  // card and briefly showing
+                                                  // stale content during the
+                                                  // transition.
+                                                  key: ValueKey(alarm.id),
                                                   delay: Duration(
                                                     milliseconds: index * 60,
                                                   ),
@@ -274,9 +298,7 @@ class _AlarmListPageState extends State<AlarmListPage> {
           final hourStr = scheduledTime.hour.toString().padLeft(2, '0');
           final minStr = scheduledTime.minute.toString().padLeft(2, '0');
           messenger.showSnackBar(
-            SnackBar(
-              content: Text('Alarm scheduled for $hourStr:$minStr'),
-            ),
+            SnackBar(content: Text('Alarm scheduled for $hourStr:$minStr')),
           );
         },
       ),
@@ -284,6 +306,7 @@ class _AlarmListPageState extends State<AlarmListPage> {
   }
 
   Future<void> _toggleActive(BuildContext context, AlarmSchedule alarm) async {
+    unawaited(HapticFeedback.lightImpact());
     final messenger = ScaffoldMessenger.of(context);
     final cubit = context.read<AlarmCubit>();
     try {
@@ -349,6 +372,11 @@ class _EmptyState extends StatelessWidget {
             ExpressiveFlower(
               size: 108,
               color: scheme.secondaryContainer,
+              // Light theme's `secondaryContainer` (`0xFFE5E5EA`) sits only
+              // ~1.05:1 from the page surface (`0xFFF2F2F7`) — with no
+              // border, this badge is effectively invisible in light mode
+              // (see `ExpressiveFlower`'s own doc comment on `borderColor`).
+              borderColor: scheme.outline,
               child: Icon(
                 Icons.alarm_add,
                 size: 44,
@@ -381,7 +409,7 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _RiseIn extends StatefulWidget {
-  const _RiseIn({required this.delay, required this.child});
+  const _RiseIn({required this.delay, required this.child, super.key});
 
   final Duration delay;
   final Widget child;
@@ -502,7 +530,9 @@ class _AlarmCard extends StatelessWidget {
                             height: 48 / 44,
                             fontWeight: FontWeight.bold,
                             letterSpacing: -1,
-                            color: on ? scheme.onSurface : scheme.onSurfaceVariant,
+                            color: on
+                                ? scheme.onSurface
+                                : scheme.onSurfaceVariant,
                             fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
@@ -521,7 +551,11 @@ class _AlarmCard extends StatelessWidget {
                               label:
                                   '${alarm.requiredReps} ${alarm.exerciseMode == ExerciseMode.squat ? 'squats' : 'push-ups'}',
                             ),
-                            _Chip(bg: chipBg, fg: chipFg, label: _recurrenceLabel),
+                            _Chip(
+                              bg: chipBg,
+                              fg: chipFg,
+                              label: _recurrenceLabel,
+                            ),
                           ],
                         ),
                       ],
@@ -652,12 +686,13 @@ class _ExpressiveFabState extends State<_ExpressiveFab> {
 class _ScheduleSheet extends StatefulWidget {
   const _ScheduleSheet({required this.onSchedule});
 
-  final void Function(
+  final Future<void> Function(
     ExerciseMode mode,
     int reps,
     DateTime scheduledTime,
     Set<int> days,
-  ) onSchedule;
+  )
+  onSchedule;
 
   @override
   State<_ScheduleSheet> createState() => _ScheduleSheetState();
@@ -667,6 +702,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
   var _mode = ExerciseMode.squat;
   var _reps = 20;
   var _days = <int>{};
+  var _saving = false;
 
   late DateTime _selectedDateTime;
 
@@ -683,20 +719,26 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     ).add(Duration(minutes: roundedMin));
   }
 
-  DateTime get _targetDateTime {
-    final now = DateTime.now();
-    var dt = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      _selectedDateTime.hour,
-      _selectedDateTime.minute,
-    );
-    if (dt.isBefore(now)) {
-      dt = dt.add(const Duration(days: 1));
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    // No `finally` reset on success — the sheet pops immediately after, so
+    // there's no frame left where a re-enabled Save button could be tapped
+    // again. On failure the sheet stays open and must re-enable it.
+    try {
+      await widget.onSchedule(_mode, _reps, _targetDateTime, _days);
+    } catch (_) {
+      if (mounted) setState(() => _saving = false);
+      return;
     }
-    return dt;
+    if (mounted) Navigator.of(context).pop();
   }
+
+  DateTime get _targetDateTime => AlarmSchedule.firstOccurrence(
+    timeOfDay: _selectedDateTime,
+    recurringDays: _days,
+    from: DateTime.now(),
+  );
 
   String _formatTargetSummary(DateTime scheduled) {
     final now = DateTime.now();
@@ -708,7 +750,14 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
         scheduled.day == now.day &&
         scheduled.month == now.month &&
         scheduled.year == now.year;
-    final dayText = isToday ? 'today' : 'tomorrow';
+    final isTomorrow =
+        scheduled.difference(DateTime(now.year, now.month, now.day)).inDays ==
+        1;
+    final dayText = isToday
+        ? 'today'
+        : isTomorrow
+        ? 'tomorrow'
+        : _weekdayFullLabels[scheduled.weekday - 1];
 
     final h24 = scheduled.hour;
     final h12 = h24 == 0 ? 12 : (h24 > 12 ? h24 - 12 : h24);
@@ -791,23 +840,29 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                   ),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      widget.onSchedule(_mode, _reps, _targetDateTime, _days);
-                      Navigator.of(context).pop();
-                    },
+                    onTap: _saving ? null : _save,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 4,
                         vertical: 8,
                       ),
-                      child: Text(
-                        'Save',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: accentColor,
-                        ),
-                      ),
+                      child: _saving
+                          ? SizedBox(
+                              width: 17,
+                              height: 17,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: accentColor,
+                              ),
+                            )
+                          : Text(
+                              'Save',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                                color: accentColor,
+                              ),
+                            ),
                     ),
                   ),
                 ],
@@ -841,7 +896,9 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
               const SizedBox(height: 16),
               Container(
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2C2C2E) : scheme.surfaceContainerHigh,
+                  color: isDark
+                      ? const Color(0xFF2C2C2E)
+                      : scheme.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
                     color: scheme.outline.withValues(alpha: 0.2),
@@ -871,17 +928,15 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                               _IosModePill(
                                 label: 'Squats',
                                 selected: _mode == ExerciseMode.squat,
-                                onTap: () => setState(
-                                  () => _mode = ExerciseMode.squat,
-                                ),
+                                onTap: () =>
+                                    setState(() => _mode = ExerciseMode.squat),
                               ),
                               const SizedBox(width: 6),
                               _IosModePill(
                                 label: 'Push-ups',
                                 selected: _mode == ExerciseMode.pushup,
-                                onTap: () => setState(
-                                  () => _mode = ExerciseMode.pushup,
-                                ),
+                                onTap: () =>
+                                    setState(() => _mode = ExerciseMode.pushup),
                               ),
                             ],
                           ),
@@ -914,9 +969,12 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                             children: [
                               _IosStepButton(
                                 icon: Icons.remove,
-                                onTap: () => setState(
-                                  () => _reps = (_reps - 5).clamp(5, 100),
-                                ),
+                                onTap: () {
+                                  unawaited(HapticFeedback.selectionClick());
+                                  setState(
+                                    () => _reps = (_reps - 5).clamp(5, 100),
+                                  );
+                                },
                               ),
                               SizedBox(
                                 width: 48,
@@ -935,9 +993,12 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                               ),
                               _IosStepButton(
                                 icon: Icons.add,
-                                onTap: () => setState(
-                                  () => _reps = (_reps + 5).clamp(5, 100),
-                                ),
+                                onTap: () {
+                                  unawaited(HapticFeedback.selectionClick());
+                                  setState(
+                                    () => _reps = (_reps + 5).clamp(5, 100),
+                                  );
+                                },
                               ),
                             ],
                           ),
@@ -991,6 +1052,9 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                                     tooltip: _weekdayFullLabels[i],
                                     selected: selected,
                                     onTap: () => setState(() {
+                                      unawaited(
+                                        HapticFeedback.selectionClick(),
+                                      );
                                       final next = {..._days};
                                       selected
                                           ? next.remove(day)
@@ -1069,20 +1133,29 @@ class _IosModePill extends StatelessWidget {
     final unselectedFg = isDark ? Colors.white70 : scheme.onSurfaceVariant;
 
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? accentColor : unselectedBg,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            color: selected ? Colors.white : unselectedFg,
+      // Was ~26dp tall (padding-driven, no minimum) — below WCAG 2.5.5's
+      // 48dp minimum. `SizedBox`+`Center` extends the tap area without
+      // changing the pill's visual size, same pattern as `ExpressiveSwitch`.
+      child: SizedBox(
+        height: 48,
+        child: Center(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: selected ? accentColor : unselectedBg,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? Colors.white : unselectedFg,
+              ),
+            ),
           ),
         ),
       ),
@@ -1106,15 +1179,21 @@ class _IosStepButton extends StatelessWidget {
         : scheme.surfaceContainer;
 
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: bg,
-          shape: BoxShape.circle,
+      // Was 32x32 — below WCAG 2.5.5's 48x48 minimum; circle stays the
+      // same visual size, centered in a larger tap area.
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: Center(
+          child: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+            child: Icon(icon, size: 18, color: accentColor),
+          ),
         ),
-        child: Icon(icon, size: 18, color: accentColor),
       ),
     );
   }
@@ -1146,10 +1225,15 @@ class _IosDayToggle extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
+        // Was 36dp tall — below WCAG 2.5.5's 48dp minimum. Seven of these
+        // sit in a row on a narrow phone with no horizontal room to grow,
+        // so unlike the pill/stepper fixes above, height grows in place
+        // instead of via a separate hit-area wrapper.
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          height: 36,
+          height: 48,
           decoration: BoxDecoration(
             color: selected ? accentColor : unselectedBg,
             borderRadius: BorderRadius.circular(10),

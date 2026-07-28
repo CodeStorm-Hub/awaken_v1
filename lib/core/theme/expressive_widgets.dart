@@ -6,6 +6,39 @@ import 'package:flutter/material.dart';
 /// App" Claude Design handoff, `m3x.css`). Core Flutter ships none of this
 /// — same rationale as `motion_tokens.dart`/`shape_tokens.dart`.
 
+/// Secondary/de-emphasized label color used across every card subtitle,
+/// section header, and empty state — previously a single hardcoded
+/// `Color(0xFF8E8E93)` regardless of theme brightness. Contrast against the
+/// dark canvas (`AppTheme.darkCanvas`) is already ~5.5:1, well past WCAG
+/// AA's 4.5:1, so dark mode keeps that value unchanged. Against the light
+/// surface (`0xFFF2F2F7`) the same color only clears ~3:1 — below AA for
+/// the 10-13px sizes it's used at throughout. `0xFF6E6E73` clears ~4.5:1
+/// against that light surface while staying visually in the same "iOS
+/// secondary label" gray family.
+Color secondaryLabelColor(BuildContext context) {
+  final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
+  return isDark ? const Color(0xFF8E8E93) : const Color(0xFF6E6E73);
+}
+
+/// The single-letter fallback shown on avatar badges (top-bar avatar,
+/// Profile's own avatar) when there's no provider photo. `displayName`/
+/// `email` can be an empty string — not just null — for some Supabase
+/// providers/email sign-ups, and indexing `[0]` on an empty string throws a
+/// `RangeError`; every call site used to do that inline via `?? 'A'`, which
+/// only guards `null`, not `''`, crashing the avatar (and with it every top
+/// bar it appears in) for those accounts.
+String avatarInitial({
+  required bool isAnonymous,
+  String? displayName,
+  String? email,
+}) {
+  if (isAnonymous) return 'G';
+  final label = (displayName != null && displayName.isNotEmpty)
+      ? displayName
+      : email;
+  return (label != null && label.isNotEmpty) ? label[0].toUpperCase() : 'A';
+}
+
 /// An authentic Apple Glassmorphic container widget supporting both Light
 /// and Dark iOS appearances. Uses `BackdropFilter` (`ImageFilter.blur`),
 /// dynamic translucent surface tints, multi-layered ambient drop shadows,
@@ -43,7 +76,8 @@ class AppleGlassContainer extends StatelessWidget {
         ? const Color(0xFF1E1E24).withValues(alpha: 0.65)
         : Colors.white.withValues(alpha: 0.78);
 
-    final glassBorder = borderColor ??
+    final glassBorder =
+        borderColor ??
         (isDark
             ? Colors.white.withValues(alpha: 0.25)
             : Colors.white.withValues(alpha: 0.65));
@@ -125,10 +159,7 @@ class AppleGlassContainer extends StatelessWidget {
     }
 
     if (onTap != null) {
-      return GestureDetector(
-        onTap: onTap,
-        child: content,
-      );
+      return GestureDetector(onTap: onTap, child: content);
     }
 
     return content;
@@ -386,37 +417,48 @@ class ExpressiveSwitch extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => onChanged(!value),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
+        // The switch's own visual size (56x32) sits under WCAG 2.5.5's
+        // 48x48 tap-target minimum, and it's the primary control for
+        // enabling/disabling an alarm. `SizedBox` extends the opaque hit
+        // area to 48 tall while keeping the visual pill the same size,
+        // centered inside it.
+        child: SizedBox(
           width: 56,
-          height: 32,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            color: value ? scheme.primary : scheme.surfaceContainerHigh,
-            border: Border.all(
-              color: value ? scheme.primary : scheme.outline,
-              width: 2,
-            ),
-          ),
-          child: AnimatedAlign(
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeOutBack,
-            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: AnimatedContainer(
+          height: 48,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+              width: 56,
+              height: 32,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                color: value ? scheme.primary : scheme.surfaceContainerHigh,
+                border: Border.all(
+                  color: value ? scheme.primary : scheme.outline,
+                  width: 2,
+                ),
+              ),
+              child: AnimatedAlign(
                 duration: const Duration(milliseconds: 350),
                 curve: Curves.easeOutBack,
-                width: value ? 24 : 18,
-                height: value ? 24 : 18,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: value ? scheme.onPrimary : scheme.outline,
+                alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeOutBack,
+                    width: value ? 24 : 18,
+                    height: value ? 24 : 18,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: value ? scheme.onPrimary : scheme.outline,
+                    ),
+                    child: value
+                        ? Icon(Icons.check, size: 15, color: scheme.primary)
+                        : null,
+                  ),
                 ),
-                child: value
-                    ? Icon(Icons.check, size: 15, color: scheme.primary)
-                    : null,
               ),
             ),
           ),
@@ -485,7 +527,9 @@ class StatTile extends StatelessWidget {
         color: effectiveBg,
         borderRadius: radius,
         border: Border.all(
-          color: hasError ? scheme.error : scheme.outline.withValues(alpha: 0.15),
+          color: hasError
+              ? scheme.error
+              : scheme.outline.withValues(alpha: 0.15),
           width: 1,
         ),
       ),

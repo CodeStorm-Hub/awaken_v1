@@ -1,0 +1,141 @@
+{
+  "@@locale": "en",
+
+  "weekdayMon": "M",
+  "weekdayTue": "T",
+  "weekdayWed": "W",
+  "weekdayThu": "T",
+  "weekdayFri": "F",
+  "weekdaySat": "S",
+  "weekdaySun": "S",
+  "weekdayFullMonday": "Monday",
+  "weekdayFullTuesday": "Tuesday",
+  "weekdayFullWednesday": "Wednesday",
+  "weekdayFullThursday": "Thursday",
+  "weekdayFullFriday": "Friday",
+  "weekdayFullSaturday": "Saturday",
+  "weekdayFullSunday": "Sunday",
+  "weekdayAbbrMon": "Mon",
+  "weekdayAbbrTue": "Tue",
+  "weekdayAbbrWed": "Wed",
+  "weekdayAbbrThu": "Thu",
+  "weekdayAbbrFri": "Fri",
+  "weekdayAbbrSat": "Sat",
+  "weekdayAbbrSun": "Sun",
+
+  "alarmsTitle": "Alarms",
+  "alarmsSubtitleEmpty": "Nothing scheduled",
+  "alarmsSubtitleCount": "{count, plural, =1{1 alarm · tap to preview} other{{count} alarms · tap to preview}}",
+  "@alarmsSubtitleCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "alarmReliabilitySettingsTooltip": "Alarm reliability settings",
+  "runSelfTestTooltip": "Run self-test",
+  "alarmScheduleFailed": "Could not schedule alarm: {error}",
+  "@alarmScheduleFailed": {
+    "placeholders": { "error": { "type": "Object" } }
+  },
+  "alarmScheduledFor": "Alarm scheduled for {time}",
+  "@alarmScheduledFor": {
+    "placeholders": { "time": { "type": "String" } }
+  },
+  "alarmUpdateFailed": "Could not update alarm: {error}",
+  "@alarmUpdateFailed": {
+    "placeholders": { "error": { "type": "Object" } }
+  },
+  "deleteAlarmTitle": "Delete alarm?",
+  "deleteAlarmBody": "This alarm will be cancelled and removed from your schedule.",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "alarmDeleteFailed": "Could not delete alarm: {error}",
+  "@alarmDeleteFailed": {
+    "placeholders": { "error": { "type": "Object" } }
+  },
+  "alarmDeleted": "Alarm deleted",
+  "noAlarmsScheduled": "No alarms scheduled",
+  "noAlarmsScheduledSubtitle": "Schedule one and earn tomorrow morning.",
+  "addAlarmSemanticLabel": "Add alarm",
+  "alarmOneTime": "One-time",
+  "everyDay": "Every day",
+  "squats": "squats",
+  "pushUps": "push-ups",
+  "alarmCardSemanticLabel": "{time}, {reps} {exercise}, {recurrence}, alarm {onOff}",
+  "@alarmCardSemanticLabel": {
+    "placeholders": {
+      "time": { "type": "String" },
+      "reps": { "type": "int" },
+      "exercise": { "type": "String" },
+      "recurrence": { "type": "String" },
+      "onOff": { "type": "String" }
+    }
+  },
+  "on": "on",
+  "off": "off",
+  "repsExercise": "{reps} {exercise}",
+  "@repsExercise": {
+    "placeholders": {
+      "reps": { "type": "int" },
+      "exercise": { "type": "String" }
+    }
+  },
+  "deleteAlarmTooltip": "Delete alarm",
+  "cancelAction": "Cancel",
+  "addAlarmTitle": "Add Alarm",
+  "save": "Save",
+  "exercise": "Exercise",
+  "squatsLabel": "Squats",
+  "pushUpsLabel": "Push-ups",
+  "reps": "Reps",
+  "repeat": "Repeat",
+  "never": "Never",
+  "weekdays": "Weekdays",
+  "weekends": "Weekends",
+  "alarmOn": "Alarm on",
+  "alarmOff": "Alarm off",
+
+  "alarmTargetSummaryUnderMinute": "Alarm set for {day} at {time} (in < 1 min)",
+  "@alarmTargetSummaryUnderMinute": {
+    "placeholders": { "day": { "type": "String" }, "time": { "type": "String" } }
+  },
+  "alarmTargetSummaryMinutes": "Alarm set for {day} at {time} (in {minutes} mins)",
+  "@alarmTargetSummaryMinutes": {
+    "placeholders": { "day": { "type": "String" }, "time": { "type": "String" }, "minutes": { "type": "int" } }
+  },
+  "alarmTargetSummaryHoursMinutes": "Alarm set for {day} at {time} (in {hours}h {minutes}m)",
+  "@alarmTargetSummaryHoursMinutes": {
+    "placeholders": { "day": { "type": "String" }, "time": { "type": "String" }, "hours": { "type": "int" }, "minutes": { "type": "int" } }
+  },
+  "today": "today",
+  "tomorrow": "tomorrow",
+
+  "timeToSquat": "Time to squat!",
+  "timeToPushUp": "Time to push up!",
+  "repsToDismiss": "reps to dismiss",
+  "wakeUpTaxApplied": "Wake-up tax applied (×{multiplier})",
+  "@wakeUpTaxApplied": {
+    "placeholders": { "multiplier": { "type": "String" } }
+  },
+  "startWorkoutToDismiss": "Start workout to dismiss",
+  "openingCamera": "Opening camera…",
+
+  "alarmReliabilitySelfTestTitle": "Alarm reliability self-test",
+  "alarmReliabilitySelfTestBody": "This schedules a test alarm {seconds} seconds from now, with a 1-rep squat requirement. For a real test of OEM battery killers, start it, then lock your screen and, ideally, swipe Awaken away from the recent-apps list. The alarm should still fire.",
+  "@alarmReliabilitySelfTestBody": {
+    "placeholders": { "seconds": { "type": "int" } }
+  },
+  "testRunning": "Test running…",
+  "runAgain": "Run again",
+  "startTest": "Start test",
+  "reliabilityTestNotStarted": "Not started.",
+  "reliabilityTestWaiting": "Waiting for alarm…",
+  "reliabilityTestPassed": "PASS — fired {seconds}s after the scheduled time.",
+  "@reliabilityTestPassed": {
+    "placeholders": { "seconds": { "type": "int" } }
+  },
+  "reliabilityTestFailed": "FAIL — alarm did not fire within the expected window. Check battery-exemption settings and OEM autostart permissions.",
+
+  "alarmDismissed": "Alarm dismissed!",
+  "alarmDismissedSubtitle": "Nice work — that's how mornings are won.",
+  "dayStreak": "day streak",
+  "nice": "Nice!"
+}

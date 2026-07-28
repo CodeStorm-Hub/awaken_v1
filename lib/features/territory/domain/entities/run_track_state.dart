@@ -41,9 +41,18 @@ class RunTrackState extends Equatable {
     if (points.length < 2 || distanceMeters < _minLoopLengthMeters) {
       return false;
     }
-    final start = points.first;
-    final current = points.last;
-    return _haversineMeters(start, current) <= _loopClosureRadiusMeters;
+    return distanceToStartMeters <= _loopClosureRadiusMeters;
+  }
+
+  /// Straight-line distance from the current position back to the run's
+  /// start point — the other half of [isLoopClosed] (alongside
+  /// [distanceMeters] vs the minimum length), surfaced for the UI so a
+  /// straight-out-and-back run can show *why* it isn't closing the loop
+  /// once the minimum distance is already covered, instead of a progress
+  /// bar that reads "done" while the run stays open indefinitely.
+  double get distanceToStartMeters {
+    if (points.length < 2) return 0;
+    return _haversineMeters(points.first, points.last);
   }
 
   RunTrackState copyWith({

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injection.dart';
@@ -73,32 +74,82 @@ class _VerificationViewState extends State<_VerificationView>
     }
   }
 
+  /// Previously a bare system back left with no `PopScope` at all — the
+  /// route still popped (with a `null` result, silently treated the same
+  /// as "I can't do this exercise today" by `alarm_ring_page.dart`), but
+  /// with zero indication of what just happened, and mid-progress reps
+  /// were discarded with no confirmation the way every other explicit exit
+  /// point in this flow is unguarded-but-obvious (a dedicated button, not
+  /// an OS gesture). Only confirms when there's actual progress to lose.
+  Future<void> _handleBack(BuildContext context) async {
+    final cubit = context.read<VerificationCubit>();
+    final state = cubit.state;
+    if (state.completedReps > 0 && !state.isComplete) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Exit workout?'),
+          content: Text(
+            "You've completed ${state.completedReps} of "
+            '${state.targetReps} reps — leaving now won\'t dismiss the '
+            'alarm.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Keep going'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Exit'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    if (context.mounted) {
+      Navigator.of(context).pop(
+        VerificationResult(
+          completed: false,
+          repsCompleted: state.completedReps,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      // Scoped to `_ViewKind`, not raw `VerificationStatus` — the camera
-      // view covers 5 distinct statuses (calibrating/noPoseDetected/
-      // counting/complete) that change on essentially every processed
-      // frame during a real session. Rebuilding on every status change
-      // used to rebuild `_CameraView` — and with it `CameraPreview`, its
-      // `Transform` wrapper, and the whole overlay subtree — on every
-      // single rep-counter update. Since `_CameraView` no longer takes
-      // `state` as a prop (each piece that needs live state now reads it
-      // itself via its own narrowly-scoped `BlocBuilder`, see below),
-      // building it once per camera-view entry is enough; nothing forces
-      // the camera texture to rebuild for the rest of the session.
-      body: BlocBuilder<VerificationCubit, VerificationState>(
-        buildWhen: (previous, current) =>
-            _viewKindOf(previous.status) != _viewKindOf(current.status),
-        builder: (context, state) {
-          return switch (_viewKindOf(state.status)) {
-            _ViewKind.permissionDenied => const _PermissionDeniedView(),
-            _ViewKind.cameraError => const _CameraErrorView(),
-            _ViewKind.initializing => const _InitializingView(),
-            _ViewKind.camera => const _CameraView(),
-          };
-        },
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleBack(context);
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        // Scoped to `_ViewKind`, not raw `VerificationStatus` — the camera
+        // view covers 5 distinct statuses (calibrating/noPoseDetected/
+        // counting/complete) that change on essentially every processed
+        // frame during a real session. Rebuilding on every status change
+        // used to rebuild `_CameraView` — and with it `CameraPreview`, its
+        // `Transform` wrapper, and the whole overlay subtree — on every
+        // single rep-counter update. Since `_CameraView` no longer takes
+        // `state` as a prop (each piece that needs live state now reads it
+        // itself via its own narrowly-scoped `BlocBuilder`, see below),
+        // building it once per camera-view entry is enough; nothing forces
+        // the camera texture to rebuild for the rest of the session.
+        body: BlocBuilder<VerificationCubit, VerificationState>(
+          buildWhen: (previous, current) =>
+              _viewKindOf(previous.status) != _viewKindOf(current.status),
+          builder: (context, state) {
+            return switch (_viewKindOf(state.status)) {
+              _ViewKind.permissionDenied => const _PermissionDeniedView(),
+              _ViewKind.cameraError => const _CameraErrorView(),
+              _ViewKind.initializing => const _InitializingView(),
+              _ViewKind.camera => const _CameraView(),
+            };
+          },
+        ),
       ),
     );
   }
@@ -193,8 +244,36 @@ class _CameraView extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = getIt<CameraDataSource>().controller;
     if (controller == null || !controller.value.isInitialized) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white),
+      // Shouldn't be reachable in the steady state — `PoseVerificationRepositoryImpl.start`
+      // only emits the `calibrating` status (the trigger for this view's
+      // `_ViewKind`) once `_camera.startFrontCameraStream` has already
+      // awaited `controller.initialize()`, so by the time this rebuilds the
+      // controller should already be ready. Kept as a defensive branch
+      // rather than an assert, with the same escape hatch every other
+      // state in this flow has — a `StatelessWidget` reading a plugin
+      // singleton once at build time has no way to rebuild itself if that
+      // assumption is ever violated, and a silent unrecoverable spinner
+      // while a real alarm is ringing is the worst version of that failure.
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: Colors.white),
+              const SizedBox(height: 24),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(
+                  const VerificationResult(completed: false, repsCompleted: 0),
+                ),
+                child: const Text(
+                  "I can't do this exercise today",
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -403,15 +482,28 @@ class _RepSegments extends StatelessWidget {
         if (!visible) return const SizedBox.shrink();
 
         final scheme = Theme.of(context).colorScheme;
+        // Above ~20 reps (the wake-up tax multiplies the schedule sheet's
+        // already-up-to-100 rep count further) one segment per rep collapses
+        // into sub-pixel slivers that convey nothing. Bucket into at most
+        // `_maxSegments` segments instead — each covering a proportional
+        // rep range, filled once `completedReps` clears that range's
+        // threshold. For `targetReps <= _maxSegments` this reduces to
+        // exactly the original one-segment-per-rep behavior.
+        const maxSegments = 20;
+        final segmentCount = state.targetReps < maxSegments
+            ? state.targetReps
+            : maxSegments;
+        final repsPerSegment = state.targetReps / segmentCount;
         return Padding(
           padding: const EdgeInsets.only(top: 14),
           child: Row(
-            children: List.generate(state.targetReps, (i) {
-              final filled = i < state.completedReps;
+            children: List.generate(segmentCount, (i) {
+              final segmentThreshold = ((i + 1) * repsPerSegment).ceil();
+              final filled = state.completedReps >= segmentThreshold;
               return Expanded(
                 child: Padding(
                   padding: EdgeInsets.only(
-                    right: i == state.targetReps - 1 ? 0 : 3,
+                    right: i == segmentCount - 1 ? 0 : 3,
                   ),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
@@ -444,6 +536,7 @@ class _RepCounterState extends State<_RepCounter> {
   bool _bump = false;
 
   void _triggerBump() {
+    unawaited(HapticFeedback.lightImpact());
     setState(() => _bump = true);
     Future.delayed(const Duration(milliseconds: 260), () {
       if (mounted) setState(() => _bump = false);

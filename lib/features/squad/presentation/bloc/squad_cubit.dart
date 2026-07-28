@@ -30,7 +30,31 @@ class SquadCubit extends Cubit<SquadState> {
     this._watchSquadPresence,
     this._squadRepository,
   ) : super(const SquadState()) {
-    _mySquadSub = _watchMySquad().listen(_onSquadChanged);
+    _subscribeToMySquad();
+  }
+
+  void _subscribeToMySquad() {
+    // `SquadStatus.error` is reserved for a genuine failure of this stream
+    // itself (e.g. a dropped realtime connection) — not for a failed
+    // create/join action, which must not blow away whatever the user was
+    // already looking at. See `createSquad`/`joinSquad` below.
+    _mySquadSub = _watchMySquad().listen(
+      _onSquadChanged,
+      onError: (Object e) => emit(
+        state.copyWith(
+          status: SquadStatus.error,
+          errorMessage: friendlySquadErrorMessage(e),
+        ),
+      ),
+    );
+  }
+
+  /// Re-subscribes after a genuine stream failure (`SquadStatus.error`) —
+  /// the retry action on `_SquadErrorView`.
+  Future<void> retry() async {
+    await _mySquadSub.cancel();
+    emit(state.copyWith(status: SquadStatus.loading));
+    _subscribeToMySquad();
   }
 
   final WatchMySquad _watchMySquad;
@@ -41,7 +65,9 @@ class SquadCubit extends Cubit<SquadState> {
   final WatchSquadPresence _watchSquadPresence;
   final SquadRepository _squadRepository;
 
-  late final StreamSubscription<Squad?> _mySquadSub;
+  // Not `final` — `retry()` cancels and replaces it after a genuine stream
+  // failure.
+  late StreamSubscription<Squad?> _mySquadSub;
   StreamSubscription<List<LeaderboardEntry>>? _leaderboardSub;
   StreamSubscription<List<SquadPresenceMember>>? _presenceSub;
 
@@ -63,31 +89,16 @@ class SquadCubit extends Cubit<SquadState> {
     ).listen((members) => emit(state.copyWith(presence: members)));
   }
 
-  Future<void> createSquad(String name) async {
-    try {
-      await _createSquad(name);
-    } catch (e) {
-      emit(
-        state.copyWith(
-          status: SquadStatus.error,
-          errorMessage: friendlySquadErrorMessage(e),
-        ),
-      );
-    }
-  }
+  /// Rethrows on failure (instead of flipping `status` to `error`, as this
+  /// used to) so a bad squad name just surfaces a SnackBar over the still-
+  /// current `noSquad` view — the page keeps both "Create"/"Join" actions
+  /// live. Previously a failed create/join stranded the user on the generic
+  /// error screen, whose only action re-opened *this same* create dialog —
+  /// there was no way back to "Join with invite code" from there.
+  Future<void> createSquad(String name) => _createSquad(name);
 
-  Future<void> joinSquad(String inviteCode) async {
-    try {
-      await _joinSquad(inviteCode);
-    } catch (e) {
-      emit(
-        state.copyWith(
-          status: SquadStatus.error,
-          errorMessage: friendlySquadErrorMessage(e),
-        ),
-      );
-    }
-  }
+  /// See [createSquad] — same rationale.
+  Future<void> joinSquad(String inviteCode) => _joinSquad(inviteCode);
 
   /// Previously fire-and-forget with no confirmation, loading, or error
   /// handling — a failure here (e.g. a dropped connection mid-request)

@@ -156,6 +156,12 @@ class _TerritoryPageState extends State<TerritoryPage> {
     // removeFills on the new controller. The new view starts with none.
     _fillsByTerritoryId.clear();
     _bountyFillsByZoneId.clear();
+    // Missed here previously: the marker handle from before the swap also
+    // belongs to the now-destroyed view, so `_syncCurrentPositionMarker`'s
+    // `updateCircle` on the stale handle silently no-oped against the new
+    // one — the blue position dot never reappeared after a style-tier
+    // fallback, even though fills/bounty zones correctly redrew.
+    _positionMarker = null;
     _controller = controller;
     _styleLoader.start();
   }
@@ -190,6 +196,17 @@ class _TerritoryPageState extends State<TerritoryPage> {
       return; // best-effort — a failed fetch just means no bounty layer this session
     }
     if (!mounted || _controller == null) return;
+
+    // `_onStyleLoaded` can run more than once per page lifetime on the
+    // *same* controller (e.g. a style-quality upgrade after the initial
+    // fallback tier, not just a full view recreation) — without clearing
+    // first, a second draw stacked a duplicate translucent fill on top of
+    // the first per zone, each redraw darkening the overlay further.
+    final existingFills = _bountyFillsByZoneId.values.expand((f) => f).toList();
+    if (existingFills.isNotEmpty) {
+      await controller.removeFills(existingFills);
+    }
+    _bountyFillsByZoneId.clear();
 
     for (final zone in zones) {
       final ring = _circlePolygon(zone.centerLat, zone.centerLng, zone.radiusM);
@@ -352,19 +369,30 @@ class _TerritoryPageState extends State<TerritoryPage> {
         children: [
           // Full-Bleed Edge-to-Edge Map Canvas
           Positioned.fill(
-            child: MapLibreMap(
-              key: _styleLoader.styleKey,
-              styleString: _styleLoader.styleString,
-              initialCameraPosition: const CameraPosition(
-                target: LatLng(20, 0),
-                zoom: 2,
+            // The map itself has no accessible representation of territory
+            // data below this — it's only ever drawn as visual fills. This
+            // gives a screen-reader user the same at-a-glance summary the
+            // owned-area chip and rival/at-risk banners convey visually.
+            child: Semantics(
+              label:
+                  '${_atRisk.length} '
+                  '${_atRisk.length == 1 ? 'territory' : 'territories'} '
+                  'undefended.'
+                  '${_currentRival != null ? ' Recent rival activity nearby.' : ''}',
+              child: MapLibreMap(
+                key: _styleLoader.styleKey,
+                styleString: _styleLoader.styleString,
+                initialCameraPosition: const CameraPosition(
+                  target: LatLng(20, 0),
+                  zoom: 2,
+                ),
+                onMapCreated: _onMapCreated,
+                onStyleLoadedCallback: _onStyleLoaded,
+                onCameraIdle: _scheduleRefreshForCurrentView,
+                myLocationEnabled: false,
+                logoEnabled: false,
+                attributionButtonPosition: AttributionButtonPosition.bottomLeft,
               ),
-              onMapCreated: _onMapCreated,
-              onStyleLoadedCallback: _onStyleLoaded,
-              onCameraIdle: _scheduleRefreshForCurrentView,
-              myLocationEnabled: false,
-              logoEnabled: false,
-              attributionButtonPosition: AttributionButtonPosition.bottomLeft,
             ),
           ),
 
@@ -394,7 +422,10 @@ class _TerritoryPageState extends State<TerritoryPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 AppleGlassContainer(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   borderRadius: BorderRadius.circular(22),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -430,10 +461,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
                 const _SyncStatusBanner(),
                 if (_atRisk.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  _AtRiskBanner(
-                    territories: _atRisk,
-                    scheme: scheme,
-                  ),
+                  _AtRiskBanner(territories: _atRisk, scheme: scheme),
                 ],
                 if (_currentRival != null) ...[
                   const SizedBox(height: 8),
@@ -558,7 +586,9 @@ class _TerritoryPageState extends State<TerritoryPage> {
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
             return ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
                 child: Container(
@@ -590,7 +620,9 @@ class _TerritoryPageState extends State<TerritoryPage> {
                               height: 5,
                               margin: const EdgeInsets.only(bottom: 18),
                               decoration: BoxDecoration(
-                                color: scheme.onSurfaceVariant.withValues(alpha: 0.3),
+                                color: scheme.onSurfaceVariant.withValues(
+                                  alpha: 0.3,
+                                ),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                             ),
@@ -610,9 +642,11 @@ class _TerritoryPageState extends State<TerritoryPage> {
                               'Show rival territory',
                               style: TextStyle(fontWeight: FontWeight.w600),
                             ),
-                            subtitle: const Text(
+                            subtitle: Text(
                               "Hide other players' captured land",
-                              style: TextStyle(color: Color(0xFF8E8E93)),
+                              style: TextStyle(
+                                color: secondaryLabelColor(sheetContext),
+                              ),
                             ),
                             value: _showRivalTerritory,
                             onChanged: (value) {
@@ -699,10 +733,7 @@ class _SyncStatusBanner extends StatelessWidget {
                   Icon(icon, size: 16, color: fg),
                 const SizedBox(width: 8),
                 Flexible(
-                  child: Text(
-                    label,
-                    style: TextStyle(fontSize: 12, color: fg),
-                  ),
+                  child: Text(label, style: TextStyle(fontSize: 12, color: fg)),
                 ),
                 if (status == SyncStatus.error) ...[
                   const SizedBox(width: 8),
@@ -827,13 +858,15 @@ class _AtRiskBanner extends StatelessWidget {
     final soonest = territories.reduce(
       (a, b) => a.expiresAt.isBefore(b.expiresAt) ? a : b,
     );
-    final daysLeft = soonest.expiresAt
-        .difference(DateTime.now())
-        .inDays
-        .clamp(0, 99);
+    final remaining = soonest.expiresAt.difference(DateTime.now());
+    // Under 24h previously still read `.inDays` -> "0d", the most urgent
+    // case reading as the least informative. Switch to hours below a day.
+    final timeLeft = remaining.inDays >= 1
+        ? '${remaining.inDays.clamp(0, 99)}d'
+        : '${remaining.inHours.clamp(0, 23)}h';
     final label = territories.length == 1
-        ? "1 territory undefended — reverts in ${daysLeft}d"
-        : "${territories.length} territories undefended — reverts in ${daysLeft}d";
+        ? "1 territory undefended — reverts in $timeLeft"
+        : "${territories.length} territories undefended — reverts in $timeLeft";
 
     return AppleGlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -848,7 +881,11 @@ class _AtRiskBanner extends StatelessWidget {
               color: Color(0xFFFF9500),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.shield_outlined, size: 14, color: Colors.black),
+            child: const Icon(
+              Icons.shield_outlined,
+              size: 14,
+              color: Colors.black,
+            ),
           ),
           const SizedBox(width: 10),
           Flexible(

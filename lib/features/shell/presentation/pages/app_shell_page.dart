@@ -139,17 +139,20 @@ class AdaptiveNavScaffold extends StatelessWidget {
                       color: scheme.primary,
                     );
                   }
-                  return const TextStyle(
+                  return TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF8E8E93),
+                    color: secondaryLabelColor(context),
                   );
                 }),
                 iconTheme: WidgetStateProperty.resolveWith((states) {
                   if (states.contains(WidgetState.selected)) {
                     return IconThemeData(color: scheme.primary, size: 22);
                   }
-                  return const IconThemeData(color: Color(0xFF8E8E93), size: 22);
+                  return IconThemeData(
+                    color: secondaryLabelColor(context),
+                    size: 22,
+                  );
                 }),
               ),
               child: NavigationBar(

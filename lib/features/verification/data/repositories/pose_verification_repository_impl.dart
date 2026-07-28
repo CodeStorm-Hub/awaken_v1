@@ -61,13 +61,6 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
     _repCounter = exercise == ExerciseMode.squat
         ? AngleRepCounter.squat()
         : AngleRepCounter.pushup();
-    _emit(
-      VerificationState(
-        status: VerificationStatus.calibrating,
-        exerciseMode: exercise,
-        targetReps: targetReps,
-      ),
-    );
 
     try {
       await _camera.startFrontCameraStream(_onFrame);
@@ -79,7 +72,24 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
           targetReps: targetReps,
         ),
       );
+      return;
     }
+
+    // Emitted only once the controller is actually initialized — `_CameraView`
+    // (verification_page.dart) is a `StatelessWidget` that reads
+    // `controller.value.isInitialized` once at build time and never rebuilds
+    // on its own; its parent `BlocBuilder` only rebuilds on a `_ViewKind`
+    // change (initializing → camera), which is this emit. Emitting
+    // `calibrating` before the camera finished starting left `_CameraView`
+    // permanently stuck on its inner spinner even after the camera became
+    // ready, since no further status change flips viewKind again.
+    _emit(
+      VerificationState(
+        status: VerificationStatus.calibrating,
+        exerciseMode: exercise,
+        targetReps: targetReps,
+      ),
+    );
   }
 
   @override

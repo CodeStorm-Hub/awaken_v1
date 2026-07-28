@@ -63,9 +63,7 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              "Couldn't open battery settings — please try again.",
-            ),
+            content: Text("Couldn't open battery settings — please try again."),
           ),
         );
       }
@@ -99,6 +97,10 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage>
                   ExpressiveFlower(
                     size: 64,
                     color: scheme.secondaryContainer,
+                    // See `alarm_list_page.dart`'s identical fix — light
+                    // theme's `secondaryContainer` is nearly invisible
+                    // against the page surface without a border.
+                    borderColor: scheme.outline,
                     child: Icon(
                       Icons.battery_charging_full,
                       size: 30,
@@ -314,10 +316,7 @@ class _StatusRow extends StatelessWidget {
                 child: SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: fg,
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: fg),
                 ),
               )
             else

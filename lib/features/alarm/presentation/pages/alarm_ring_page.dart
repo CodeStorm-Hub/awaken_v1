@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/router/navigator_key.dart';
@@ -38,6 +39,12 @@ class AlarmRingPage extends StatefulWidget {
 
 class _AlarmRingPageState extends State<AlarmRingPage> {
   bool _workoutStarted = false;
+  // Set synchronously on the very first tap, before the `setState` below —
+  // two taps dispatched in the same frame both reach `_startWorkout` before
+  // either `setState` rebuild lands, so `_workoutStarted` alone can't guard
+  // re-entry. A second tap while this is true would otherwise push a second
+  // `VerificationPage`, giving two camera/ML Kit sessions started at once.
+  bool _startingWorkout = false;
   late DateTime _now;
   Timer? _clock;
 
@@ -57,6 +64,18 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
   }
 
   Future<void> _startWorkout(BuildContext context, int effectiveReps) async {
+    // Guards re-entry from a second tap dispatched before the first
+    // `setState` below has rebuilt the button — see `_startingWorkout`'s doc
+    // comment.
+    if (_startingWorkout) return;
+    _startingWorkout = true;
+
+    final navigatorState = navigatorKey.currentState;
+    if (navigatorState == null) {
+      _startingWorkout = false;
+      return;
+    }
+
     final startedAt = DateTime.now();
     setState(() {
       _workoutStarted = true;
@@ -75,7 +94,7 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
     // get stuck deferring to a route that never actually appeared.
     cubit.setVerificationInProgress(true);
     try {
-      final result = await navigatorKey.currentState!.push<VerificationResult>(
+      final result = await navigatorState.push<VerificationResult>(
         MaterialPageRoute(
           builder: (_) => VerificationPage(
             exercise: widget.alarm.exerciseMode,
@@ -110,6 +129,7 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
 
       final navContext = navigatorKey.currentContext;
       if (navContext != null && navContext.mounted) {
+        unawaited(HapticFeedback.mediumImpact());
         await showModalBottomSheet<void>(
           context: navContext,
           isDismissible: false,
@@ -124,6 +144,7 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
       _popIfPreview();
     } finally {
       cubit.setVerificationInProgress(false);
+      _startingWorkout = false;
     }
   }
 
