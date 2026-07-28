@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:injectable/injectable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -36,15 +37,28 @@ class TerritoryRepositoryImpl implements TerritoryRepository {
   /// last queried.
   static const _cacheCap = 2000;
 
+  /// `compute()` spawns a real isolate, which has non-trivial fixed cost
+  /// (spawn + message copy) — worth paying only when the parse it's avoiding
+  /// would actually risk blocking a frame. Below this row count the inline
+  /// parse is cheaper than the isolate hop; above it, a large cache (up to
+  /// `_cacheCap`) can have enough combined polygon complexity to jank the UI
+  /// thread, so it's worth moving off it.
+  static const _isolateThreshold = 200;
+
   @override
   Stream<List<Territory>> watchTerritories() {
     return (_db.select(
       _db.territories,
-    )..where((t) => t.deletedAt.isNull())).watch().map(
-      (rows) => rows
-          .map((r) => TerritoryMapper.fromRow(r, currentUserId: _currentUserId))
-          .toList(),
-    );
+    )..where((t) => t.deletedAt.isNull())).watch().asyncMap((rows) async {
+      if (rows.isEmpty) return const <Territory>[];
+      final args = (rows, _currentUserId);
+      // GeoJSON parsing/coordinate transform for every cached row feeds
+      // straight into the map render. For small/typical caches the parse
+      // itself is cheap, so it stays inline; only above `_isolateThreshold`
+      // does it move to a background isolate via `compute()`.
+      if (rows.length < _isolateThreshold) return _mapTerritoryRows(args);
+      return compute(_mapTerritoryRows, args);
+    });
   }
 
   @override
@@ -54,9 +68,19 @@ class TerritoryRepositoryImpl implements TerritoryRepository {
     final query = _db.select(_db.territories)
       ..where((t) => t.ownerId.equals(userId))
       ..where((t) => t.deletedAt.isNull());
-    return query.watch().map(
-      (rows) => rows.fold<double>(0, (sum, r) => sum + r.areaSqm),
-    );
+
+    // `territories` is pull-only/server-authoritative (never locally
+    // authored — see the class doc comment), so the local Drift cache is
+    // always a *subset* of the true total: it's bbox-scoped (see
+    // `_cacheCap`/`refreshTerritories` above) and silently omits any
+    // territory outside whatever's been pulled into view. Summing it
+    // directly under-counts a user whose territory spans multiple areas.
+    // `my_owned_area_sqm()` sums every row server-side regardless of what's
+    // cached, so it's the only correct source for this figure — the local
+    // `watch()` stream is used purely as a "something changed, refetch"
+    // trigger (fires immediately on listen, and again after every
+    // `refreshTerritories()` pull), not as the emitted value itself.
+    return query.watch().asyncMap((_) => _remote.fetchMyOwnedAreaSqm());
   }
 
   @override
@@ -181,4 +205,15 @@ class TerritoryRepositoryImpl implements TerritoryRepository {
         )
         .toList();
   }
+}
+
+/// Top-level (isolate-sendable) so `compute()` in `watchTerritories` can run
+/// it off the main isolate.
+List<Territory> _mapTerritoryRows(
+  (List<TerritoryRow> rows, String? currentUserId) args,
+) {
+  final (rows, currentUserId) = args;
+  return rows
+      .map((r) => TerritoryMapper.fromRow(r, currentUserId: currentUserId))
+      .toList();
 }

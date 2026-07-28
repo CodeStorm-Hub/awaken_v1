@@ -614,18 +614,16 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                               ],
                                             ),
                                             const SizedBox(height: 10),
-                                            ClipRRect(
+                                            LinearProgressIndicator(
+                                              value: animatedProgress,
+                                              minHeight: 6,
                                               borderRadius:
                                                   BorderRadius.circular(999),
-                                              child: LinearProgressIndicator(
-                                                value: animatedProgress,
-                                                minHeight: 6,
-                                                backgroundColor: scheme
-                                                    .surfaceContainerHighest,
-                                                color: loopClosed
-                                                    ? scheme.primary
-                                                    : scheme.tertiary,
-                                              ),
+                                              backgroundColor: scheme
+                                                  .surfaceContainerHighest,
+                                              color: loopClosed
+                                                  ? scheme.primary
+                                                  : scheme.tertiary,
                                             ),
                                             const SizedBox(height: 4),
                                             Text(

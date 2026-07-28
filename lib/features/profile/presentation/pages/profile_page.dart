@@ -110,6 +110,7 @@ class ProfilePage extends StatelessWidget {
                       displayName: displayName,
                       email: email,
                     );
+                    final dpr = MediaQuery.devicePixelRatioOf(context);
 
                     return SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
@@ -131,6 +132,8 @@ class ProfilePage extends StatelessWidget {
                                       width: 84,
                                       height: 84,
                                       fit: BoxFit.cover,
+                                      cacheWidth: (84 * dpr).round(),
+                                      cacheHeight: (84 * dpr).round(),
                                       errorBuilder:
                                           (context, error, stackTrace) =>
                                               _InitialAvatar(

@@ -27,19 +27,6 @@ class HomePage extends StatelessWidget {
   final VoidCallback onOpenTerritory;
   final VoidCallback onOpenSquad;
 
-  AlarmSchedule? _nextAlarm(List<AlarmSchedule> alarms) {
-    final eligible = alarms.where((a) => a.isActive).toList()
-      ..sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
-    return eligible.isEmpty ? null : eligible.first;
-  }
-
-  String _recurrenceSuffix(Set<int> recurringDays) {
-    if (recurringDays.isEmpty) return '';
-    if (recurringDays.length == 7) return ' · Every day';
-    final sorted = recurringDays.toList()..sort();
-    return ' · ${sorted.map((d) => _weekdayAbbrLabels[d - 1]).join(', ')}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -49,197 +36,177 @@ class HomePage extends StatelessWidget {
       child: Scaffold(
         backgroundColor: scheme.surface,
         body: SafeArea(
-          child: BlocBuilder<AlarmCubit, AlarmState>(
-            builder: (context, alarmState) {
-              final nextAlarm = _nextAlarm(alarmState.alarms);
-              final nextAlarmLabel = nextAlarm == null
-                  ? '--:--'
-                  : '${nextAlarm.scheduledTime.hour.toString().padLeft(2, '0')}:'
-                        '${nextAlarm.scheduledTime.minute.toString().padLeft(2, '0')}';
-              final nextAlarmSubtitle = nextAlarm == null
-                  ? 'No alarms scheduled'
-                  : '${nextAlarm.exerciseMode == ExerciseMode.squat ? 'Squats' : 'Push-ups'} · '
-                        '${nextAlarm.requiredReps} reps'
-                        '${_recurrenceSuffix(nextAlarm.recurringDays)}';
-
-              return BlocBuilder<HomeCubit, HomeState>(
-                builder: (context, home) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-                        child: AppleGlassContainer(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          borderRadius: BorderRadius.circular(22),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const _GreetingText(),
-                                  Text(
-                                    'Awaken',
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: -0.5,
-                                      color: scheme.onSurface,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Row(
-                                children: [
-                                  Container(
-                                    // A hard `height:` forces the child Row
-                                    // into that exact cross-axis size — at
-                                    // large system text scale the Text
-                                    // below needs more than 30dp and
-                                    // overflows (`RenderFlex`) instead of
-                                    // the pill growing. `constraints` with
-                                    // only a minimum lets it grow.
-                                    constraints: const BoxConstraints(
-                                      minHeight: 30,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(
-                                        0xFFFF9F0A,
-                                      ).withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.local_fire_department,
-                                          size: 14,
-                                          color: Color(0xFFFF9F0A),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          '${home.streak}',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFFFF9F0A),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const CurrentUserAvatarButton(),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
+          child: BlocBuilder<HomeCubit, HomeState>(
+            builder: (context, home) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                    child: AppleGlassContainer(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
                       ),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-                          child: Column(
+                      borderRadius: BorderRadius.circular(22),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _NextAlarmCard(
-                                label: nextAlarmLabel,
-                                subtitle: nextAlarmSubtitle,
-                                onViewAlarms: onOpenAlarms,
-                              ),
-                              const SizedBox(height: 12),
-                              if (home.streak == 0 && home.ownedAreaSqm == 0)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Text(
-                                    "Dismiss an alarm or capture territory to build your stats.",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: secondaryLabelColor(context),
-                                    ),
-                                  ),
+                              const _GreetingText(),
+                              Text(
+                                'Awaken',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.5,
+                                  color: scheme.onSurface,
                                 ),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: StatTile(
-                                      bg: scheme.surfaceContainer,
-                                      fg: scheme.primary,
-                                      icon: Icons.local_fire_department,
-                                      value: '${home.streak}',
-                                      label: 'Day streak',
-                                      hasError: home.streakError,
-                                      radius: const BorderRadius.horizontal(
-                                        left: Radius.circular(14),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Expanded(
-                                    child: StatTile(
-                                      bg: scheme.surfaceContainer,
-                                      fg: const Color(0xFFFF9F0A),
-                                      icon: Icons.landscape,
-                                      value: (home.ownedAreaSqm / 1000000)
-                                          .toStringAsFixed(2),
-                                      label: 'km² owned',
-                                      hasError: home.ownedAreaError,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Expanded(
-                                    child: StatTile(
-                                      bg: scheme.surfaceContainer,
-                                      fg: const Color(0xFF30D158),
-                                      icon: Icons.emoji_events,
-                                      value: home.squadRank == null
-                                          ? '—'
-                                          : '#${home.squadRank}',
-                                      label: 'Squad rank',
-                                      hasError: home.squadRankError,
-                                      radius: const BorderRadius.horizontal(
-                                        right: Radius.circular(14),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 14),
-                              _QuickActionsPill(
-                                onOpenTerritory: onOpenTerritory,
-                                onOpenSquad: onOpenSquad,
-                              ),
-                              const SizedBox(height: 14),
-                              const _SectionLabel('ACHIEVEMENTS'),
-                              _AchievementsRow(
-                                streak: home.streak,
-                                ownedAreaSqm: home.ownedAreaSqm,
-                                hasSquad: home.squad != null,
-                              ),
-                              const SizedBox(height: 14),
-                              const _SectionLabel('RECENT ACTIVITY'),
-                              _RecentActivitySection(
-                                activity: home.recentActivity,
-                                hasError: home.recentActivityError,
-                                onRetry: () => context
-                                    .read<HomeCubit>()
-                                    .retryRecentActivity(),
                               ),
                             ],
                           ),
-                        ),
+                          Row(
+                            children: [
+                              Container(
+                                // A hard `height:` forces the child Row
+                                // into that exact cross-axis size — at
+                                // large system text scale the Text
+                                // below needs more than 30dp and
+                                // overflows (`RenderFlex`) instead of
+                                // the pill growing. `constraints` with
+                                // only a minimum lets it grow.
+                                constraints: const BoxConstraints(
+                                  minHeight: 30,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(
+                                    0xFFFF9F0A,
+                                  ).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.local_fire_department,
+                                      size: 14,
+                                      color: Color(0xFFFF9F0A),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${home.streak}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFFFF9F0A),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const CurrentUserAvatarButton(),
+                            ],
+                          ),
+                        ],
                       ),
-                    ],
-                  );
-                },
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _NextAlarmCardBloc(onViewAlarms: onOpenAlarms),
+                          const SizedBox(height: 12),
+                          if (home.streak == 0 && home.ownedAreaSqm == 0)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text(
+                                "Dismiss an alarm or capture territory to build your stats.",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: secondaryLabelColor(context),
+                                ),
+                              ),
+                            ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: StatTile(
+                                  bg: scheme.surfaceContainer,
+                                  fg: scheme.primary,
+                                  icon: Icons.local_fire_department,
+                                  value: '${home.streak}',
+                                  label: 'Day streak',
+                                  hasError: home.streakError,
+                                  radius: const BorderRadius.horizontal(
+                                    left: Radius.circular(14),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              Expanded(
+                                child: StatTile(
+                                  bg: scheme.surfaceContainer,
+                                  fg: const Color(0xFFFF9F0A),
+                                  icon: Icons.landscape,
+                                  value: (home.ownedAreaSqm / 1000000)
+                                      .toStringAsFixed(2),
+                                  label: 'km² owned',
+                                  hasError: home.ownedAreaError,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              Expanded(
+                                child: StatTile(
+                                  bg: scheme.surfaceContainer,
+                                  fg: const Color(0xFF30D158),
+                                  icon: Icons.emoji_events,
+                                  value: home.squadRank == null
+                                      ? '—'
+                                      : '#${home.squadRank}',
+                                  label: 'Squad rank',
+                                  hasError: home.squadRankError,
+                                  radius: const BorderRadius.horizontal(
+                                    right: Radius.circular(14),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          _QuickActionsPill(
+                            onOpenTerritory: onOpenTerritory,
+                            onOpenSquad: onOpenSquad,
+                          ),
+                          const SizedBox(height: 14),
+                          const _SectionLabel('ACHIEVEMENTS'),
+                          _AchievementsRow(
+                            streak: home.streak,
+                            ownedAreaSqm: home.ownedAreaSqm,
+                            hasSquad: home.squad != null,
+                          ),
+                          const SizedBox(height: 14),
+                          const _SectionLabel('RECENT ACTIVITY'),
+                          _RecentActivitySection(
+                            activity: home.recentActivity,
+                            hasError: home.recentActivityError,
+                            onRetry: () =>
+                                context.read<HomeCubit>().retryRecentActivity(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               );
             },
           ),
@@ -415,6 +382,51 @@ class _RecentActivitySection extends StatelessWidget {
           ),
         );
       }),
+    );
+  }
+}
+
+/// Owns its own narrowly-scoped `BlocBuilder<AlarmCubit>` so an alarm
+/// change only rebuilds this card, not the whole `HomeCubit`-driven page
+/// body (see `HomePage.build`).
+class _NextAlarmCardBloc extends StatelessWidget {
+  const _NextAlarmCardBloc({required this.onViewAlarms});
+
+  final VoidCallback onViewAlarms;
+
+  AlarmSchedule? _nextAlarm(List<AlarmSchedule> alarms) {
+    final eligible = alarms.where((a) => a.isActive).toList()
+      ..sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
+    return eligible.isEmpty ? null : eligible.first;
+  }
+
+  String _recurrenceSuffix(Set<int> recurringDays) {
+    if (recurringDays.isEmpty) return '';
+    if (recurringDays.length == 7) return ' · Every day';
+    final sorted = recurringDays.toList()..sort();
+    return ' · ${sorted.map((d) => _weekdayAbbrLabels[d - 1]).join(', ')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<AlarmCubit, AlarmState>(
+      builder: (context, alarmState) {
+        final nextAlarm = _nextAlarm(alarmState.alarms);
+        final label = nextAlarm == null
+            ? '--:--'
+            : '${nextAlarm.scheduledTime.hour.toString().padLeft(2, '0')}:'
+                  '${nextAlarm.scheduledTime.minute.toString().padLeft(2, '0')}';
+        final subtitle = nextAlarm == null
+            ? 'No alarms scheduled'
+            : '${nextAlarm.exerciseMode == ExerciseMode.squat ? 'Squats' : 'Push-ups'} · '
+                  '${nextAlarm.requiredReps} reps'
+                  '${_recurrenceSuffix(nextAlarm.recurringDays)}';
+        return _NextAlarmCard(
+          label: label,
+          subtitle: subtitle,
+          onViewAlarms: onViewAlarms,
+        );
+      },
     );
   }
 }

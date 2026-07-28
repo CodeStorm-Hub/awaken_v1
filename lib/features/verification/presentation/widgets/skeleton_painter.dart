@@ -27,6 +27,12 @@ class SkeletonPainter extends CustomPainter {
   final BodyPose? pose;
   final Size imageSize;
 
+  static final _bonePaint = Paint()
+    ..color = Colors.greenAccent
+    ..strokeWidth = 4
+    ..style = PaintingStyle.stroke;
+  static final _jointPaint = Paint()..color = Colors.greenAccent;
+
   @override
   void paint(Canvas canvas, Size size) {
     final pose = this.pose;
@@ -38,24 +44,19 @@ class SkeletonPainter extends CustomPainter {
     Offset project(JointPosition joint) =>
         Offset(size.width - joint.x * scaleX, joint.y * scaleY);
 
-    final bonePaint = Paint()
-      ..color = Colors.greenAccent
-      ..strokeWidth = 4
-      ..style = PaintingStyle.stroke;
-    final jointPaint = Paint()..color = Colors.greenAccent;
-
     for (final (a, b) in _bones) {
       final from = pose[a];
       final to = pose[b];
       if (from == null || to == null) continue;
-      canvas.drawLine(project(from), project(to), bonePaint);
+      canvas.drawLine(project(from), project(to), _bonePaint);
     }
 
     for (final joint in pose.joints.values) {
-      canvas.drawCircle(project(joint), 5, jointPaint);
+      canvas.drawCircle(project(joint), 5, _jointPaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant SkeletonPainter oldDelegate) => oldDelegate.pose != pose;
+  bool shouldRepaint(covariant SkeletonPainter oldDelegate) =>
+      oldDelegate.pose != pose;
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart' show Value;
+import 'package:flutter/foundation.dart' show compute;
 import 'package:geolocator/geolocator.dart' show Geolocator;
 import 'package:injectable/injectable.dart';
 import 'package:kalman_dr/kalman_dr.dart';
@@ -280,9 +281,7 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
               id: const Value(1),
               runId: runId,
               startedAt: startedAt,
-              pointsJson: jsonEncode(
-                points.map((p) => p.toJson()).toList(),
-              ),
+              pointsJson: jsonEncode(points.map((p) => p.toJson()).toList()),
               distanceMeters: _state.distanceMeters,
               updatedAt: now,
             ),
@@ -344,7 +343,12 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
       );
     }
 
-    final simplified = PathSimplifier.simplify(points);
+    // Offloaded to a background isolate: RDP simplification is O(n log n)
+    // average but recurses over every point, and this runs synchronously on
+    // the main isolate right as the user taps "Close loop & capture" — a
+    // long run (thousands of points) would otherwise jank the capture tap
+    // and the celebration sheet that follows it.
+    final simplified = await compute(PathSimplifier.simplify, points);
     final endedAt = points.last.timestamp;
 
     await _localWriter.insertRun(

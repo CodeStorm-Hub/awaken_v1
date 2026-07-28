@@ -191,6 +191,7 @@ class ProfileAvatarButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
     final fallback = Container(
       width: 40,
       height: 40,
@@ -232,6 +233,8 @@ class ProfileAvatarButton extends StatelessWidget {
                           width: 40,
                           height: 40,
                           fit: BoxFit.cover,
+                          cacheWidth: (40 * dpr).round(),
+                          cacheHeight: (40 * dpr).round(),
                           errorBuilder: (context, error, stackTrace) =>
                               fallback,
                           loadingBuilder: (context, child, progress) =>

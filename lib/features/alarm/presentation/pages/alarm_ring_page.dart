@@ -415,17 +415,14 @@ class _RingingBellState extends State<_RingingBell>
   Widget _ringAt(double t, Color color) {
     final scale = 1.0 + t * 0.5;
     final opacity = (1.0 - t).clamp(0.0, 1.0);
-    return Opacity(
-      opacity: opacity,
-      child: Transform.scale(
-        scale: scale,
-        child: Container(
-          width: 128,
-          height: 128,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: color, width: 3),
-          ),
+    return Transform.scale(
+      scale: scale,
+      child: Container(
+        width: 128,
+        height: 128,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: color.withValues(alpha: opacity), width: 3),
         ),
       ),
     );

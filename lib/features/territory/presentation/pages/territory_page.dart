@@ -645,24 +645,34 @@ class _TerritoryPageState extends State<TerritoryPage> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text(
-                              'Show rival territory',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            subtitle: Text(
-                              "Hide other players' captured land",
-                              style: TextStyle(
-                                color: secondaryLabelColor(sheetContext),
+                          // `SwitchListTile` paints its background/ink
+                          // splashes on the nearest `Material` ancestor —
+                          // without this, the enclosing glass `Container`'s
+                          // `DecoratedBox` swallows them and taps show no
+                          // visual feedback at all.
+                          Material(
+                            type: MaterialType.transparency,
+                            child: SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text(
+                                'Show rival territory',
+                                style: TextStyle(fontWeight: FontWeight.w600),
                               ),
+                              subtitle: Text(
+                                "Hide other players' captured land",
+                                style: TextStyle(
+                                  color: secondaryLabelColor(sheetContext),
+                                ),
+                              ),
+                              value: _showRivalTerritory,
+                              onChanged: (value) {
+                                setSheetState(
+                                  () => _showRivalTerritory = value,
+                                );
+                                setState(() => _showRivalTerritory = value);
+                                unawaited(_redrawFills());
+                              },
                             ),
-                            value: _showRivalTerritory,
-                            onChanged: (value) {
-                              setSheetState(() => _showRivalTerritory = value);
-                              setState(() => _showRivalTerritory = value);
-                              unawaited(_redrawFills());
-                            },
                           ),
                         ],
                       ),

@@ -40,6 +40,16 @@ class TerritoryRemoteDataSource {
     return List<Map<String, Object?>>.from(result! as List);
   }
 
+  /// Server-authoritative total owned area (m²) via `my_owned_area_sqm()` —
+  /// sums every non-deleted `territories` row for the caller, unlike the
+  /// local Drift cache which is bbox-scoped (see `TerritoryRepositoryImpl`'s
+  /// `_cacheCap`/`refreshTerritories` doc comments) and can under-count a
+  /// user whose territory spans outside the currently-viewed map area.
+  Future<double> fetchMyOwnedAreaSqm() async {
+    final result = await _supabase.rpc<Object?>('my_owned_area_sqm');
+    return (result! as num).toDouble();
+  }
+
   /// The caller's most recent contested capture (either direction) via the
   /// `current_rival()` RPC — null if there is none yet.
   Future<Map<String, Object?>?> fetchCurrentRival() async {
