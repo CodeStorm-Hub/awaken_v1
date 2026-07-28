@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:camera/camera.dart';
 import 'package:injectable/injectable.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../alarm/domain/entities/alarm_schedule.dart';
@@ -62,9 +63,28 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
         ? AngleRepCounter.squat()
         : AngleRepCounter.pushup();
 
+    unawaited(
+      Sentry.addBreadcrumb(
+        Breadcrumb(
+          message: 'Verification session started',
+          category: 'verification',
+          data: {'exercise': exercise.name, 'targetReps': targetReps},
+        ),
+      ),
+    );
+
     try {
       await _camera.startFrontCameraStream(_onFrame);
-    } catch (_) {
+    } catch (e, st) {
+      unawaited(
+        Sentry.captureException(
+          e,
+          stackTrace: st,
+          withScope: (scope) => scope
+            ..setTag('exercise', exercise.name)
+            ..setTag('targetReps', targetReps.toString()),
+        ),
+      );
       _emit(
         VerificationState(
           status: VerificationStatus.cameraError,
@@ -94,6 +114,21 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
 
   @override
   Future<void> stop() async {
+    unawaited(
+      Sentry.addBreadcrumb(
+        Breadcrumb(
+          message: _state.isComplete
+              ? 'Verification session completed'
+              : 'Verification session ended early',
+          category: 'verification',
+          data: {
+            'exercise': _state.exerciseMode.name,
+            'completedReps': _state.completedReps,
+            'targetReps': _state.targetReps,
+          },
+        ),
+      ),
+    );
     _generation++;
     await _camera.stop();
     _repCounter = null;

@@ -108,7 +108,14 @@ class VerificationCubit extends Cubit<VerificationState> {
   @override
   Future<void> close() async {
     await _stateSub?.cancel();
-    await _stopSession(const NoParams());
+    // Fire-and-forget: camera teardown (stopImageStream + dispose) is native
+    // work that can take a noticeable moment on both CameraX and AVFoundation
+    // backends. Awaiting it here ties that cost to whatever triggered this
+    // close (typically a Navigator.pop), landing on the same frame as the
+    // page transition. The repository's `_generation` guard already discards
+    // any frame that straggles in after this point, so there's nothing for
+    // the caller to wait on.
+    unawaited(_stopSession(const NoParams()));
     await WakelockPlus.disable();
     return super.close();
   }
