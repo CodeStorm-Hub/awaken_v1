@@ -6,13 +6,23 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/gamification_widgets.dart';
+import '../../../../core/theme/motion_tokens.dart';
+import '../../../../core/theme/semantic_colors.dart';
+import '../../../../core/theme/shape_tokens.dart';
 import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
+import '../../../territory/presentation/pages/territory_page.dart';
+import '../../data/datasources/weekly_reset_local_datasource.dart';
 import '../../domain/entities/leaderboard_entry.dart';
+import '../../domain/entities/territory_capture_feed_item.dart';
 import '../../domain/usecases/get_global_leaderboard.dart';
+import '../../domain/usecases/get_my_leaderboard_rank.dart';
 import '../../domain/usecases/get_nearby_leaderboard.dart';
+import '../../domain/usecases/get_recent_territory_captures.dart';
 import '../bloc/squad_cubit.dart';
 import '../bloc/squad_state.dart';
 import '../squad_error_message.dart';
+import '../widgets/weekly_recap_sheet.dart';
 
 /// Squad leaderboard (Claude Design handoff — `isSquad`), wired to real
 /// Supabase-backed squad state (plan §6 Phase 6) instead of the original
@@ -25,7 +35,7 @@ class SquadPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider<SquadCubit>(
       create: (_) => getIt<SquadCubit>(),
-      child: const _SquadView(),
+      child: const _WeeklyResetCeremonyGate(child: _SquadView()),
     );
   }
 }
@@ -202,7 +212,9 @@ class _NoSquadView extends StatelessWidget {
               style: TextStyle(color: scheme.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+            const _ConquestTicker(),
+            const SizedBox(height: 4),
             SizedBox(
               width: double.infinity,
               child: FilledButton(
@@ -230,6 +242,18 @@ class _NoSquadView extends StatelessWidget {
                 child: const Text('Join with invite code'),
               ),
             ),
+            const SizedBox(height: 20),
+            // No squad yet still leaves "capture territory to appear on a
+            // leaderboard" reachable — previously only the loaded-and-empty
+            // squad leaderboard (below) carried this hint, so a brand new
+            // user had no path from here to Territory at all.
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const TerritoryPage()),
+              ),
+              icon: const Icon(Icons.map_outlined, size: 18),
+              label: const Text('Capture territory to start earning a rank'),
+            ),
           ],
         ),
       ),
@@ -251,6 +275,10 @@ Future<void> _showCreateSquadDialog(BuildContext context) async {
     ),
   );
   if (created == true) {
+    // Squad join/create previously only got a SnackBar, while territory
+    // capture gives a haptic — this brings squad creation up to the same
+    // celebratory feedback bar (2026-07-29 UI/UX audit item 8).
+    unawaited(HapticFeedback.mediumImpact());
     messenger.showSnackBar(const SnackBar(content: Text('Squad created.')));
   }
 }
@@ -269,6 +297,7 @@ Future<void> _showJoinSquadDialog(BuildContext context) async {
     ),
   );
   if (joined == true) {
+    unawaited(HapticFeedback.mediumImpact());
     messenger.showSnackBar(const SnackBar(content: Text('Joined squad.')));
   }
 }
@@ -459,6 +488,8 @@ class _SquadLoadedView extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _InviteCodeCard(inviteCode: squad.inviteCode),
+            const SizedBox(height: 14),
+            const _ConquestTicker(),
             const SizedBox(height: 18),
             if (live.isNotEmpty) ...[
               Text(
@@ -579,6 +610,7 @@ class _SquadLoadedView extends StatelessWidget {
                     row: row,
                     index: i,
                     count: state.leaderboard.length,
+                    isTied: isLeaderboardRowTied(state.leaderboard, i),
                   );
                 }),
               ),
@@ -666,50 +698,110 @@ class _InviteCodeCard extends StatelessWidget {
   }
 }
 
+/// True when [entries]`[index]` shares its rank with an adjacent entry —
+/// `LeaderboardEntry.rank` uses standard "competition ranking" (equal-area
+/// neighbors share a rank number) as of the 2026-07-29 UI/UX audit, so a
+/// shared rank is detected by comparing neighbors rather than re-deriving it
+/// from `areaSqm`.
+bool isLeaderboardRowTied(List<LeaderboardEntry> entries, int index) {
+  final tiedWithPrev =
+      index > 0 && entries[index - 1].rank == entries[index].rank;
+  final tiedWithNext =
+      index < entries.length - 1 &&
+      entries[index + 1].rank == entries[index].rank;
+  return tiedWithPrev || tiedWithNext;
+}
+
 class _LeaderboardRow extends StatelessWidget {
   const _LeaderboardRow({
     required this.row,
     required this.index,
     required this.count,
+    this.isTied = false,
   });
 
   final LeaderboardEntry row;
   final int index;
   final int count;
 
+  /// See [isLeaderboardRowTied] — renders as "T-N" instead of "N" so a
+  /// shared rank never implies a false ordering between tied rows.
+  final bool isTied;
+
+  /// Ranks 1-3 get gold/silver/bronze podium styling (distinct background
+  /// tint, taller row, bigger avatar) instead of the flat row every other
+  /// rank uses — matches ranks, not list position, so a page 2+ of the
+  /// paginated leaderboard sheet never podium-styles anything (no rank <= 3
+  /// row can appear there).
+  int? get _podiumPlace => row.rank <= 3 ? row.rank : null;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final colors = context.semanticColors;
+    final podiumPlace = _podiumPlace;
+
+    // Bronze/silver reuse `StreakTierAvatarRing`'s fixed "metal" hues so the
+    // podium and the streak-tier ring share one visual language; gold reuses
+    // the semantic bounty-gold role per the audit's design-system guidance.
+    final podiumColor = switch (podiumPlace) {
+      1 => colors.bountyGold,
+      2 => const Color(0xFFA8AEB8),
+      3 => const Color(0xFFB08D57),
+      _ => null,
+    };
+
     final radius = row.isYou
         ? BorderRadius.circular(14)
         : groupedItemRadius(index: index, count: count, outer: 14);
-    final bg = row.isYou
+    final bg = podiumColor != null
+        ? podiumColor.withValues(alpha: 0.16)
+        : row.isYou
         ? scheme.primary.withValues(alpha: 0.18)
         : scheme.surfaceContainer;
     final fg = row.isYou ? scheme.primary : scheme.onSurface;
-    final rankBg = row.rank == 1
-        ? const Color(0xFFFF9F0A).withValues(alpha: 0.2)
+    final rankBg = podiumColor != null
+        ? podiumColor.withValues(alpha: 0.24)
         : row.isYou
         ? scheme.primary.withValues(alpha: 0.25)
         : scheme.surfaceContainerHigh;
-    final rankFg = row.rank == 1
-        ? const Color(0xFFFF9F0A)
-        : row.isYou
-        ? scheme.primary
-        : secondaryLabelColor(context);
+    final rankFg =
+        podiumColor ??
+        (row.isYou ? scheme.primary : secondaryLabelColor(context));
+
+    // Height variation: 1st place tallest, 2nd/3rd a step down, everything
+    // else flat.
+    final verticalPadding = switch (podiumPlace) {
+      1 => 18.0,
+      2 => 15.0,
+      3 => 14.0,
+      _ => 13.0,
+    };
+    final avatarSize = switch (podiumPlace) {
+      1 => 40.0,
+      2 => 36.0,
+      3 => 34.0,
+      _ => 32.0,
+    };
+    final rankLabel = isTied ? 'T-${row.rank}' : '${row.rank}';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 3),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        padding: EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: verticalPadding,
+        ),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: radius,
           border: Border.all(
-            color: row.isYou
+            color: podiumColor != null
+                ? podiumColor.withValues(alpha: 0.5)
+                : row.isYou
                 ? scheme.primary.withValues(alpha: 0.4)
                 : scheme.outline,
-            width: row.isYou ? 1.0 : 0.5,
+            width: row.isYou || podiumColor != null ? 1.0 : 0.5,
           ),
         ),
         child: Row(
@@ -717,7 +809,7 @@ class _LeaderboardRow extends StatelessWidget {
             Expanded(
               child: Semantics(
                 label:
-                    'Rank ${row.rank}, ${row.displayName}'
+                    '${isTied ? 'Tied rank' : 'Rank'} ${row.rank}, ${row.displayName}'
                     '${row.isYou ? ', you' : ''}, '
                     '${row.streakTier.label}, '
                     '${(row.areaSqm / 1000000).toStringAsFixed(2)} square kilometers',
@@ -742,7 +834,7 @@ class _LeaderboardRow extends StatelessWidget {
                             child: Padding(
                               padding: const EdgeInsets.all(2),
                               child: Text(
-                                '${row.rank}',
+                                rankLabel,
                                 style: TextStyle(
                                   fontWeight: FontWeight.w800,
                                   color: rankFg,
@@ -753,13 +845,17 @@ class _LeaderboardRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      _MemberAvatar(
-                        displayName: row.displayName,
-                        avatarUrl: row.avatarUrl,
-                        size: 32,
-                        borderRadius: BorderRadius.circular(16),
-                        background: scheme.tertiaryContainer,
-                        foreground: scheme.onTertiaryContainer,
+                      StreakTierAvatarRing(
+                        tier: row.streakTier,
+                        size: avatarSize,
+                        child: _MemberAvatar(
+                          displayName: row.displayName,
+                          avatarUrl: row.avatarUrl,
+                          size: avatarSize,
+                          borderRadius: BorderRadius.circular(avatarSize / 2),
+                          background: scheme.tertiaryContainer,
+                          foreground: scheme.onTertiaryContainer,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -768,6 +864,8 @@ class _LeaderboardRow extends StatelessWidget {
                           children: [
                             Text(
                               row.displayName,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: fg,
@@ -936,14 +1034,35 @@ Future<void> _showReportMemberDialog(
 
 enum _LeaderboardScope { nearby, global }
 
-/// Nearby/global leaderboard scope + all-time/weekly time window (refined
-/// territory plan item 4) — deliberately separate from the squad-scoped
-/// leaderboard above (`SquadCubit.watchLeaderboard`'s live-polled stream),
-/// which needs neither a scope nor window picker and works whether or not
-/// this sheet is ever opened. One-shot fetches, refetched on scope/window
-/// change rather than polled — a leaderboard spanning "everyone nearby" or
-/// "everyone" doesn't need the same live-during-a-run freshness a squad's
-/// own handful of members does.
+/// `p_time_window` values the leaderboard RPCs accept, in display order.
+enum _TimeWindow {
+  daily('daily', 'Daily'),
+  weekly('weekly', 'Weekly'),
+  allTime('all_time', 'All-time');
+
+  const _TimeWindow(this.rpcValue, this.label);
+
+  final String rpcValue;
+  final String label;
+}
+
+/// Nearby/global leaderboard scope + daily/weekly/all-time time window
+/// (refined territory plan item 4; daily added per the 2026-07-29 UI/UX
+/// audit) — deliberately separate from the squad-scoped leaderboard above
+/// (`SquadCubit.watchLeaderboard`'s live-polled stream), which needs neither
+/// a scope nor window picker and works whether or not this sheet is ever
+/// opened. One-shot fetches, refetched on scope/window change rather than
+/// polled — a leaderboard spanning "everyone nearby" or "everyone" doesn't
+/// need the same live-during-a-run freshness a squad's own handful of
+/// members does.
+///
+/// Pagination: the underlying RPCs (`nearby_leaderboard`/`global_leaderboard`)
+/// take a `p_row_limit` (1-500) but no offset/cursor param, so "load more"
+/// on scroll-near-bottom re-fetches the whole list with a larger limit
+/// rather than using a true paged cursor — the simplest correct thing given
+/// the RPC surface, at the cost of re-transferring already-seen rows on
+/// each page grow. A future offset-aware RPC would let this become a real
+/// cursor without any client-visible behavior change.
 class _LeaderboardsSheet extends StatefulWidget {
   const _LeaderboardsSheet();
 
@@ -953,37 +1072,81 @@ class _LeaderboardsSheet extends StatefulWidget {
 
 class _LeaderboardsSheetState extends State<_LeaderboardsSheet> {
   static const _nearbyRadiusM = 5000.0;
+  static const _pageSize = 50;
 
   var _scope = _LeaderboardScope.nearby;
-  var _weekly = false;
+  var _timeWindow = _TimeWindow.weekly;
   var _loading = true;
+  var _loadingMore = false;
   String? _error;
   List<LeaderboardEntry> _entries = const [];
+  var _rowLimit = _pageSize;
+
+  /// True once a fetch returns fewer rows than requested (or hits the RPC's
+  /// 500-row ceiling) — no point requesting yet another page after that.
+  var _hasMore = true;
+
+  int? _myRank;
+
+  final _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     unawaited(_load());
+    unawaited(_loadMyRank());
   }
 
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_loading || _loadingMore || !_hasMore) return;
+    // "Near bottom" — within 200px of the end, so the next page has time to
+    // arrive before the user actually reaches it.
+    if (_scrollController.position.pixels >
+        _scrollController.position.maxScrollExtent - 200) {
+      unawaited(_loadMore());
+    }
+  }
+
+  Future<List<LeaderboardEntry>> _fetch(int rowLimit) {
+    return _scope == _LeaderboardScope.nearby
+        ? getIt<GetNearbyLeaderboard>()(
+            GetNearbyLeaderboardParams(
+              radiusM: _nearbyRadiusM,
+              timeWindow: _timeWindow.rpcValue,
+              rowLimit: rowLimit,
+            ),
+          )
+        : getIt<GetGlobalLeaderboard>()(
+            timeWindow: _timeWindow.rpcValue,
+            rowLimit: rowLimit,
+          );
+  }
+
+  /// Resets to the first page — called on initial load and on scope/window
+  /// change.
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
+      _rowLimit = _pageSize;
+      _hasMore = true;
     });
     try {
-      final entries = _scope == _LeaderboardScope.nearby
-          ? await getIt<GetNearbyLeaderboard>()(
-              GetNearbyLeaderboardParams(
-                radiusM: _nearbyRadiusM,
-                weekly: _weekly,
-              ),
-            )
-          : await getIt<GetGlobalLeaderboard>()(weekly: _weekly);
+      final entries = await _fetch(_rowLimit);
       if (!mounted) return;
       setState(() {
         _entries = entries;
         _loading = false;
+        _hasMore = entries.length >= _rowLimit && _rowLimit < 500;
       });
     } catch (e) {
       if (!mounted) return;
@@ -992,6 +1155,56 @@ class _LeaderboardsSheetState extends State<_LeaderboardsSheet> {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _loadMore() async {
+    setState(() => _loadingMore = true);
+    final nextLimit = (_rowLimit + _pageSize).clamp(0, 500);
+    try {
+      final entries = await _fetch(nextLimit);
+      if (!mounted) return;
+      setState(() {
+        _entries = entries;
+        _rowLimit = nextLimit;
+        _loadingMore = false;
+        _hasMore = entries.length >= nextLimit && nextLimit < 500;
+      });
+    } catch (_) {
+      // Best-effort — keep whatever page is already showing rather than
+      // surfacing a full-sheet error for a failed "load more" tick.
+      if (!mounted) return;
+      setState(() => _loadingMore = false);
+    }
+  }
+
+  /// Independent targeted query for the pinned "You: #N" row — deliberately
+  /// not derived from `_entries`, which is only ever a prefix of the full
+  /// leaderboard once pagination is involved.
+  Future<void> _loadMyRank() async {
+    try {
+      final rank = await getIt<GetMyLeaderboardRank>()(
+        nearby: _scope == _LeaderboardScope.nearby,
+        timeWindow: _timeWindow.rpcValue,
+        radiusM: _nearbyRadiusM,
+      );
+      if (!mounted) return;
+      setState(() => _myRank = rank);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _myRank = null);
+    }
+  }
+
+  void _onScopeChanged(_LeaderboardScope scope) {
+    setState(() => _scope = scope);
+    unawaited(_load());
+    unawaited(_loadMyRank());
+  }
+
+  void _onTimeWindowChanged(_TimeWindow window) {
+    setState(() => _timeWindow = window);
+    unawaited(_load());
+    unawaited(_loadMyRank());
   }
 
   @override
@@ -1040,10 +1253,8 @@ class _LeaderboardsSheetState extends State<_LeaderboardsSheet> {
                       ),
                     ],
                     selected: {_scope},
-                    onSelectionChanged: (selected) {
-                      setState(() => _scope = selected.first);
-                      unawaited(_load());
-                    },
+                    onSelectionChanged: (selected) =>
+                        _onScopeChanged(selected.first),
                   ),
                 ),
               ],
@@ -1052,23 +1263,54 @@ class _LeaderboardsSheetState extends State<_LeaderboardsSheet> {
             Row(
               children: [
                 Expanded(
-                  child: SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(value: false, label: Text('All-time')),
-                      ButtonSegment(value: true, label: Text('Weekly')),
+                  child: SegmentedButton<_TimeWindow>(
+                    segments: [
+                      for (final window in _TimeWindow.values)
+                        ButtonSegment(value: window, label: Text(window.label)),
                     ],
-                    selected: {_weekly},
-                    onSelectionChanged: (selected) {
-                      setState(() => _weekly = selected.first);
-                      unawaited(_load());
-                    },
+                    selected: {_timeWindow},
+                    onSelectionChanged: (selected) =>
+                        _onTimeWindowChanged(selected.first),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
+            // Sticky "you" row — an independent targeted query (`_myRank`),
+            // not scanned from `_entries`, so it stays correct regardless of
+            // how many pages have been loaded or whether the user's own row
+            // happens to be on the currently-fetched page at all.
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: 0.12),
+                borderRadius: ShapeTokens.medium,
+                border: Border.all(
+                  color: scheme.primary.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.person_pin_circle,
+                    size: 16,
+                    color: scheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _myRank == null ? 'You: unranked' : 'You: #$_myRank',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: scheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             SizedBox(
-              height: 320,
+              height: 360,
               child: _loading
                   ? const Center(child: ExpressiveLoader())
                   : _error != null
@@ -1090,12 +1332,30 @@ class _LeaderboardsSheetState extends State<_LeaderboardsSheet> {
                       ),
                     )
                   : ListView.builder(
-                      itemCount: _entries.length,
-                      itemBuilder: (context, i) => _LeaderboardRow(
-                        row: _entries[i],
-                        index: i,
-                        count: _entries.length,
-                      ),
+                      controller: _scrollController,
+                      itemCount: _entries.length + (_hasMore ? 1 : 0),
+                      itemBuilder: (context, i) {
+                        if (i >= _entries.length) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+                        return _LeaderboardRow(
+                          row: _entries[i],
+                          index: i,
+                          count: _entries.length,
+                          isTied: isLeaderboardRowTied(_entries, i),
+                        );
+                      },
                     ),
             ),
           ],
@@ -1103,4 +1363,191 @@ class _LeaderboardsSheetState extends State<_LeaderboardsSheet> {
       ),
     );
   }
+}
+
+/// Small live activity feed of recent territory captures — "conquest
+/// ticker" (2026-07-29 UI/UX audit item 9). Falls back to a periodic
+/// refetch rather than Realtime, since `SquadRemoteDataSource` only opens a
+/// per-squad Presence/Broadcast channel and there's no existing public
+/// broadcast channel this feed could piggyback on.
+class _ConquestTicker extends StatefulWidget {
+  const _ConquestTicker();
+
+  @override
+  State<_ConquestTicker> createState() => _ConquestTickerState();
+}
+
+class _ConquestTickerState extends State<_ConquestTicker> {
+  static const _refetchInterval = Duration(seconds: 30);
+  static const _rotateInterval = Duration(seconds: 4);
+
+  List<TerritoryCaptureFeedItem> _items = const [];
+  var _index = 0;
+  Timer? _refetchTimer;
+  Timer? _rotateTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+    _refetchTimer = Timer.periodic(_refetchInterval, (_) => unawaited(_load()));
+    _rotateTimer = Timer.periodic(_rotateInterval, (_) {
+      if (!mounted || _items.length < 2) return;
+      setState(() => _index = (_index + 1) % _items.length);
+    });
+  }
+
+  @override
+  void dispose() {
+    _refetchTimer?.cancel();
+    _rotateTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final items = await getIt<GetRecentTerritoryCaptures>()(rowLimit: 10);
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        if (_index >= items.length) _index = 0;
+      });
+    } catch (_) {
+      // Best-effort — a failed refetch just leaves the last known feed
+      // showing (or nothing, before the first successful load).
+    }
+  }
+
+  String _label(TerritoryCaptureFeedItem item) {
+    final areaLabel = item.areaTakenSqm >= 10000
+        ? '${(item.areaTakenSqm / 1000000).toStringAsFixed(2)} km²'
+        : '${item.areaTakenSqm.round()} m²';
+    return item.loserDisplayName == null
+        ? '${item.winnerDisplayName} captured $areaLabel of unclaimed ground'
+        : '${item.winnerDisplayName} captured $areaLabel from ${item.loserDisplayName}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_items.isEmpty) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    final item = _items[_index.clamp(0, _items.length - 1)];
+
+    return AnimatedSwitcher(
+      duration: MotionTokens.defaultSpatial,
+      switchInCurve: MotionTokens.effectsCurve,
+      switchOutCurve: MotionTokens.effectsCurve,
+      child: Container(
+        key: ValueKey(item.captureId),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainer,
+          borderRadius: ShapeTokens.mediumLarge,
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.bolt_rounded, size: 16, color: scheme.tertiary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  _label(item),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One-time weekly-leaderboard-reset ceremony (2026-07-29 UI/UX audit item
+/// 11) — wraps the whole page so it can run its check exactly once per
+/// `SquadPage` mount (the shell's `IndexedStack` keeps this tab's `State`
+/// alive across tab switches, so "once per mount" already means "once per
+/// app session" in practice) without disturbing `_SquadView`'s own
+/// `BlocBuilder` rebuilds. Uses the global weekly rank (`my_global_rank`),
+/// not a squad-scoped one — `WatchLeaderboard`/`squad_leaderboard` has no
+/// weekly-specific stream today, only the RPC's default `'all_time'`
+/// window, so reusing the already-time-windowed global rank query is the
+/// gap-free option rather than adding a second squad-scoped rank fetch.
+class _WeeklyResetCeremonyGate extends StatefulWidget {
+  const _WeeklyResetCeremonyGate({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_WeeklyResetCeremonyGate> createState() =>
+      _WeeklyResetCeremonyGateState();
+}
+
+class _WeeklyResetCeremonyGateState extends State<_WeeklyResetCeremonyGate> {
+  var _checked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowCeremony());
+  }
+
+  static String _isoWeekKey(DateTime date) {
+    final d = DateTime.utc(date.year, date.month, date.day);
+    // ISO week: the week containing this date's Thursday determines both
+    // the week's year and number, so a late-Dec/early-Jan date lands in the
+    // correct week even when it crosses a calendar-year boundary.
+    final thursday = d.add(Duration(days: 4 - d.weekday));
+    final firstDayOfYear = DateTime.utc(thursday.year, 1, 1);
+    final weekNum =
+        ((thursday.difference(firstDayOfYear).inDays) / 7).floor() + 1;
+    return '${thursday.year}-W$weekNum';
+  }
+
+  Future<void> _maybeShowCeremony() async {
+    if (_checked || !mounted) return;
+    _checked = true;
+    try {
+      final store = getIt<WeeklyResetLocalDataSource>();
+      final currentWeek = _isoWeekKey(DateTime.now());
+      final lastWeek = await store.getLastSeenWeek();
+      final lastRank = await store.getLastKnownRank();
+      final currentRank = await getIt<GetMyLeaderboardRank>()(
+        nearby: false,
+        timeWindow: 'weekly',
+      );
+
+      if (lastWeek != null &&
+          lastWeek != currentWeek &&
+          lastRank != null &&
+          currentRank != null &&
+          mounted) {
+        await showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => WeeklyRecapSheet(
+            currentRank: currentRank,
+            previousRank: lastRank,
+          ),
+        );
+      }
+
+      await store.save(isoWeek: currentWeek, rank: currentRank);
+    } catch (_) {
+      // Best-effort — never blocks the page on a failed rank fetch or a
+      // SharedPreferences read/write hiccup.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

@@ -96,6 +96,8 @@ import '../../features/profile/domain/usecases/watch_current_user.dart'
 import '../../features/profile/presentation/bloc/profile_cubit.dart' as _i800;
 import '../../features/squad/data/datasources/squad_remote_datasource.dart'
     as _i654;
+import '../../features/squad/data/datasources/weekly_reset_local_datasource.dart'
+    as _i564;
 import '../../features/squad/data/repositories/squad_repository_impl.dart'
     as _i235;
 import '../../features/squad/domain/repositories/squad_repository.dart'
@@ -103,8 +105,12 @@ import '../../features/squad/domain/repositories/squad_repository.dart'
 import '../../features/squad/domain/usecases/create_squad.dart' as _i134;
 import '../../features/squad/domain/usecases/get_global_leaderboard.dart'
     as _i752;
+import '../../features/squad/domain/usecases/get_my_leaderboard_rank.dart'
+    as _i113;
 import '../../features/squad/domain/usecases/get_nearby_leaderboard.dart'
     as _i966;
+import '../../features/squad/domain/usecases/get_recent_territory_captures.dart'
+    as _i418;
 import '../../features/squad/domain/usecases/join_squad.dart' as _i36;
 import '../../features/squad/domain/usecases/leave_squad.dart' as _i769;
 import '../../features/squad/domain/usecases/watch_leaderboard.dart' as _i670;
@@ -191,6 +197,9 @@ _i174.GetIt init(
   );
   gh.lazySingleton<_i804.OnboardingLocalDataSource>(
     () => _i804.OnboardingLocalDataSource(),
+  );
+  gh.lazySingleton<_i564.WeeklyResetLocalDataSource>(
+    () => _i564.WeeklyResetLocalDataSource(),
   );
   gh.lazySingleton<_i862.RunForegroundService>(
     () => _i862.RunForegroundService(),
@@ -308,8 +317,14 @@ _i174.GetIt init(
   gh.factory<_i752.GetGlobalLeaderboard>(
     () => _i752.GetGlobalLeaderboard(gh<_i1051.SquadRepository>()),
   );
+  gh.factory<_i113.GetMyLeaderboardRank>(
+    () => _i113.GetMyLeaderboardRank(gh<_i1051.SquadRepository>()),
+  );
   gh.factory<_i966.GetNearbyLeaderboard>(
     () => _i966.GetNearbyLeaderboard(gh<_i1051.SquadRepository>()),
+  );
+  gh.factory<_i418.GetRecentTerritoryCaptures>(
+    () => _i418.GetRecentTerritoryCaptures(gh<_i1051.SquadRepository>()),
   );
   gh.factory<_i36.JoinSquad>(
     () => _i36.JoinSquad(gh<_i1051.SquadRepository>()),
@@ -433,15 +448,6 @@ _i174.GetIt init(
   gh.factory<_i879.WatchRingingAlarm>(
     () => _i879.WatchRingingAlarm(gh<_i1014.AlarmRepository>()),
   );
-  gh.factory<_i816.HomeCubit>(
-    () => _i816.HomeCubit(
-      gh<_i416.WatchCurrentStreak>(),
-      gh<_i838.WatchOwnedArea>(),
-      gh<_i343.WatchMyRank>(),
-      gh<_i871.WatchMySquad>(),
-      gh<_i135.WatchRecentActivity>(),
-    ),
-  );
   gh.lazySingleton<_i487.AuthRepository>(
     () => _i1.AuthRepositoryImpl(
       gh<_i670.AuthRemoteDataSource>(),
@@ -450,6 +456,17 @@ _i174.GetIt init(
       gh<_i1014.AlarmRepository>(),
       gh<_i1051.SquadRepository>(),
       gh<_i666.SyncWorker>(),
+    ),
+  );
+  gh.factory<_i816.HomeCubit>(
+    () => _i816.HomeCubit(
+      gh<_i416.WatchCurrentStreak>(),
+      gh<_i838.WatchOwnedArea>(),
+      gh<_i343.WatchMyRank>(),
+      gh<_i871.WatchMySquad>(),
+      gh<_i135.WatchRecentActivity>(),
+      gh<_i959.WakeUpTaxStore>(),
+      gh<_i1039.PullDownSync>(),
     ),
   );
   gh.factory<_i3.RunTrackingCubit>(

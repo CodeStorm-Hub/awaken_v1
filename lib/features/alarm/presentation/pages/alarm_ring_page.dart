@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/router/navigator_key.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/shape_tokens.dart';
 import '../../../verification/domain/entities/verification_result.dart';
 import '../../../verification/presentation/pages/verification_page.dart';
 import '../../domain/entities/alarm_schedule.dart';
@@ -226,7 +227,10 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
-                      color: scheme.onErrorContainer.withValues(alpha: 0.7),
+                      // Bumped from ~0.7 to 0.9 — legibility in bright light
+                      // (e.g. sunlight through a window at wake-up time)
+                      // suffers at lower contrast against `errorContainer`.
+                      color: scheme.onErrorContainer.withValues(alpha: 0.9),
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
@@ -239,18 +243,38 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
                   children: [
                     _RingingBell(scheme: scheme),
                     const SizedBox(height: 28),
-                    Text(
-                      widget.alarm.exerciseMode == ExerciseMode.squat
-                          ? 'Time to squat!'
-                          : 'Time to push up!',
-                      style: TextStyle(
-                        fontSize: 30,
-                        height: 36 / 30,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: -0.4,
-                        color: scheme.onErrorContainer,
-                      ),
-                      textAlign: TextAlign.center,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Same icon mapping as the exercise chips on
+                        // `alarm_list_page.dart`'s `_AlarmCard` — pairing
+                        // the label with the icon the user already
+                        // associates with this exercise from the alarm
+                        // list, instead of text alone.
+                        Icon(
+                          widget.alarm.exerciseMode == ExerciseMode.squat
+                              ? Icons.accessibility_new
+                              : Icons.sports_gymnastics,
+                          size: 28,
+                          color: scheme.onErrorContainer,
+                        ),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            widget.alarm.exerciseMode == ExerciseMode.squat
+                                ? 'Time to squat!'
+                                : 'Time to push up!',
+                            style: TextStyle(
+                              fontSize: 30,
+                              height: 36 / 30,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: -0.4,
+                              color: scheme.onErrorContainer,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
                     ),
                     Text(
                       '$effectiveReps',
@@ -278,14 +302,33 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
                           horizontal: 16,
                           vertical: 8,
                         ),
-                        color: scheme.error,
-                        child: Text(
-                          'Wake-up tax applied (×${taxMultiplier.toStringAsFixed(1)})',
-                          style: TextStyle(
-                            color: scheme.onError,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
+                        decoration: BoxDecoration(
+                          color: scheme.error,
+                          // Was a flat square-cornered `Container` — every
+                          // other surface on this screen (start-workout
+                          // button, ring segments) is pill-shaped; this
+                          // matches that visual language instead of
+                          // standing out as a mismatched rectangle.
+                          borderRadius: ShapeTokens.pill,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              size: 16,
+                              color: scheme.onError,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Wake-up tax applied (×${taxMultiplier.toStringAsFixed(1)})',
+                              style: TextStyle(
+                                color: scheme.onError,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

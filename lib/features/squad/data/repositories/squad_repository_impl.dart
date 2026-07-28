@@ -7,6 +7,7 @@ import '../../domain/entities/leaderboard_entry.dart';
 import '../../domain/entities/squad.dart';
 import '../../domain/entities/squad_presence_member.dart';
 import '../../domain/entities/streak_tier.dart';
+import '../../domain/entities/territory_capture_feed_item.dart';
 import '../../domain/repositories/squad_repository.dart';
 import '../datasources/squad_remote_datasource.dart';
 
@@ -137,25 +138,42 @@ class SquadRepositoryImpl implements SquadRepository {
     _emitSquad(null);
   }
 
+  /// Standard "competition ranking" (1, 2, 2, 4 — a tie doesn't consume the
+  /// next rank number, but the entry after a tied group skips ahead as if
+  /// it hadn't been) rather than plain `index + 1`. Rows arrive already
+  /// sorted desc by `area_sqm` from the RPC, so equal-area neighbors share a
+  /// rank; the UI (`_LeaderboardRow`) renders a shared rank as "T-N" by
+  /// comparing a row's rank against its neighbors'.
   List<LeaderboardEntry> _mapLeaderboardRows(
     List<Map<String, dynamic>> rows, {
     String defaultName = 'Player',
   }) {
     final userId = _currentUserId;
-    return [
-      for (var i = 0; i < rows.length; i++)
+    final entries = <LeaderboardEntry>[];
+    int? previousRank;
+    double? previousArea;
+    for (var i = 0; i < rows.length; i++) {
+      final area = (rows[i]['area_sqm'] as num?)?.toDouble() ?? 0;
+      final rank = (previousArea != null && area == previousArea)
+          ? previousRank!
+          : i + 1;
+      previousRank = rank;
+      previousArea = area;
+      entries.add(
         LeaderboardEntry(
-          rank: i + 1,
+          rank: rank,
           userId: rows[i]['user_id'] as String,
           displayName: (rows[i]['display_name'] as String?) ?? defaultName,
           streakTier: StreakTier.fromValue(
             (rows[i]['streak_tier'] as num?)?.toInt() ?? 0,
           ),
-          areaSqm: (rows[i]['area_sqm'] as num?)?.toDouble() ?? 0,
+          areaSqm: area,
           isYou: rows[i]['user_id'] == userId,
           avatarUrl: rows[i]['avatar_url'] as String?,
         ),
-    ];
+      );
+    }
+    return entries;
   }
 
   @override
@@ -180,23 +198,57 @@ class SquadRepositoryImpl implements SquadRepository {
   @override
   Future<List<LeaderboardEntry>> fetchNearbyLeaderboard({
     required double radiusM,
-    required bool weekly,
+    required String timeWindow,
+    int rowLimit = 50,
   }) async {
     final rows = await _remote.fetchNearbyLeaderboard(
       radiusM: radiusM,
-      timeWindow: weekly ? 'weekly' : 'all_time',
+      timeWindow: timeWindow,
+      rowLimit: rowLimit,
     );
     return _mapLeaderboardRows(rows);
   }
 
   @override
   Future<List<LeaderboardEntry>> fetchGlobalLeaderboard({
-    required bool weekly,
+    required String timeWindow,
+    int rowLimit = 50,
   }) async {
     final rows = await _remote.fetchGlobalLeaderboard(
-      timeWindow: weekly ? 'weekly' : 'all_time',
+      timeWindow: timeWindow,
+      rowLimit: rowLimit,
     );
     return _mapLeaderboardRows(rows);
+  }
+
+  @override
+  Future<int?> fetchMyGlobalRank({required String timeWindow}) =>
+      _remote.fetchMyGlobalRank(timeWindow: timeWindow);
+
+  @override
+  Future<int?> fetchMyNearbyRank({
+    required double radiusM,
+    required String timeWindow,
+  }) => _remote.fetchMyNearbyRank(radiusM: radiusM, timeWindow: timeWindow);
+
+  @override
+  Future<List<TerritoryCaptureFeedItem>> fetchRecentTerritoryCaptures({
+    int rowLimit = 10,
+  }) async {
+    final rows = await _remote.fetchRecentTerritoryCaptures(rowLimit: rowLimit);
+    return [
+      for (final row in rows)
+        TerritoryCaptureFeedItem(
+          captureId: row['capture_id'] as String,
+          winnerId: row['winner_id'] as String,
+          winnerDisplayName:
+              (row['winner_display_name'] as String?) ?? 'A player',
+          loserId: row['loser_id'] as String?,
+          loserDisplayName: row['loser_display_name'] as String?,
+          areaTakenSqm: (row['area_taken_sqm'] as num?)?.toDouble() ?? 0,
+          createdAt: DateTime.parse(row['created_at'] as String),
+        ),
+    ];
   }
 
   /// Latest broadcast-telemetry label per user, per squad — kept as

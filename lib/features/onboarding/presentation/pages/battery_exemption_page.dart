@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/semantic_colors.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../domain/entities/battery_exemption_status.dart';
 import '../../domain/usecases/check_battery_exemption_status.dart';
@@ -16,9 +17,16 @@ import '../../domain/usecases/request_battery_exemption.dart';
 /// stock Android — offers a best-effort deep link into their vendor
 /// autostart/protected-apps screen too.
 class BatteryExemptionPage extends StatefulWidget {
-  const BatteryExemptionPage({this.onContinue, super.key});
+  const BatteryExemptionPage({this.onContinue, this.onBack, super.key});
 
   final VoidCallback? onContinue;
+
+  /// Only supplied when this page is reached as an onboarding step (see
+  /// `onboarding_page.dart`) — lets the user step back to the notification-
+  /// rationale step instead of onboarding being one-way forward only.
+  /// `null` when opened standalone from Profile, where there's no previous
+  /// onboarding step to return to.
+  final VoidCallback? onBack;
 
   @override
   State<BatteryExemptionPage> createState() => _BatteryExemptionPageState();
@@ -89,8 +97,22 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (widget.onBack != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 8, 20, 0),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  tooltip: 'Back',
+                  onPressed: widget.onBack,
+                ),
+              ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 6),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                widget.onBack != null ? 6 : 22,
+                20,
+                6,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -166,10 +188,10 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage>
                                   : BorderRadius.circular(20),
                               bg: status.isExempt
                                   ? scheme.primaryContainer
-                                  : const Color(0xFFFFE08C),
+                                  : context.semanticColors.warningContainer,
                               fg: status.isExempt
                                   ? scheme.onPrimaryContainer
-                                  : const Color(0xFF2A1F00),
+                                  : context.semanticColors.onWarningContainer,
                               icon: status.isExempt
                                   ? Icons.check_circle
                                   : Icons.warning,
@@ -207,6 +229,21 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage>
                                     getIt<OpenOemAutostartSettings>()(
                                       const NoParams(),
                                     ),
+                              ),
+                            ],
+                            if (!status.isExempt) ...[
+                              const SizedBox(height: 10),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                child: Text(
+                                  'You can enable this later in Settings → '
+                                  'Battery.',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
                               ),
                             ],
                           ],

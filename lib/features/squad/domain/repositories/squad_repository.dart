@@ -1,6 +1,7 @@
 import '../entities/leaderboard_entry.dart';
 import '../entities/squad.dart';
 import '../entities/squad_presence_member.dart';
+import '../entities/territory_capture_feed_item.dart';
 
 abstract interface class SquadRepository {
   /// The caller's current squad, or `null` if not in one. Re-emits after
@@ -23,14 +24,42 @@ abstract interface class SquadRepository {
   /// One-shot (not polled, unlike [watchLeaderboard]) — players within
   /// [radiusM] of the caller's own last submitted run location. Empty if
   /// the caller has never submitted a run (`profiles.last_run_location` is
-  /// null server-side).
+  /// null server-side). [timeWindow] is `'all_time'`/`'weekly'`/`'daily'`
+  /// (matches the RPC's `p_time_window` check constraint). [rowLimit] is
+  /// the RPC's `p_row_limit` (1-500) — there's no server-side offset/cursor,
+  /// so "load more" is implemented by refetching with a larger [rowLimit],
+  /// not a true paged cursor.
   Future<List<LeaderboardEntry>> fetchNearbyLeaderboard({
     required double radiusM,
-    required bool weekly,
+    required String timeWindow,
+    int rowLimit = 50,
   });
 
-  /// One-shot global top-N leaderboard.
-  Future<List<LeaderboardEntry>> fetchGlobalLeaderboard({required bool weekly});
+  /// One-shot global top-N leaderboard. See [fetchNearbyLeaderboard] for
+  /// [timeWindow]/[rowLimit] semantics.
+  Future<List<LeaderboardEntry>> fetchGlobalLeaderboard({
+    required String timeWindow,
+    int rowLimit = 50,
+  });
+
+  /// Caller's own rank in [fetchGlobalLeaderboard]'s ordering, fetched as an
+  /// independent targeted query (`my_global_rank` RPC) rather than scanning
+  /// a page-limited list client-side. Null if the caller has captured no
+  /// area yet (not on the board).
+  Future<int?> fetchMyGlobalRank({required String timeWindow});
+
+  /// Caller's own rank in [fetchNearbyLeaderboard]'s ordering. Null if the
+  /// caller has no `last_run_location` yet.
+  Future<int?> fetchMyNearbyRank({
+    required double radiusM,
+    required String timeWindow,
+  });
+
+  /// Recent territory captures across all users (`recent_territory_captures`
+  /// RPC) for the "conquest ticker" activity feed — most recent first.
+  Future<List<TerritoryCaptureFeedItem>> fetchRecentTerritoryCaptures({
+    int rowLimit = 10,
+  });
 
   /// Realtime Presence sync/join/leave for the squad's channel — online
   /// members and their current activity label.

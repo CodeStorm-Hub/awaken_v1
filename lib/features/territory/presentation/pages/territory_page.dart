@@ -7,8 +7,14 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/motion_tokens.dart';
+import '../../../../core/theme/semantic_colors.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
+import '../../../squad/domain/entities/squad.dart';
+import '../../../squad/domain/entities/squad_presence_member.dart';
+import '../../../squad/domain/usecases/watch_my_squad.dart';
+import '../../../squad/domain/usecases/watch_squad_presence.dart';
 import '../../domain/entities/bounty_zone.dart';
 import '../../domain/entities/geo_bounds.dart';
 import '../../domain/entities/rival.dart';
@@ -51,6 +57,21 @@ class _TerritoryPageState extends State<TerritoryPage> {
   final _fillsByTerritoryId = <String, List<Fill>>{};
   List<Territory> _lastTerritories = const [];
 
+  // Dashed rival outlines (item 3) and pulsing at-risk borders (item 5) are
+  // both built from separate `Line` annotations layered on top of each
+  // territory's `Fill` — see `TerritoryMapStyle.ringToDashSegments`'s doc
+  // comment for why (this `maplibre_gl` version has no line-dash paint
+  // property to draw them as part of the fill's own outline).
+  final _outlineLinesByTerritoryId = <String, List<Line>>{};
+  final _atRiskPulseLinesByTerritoryId = <String, List<Line>>{};
+  Timer? _pulseTimer;
+  double _pulseT = 0;
+
+  // Ids of owned territories from the *previous* redraw — a territory that
+  // is mine now but wasn't a moment ago just got captured, and gets the
+  // grow-in animation (item 7) instead of popping in at full opacity.
+  Set<String> _knownMineIds = {};
+
   LatLng _center = const LatLng(20, 0);
   bool _hasFix = false;
   bool _showRivalTerritory = true;
@@ -64,11 +85,30 @@ class _TerritoryPageState extends State<TerritoryPage> {
   Rival? _currentRival;
   List<TerritoryAtRisk> _atRisk = const [];
 
+  // Unclaimed/"capturable" ground near the user (item 4) — a subtle
+  // neutral-tinted ring around the last known fix, Ingress-style, so the
+  // map reads as "you can capture this" rather than empty space.
+  Fill? _neutralZoneFill;
+
+  // Squad territory heatmap (item 11) — client-side aggregation of
+  // already-fetched `Territory` rows (via `ownerId`) against the caller's
+  // squad's online member ids. `SquadRepository` doesn't expose a
+  // dedicated "all my squad's territory" query, so this reuses whatever
+  // territories are already cached/visible in the current viewport rather
+  // than fetching a separate global set.
+  Squad? _mySquad;
+  Set<String> _squadMemberIds = {};
+  StreamSubscription<Squad?>? _squadSub;
+  StreamSubscription<List<SquadPresenceMember>>? _presenceSub;
+  bool _showSquadHeatmap = false;
+  final _squadHeatmapFillsByTerritoryId = <String, List<Fill>>{};
+
   @override
   void initState() {
     super.initState();
     unawaited(_locateSelf());
     unawaited(_loadRivalAndDecayStatus());
+    _loadSquadInfo();
   }
 
   @override
@@ -104,9 +144,34 @@ class _TerritoryPageState extends State<TerritoryPage> {
   @override
   void dispose() {
     unawaited(_territoriesSub?.cancel());
+    unawaited(_squadSub?.cancel());
+    unawaited(_presenceSub?.cancel());
     _bboxRefreshDebounceTimer?.cancel();
+    _pulseTimer?.cancel();
     _styleLoader.dispose();
     super.dispose();
+  }
+
+  /// Best-effort — the caller may not be in a squad, and squad membership
+  /// isn't needed for the map's core owned/rival territory rendering, only
+  /// for the optional heatmap layer toggle.
+  void _loadSquadInfo() {
+    _squadSub = getIt<WatchMySquad>()().listen((squad) {
+      unawaited(_presenceSub?.cancel());
+      _mySquad = squad;
+      if (squad == null) {
+        if (mounted) setState(() => _squadMemberIds = {});
+        unawaited(_redrawSquadHeatmap());
+        return;
+      }
+      _presenceSub = getIt<WatchSquadPresence>()(squad.id).listen((members) {
+        if (!mounted) return;
+        setState(() {
+          _squadMemberIds = members.map((m) => m.userId).toSet();
+        });
+        unawaited(_redrawSquadHeatmap());
+      });
+    });
   }
 
   Future<void> _locateSelf() async {
@@ -123,6 +188,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
           CameraUpdate.newLatLngZoom(_center, _focusZoom),
         );
         await _syncCurrentPositionMarker();
+        await _syncNeutralZone();
         // Explicit, rather than relying on `animateCamera` reliably
         // triggering `onCameraIdle` on its own (plugin behavior this
         // shouldn't have to depend on). Real gap found live: `initState`
@@ -165,17 +231,24 @@ class _TerritoryPageState extends State<TerritoryPage> {
 
   Future<void> _onMapCreated(MapLibreMapController controller) async {
     // A fallback-tier style swap tears down and recreates the native map
-    // view entirely (see MapStyleLoader) — any Fill handles from before the
-    // swap belong to a now-destroyed view, so they can't be passed to
-    // removeFills on the new controller. The new view starts with none.
+    // view entirely (see MapStyleLoader) — any Fill/Line handles from
+    // before the swap belong to a now-destroyed view, so they can't be
+    // passed to removeFills/removeLines on the new controller. The new view
+    // starts with none.
     _fillsByTerritoryId.clear();
     _bountyFillsByZoneId.clear();
+    _outlineLinesByTerritoryId.clear();
+    _atRiskPulseLinesByTerritoryId.clear();
+    _squadHeatmapFillsByTerritoryId.clear();
+    _pulseTimer?.cancel();
+    _pulseTimer = null;
     // Missed here previously: the marker handle from before the swap also
     // belongs to the now-destroyed view, so `_syncCurrentPositionMarker`'s
     // `updateCircle` on the stale handle silently no-oped against the new
     // one — the blue position dot never reappeared after a style-tier
     // fallback, even though fills/bounty zones correctly redrew.
     _positionMarker = null;
+    _neutralZoneFill = null;
     _controller = controller;
     _styleLoader.start();
   }
@@ -187,6 +260,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
         CameraUpdate.newLatLngZoom(_center, _focusZoom),
       );
       await _syncCurrentPositionMarker();
+      await _syncNeutralZone();
     }
     await _refreshForCurrentView();
     // A fallback-tier style swap tears down and recreates the native map
@@ -196,6 +270,34 @@ class _TerritoryPageState extends State<TerritoryPage> {
     await _territoriesSub?.cancel();
     _territoriesSub = getIt<WatchTerritories>()().listen(_onTerritoriesChanged);
     unawaited(_drawBountyZones());
+  }
+
+  /// Unclaimed, runnable ground near the user (item 4) — a subtle
+  /// `territoryNeutral`-tinted ring around the last known fix, so the map
+  /// reads as "this is capturable" rather than empty space (Ingress-style
+  /// neutral/faction painting). Drawn once per fix rather than tracked
+  /// continuously with the position marker, since it's meant to read as
+  /// "the area around here," not a precise live radius.
+  Future<void> _syncNeutralZone() async {
+    final controller = _controller;
+    if (controller == null || !_hasFix || !mounted) return;
+    final semantic = context.semanticColors;
+    final ring = _circlePolygon(_center.latitude, _center.longitude, 300);
+    if (_neutralZoneFill == null) {
+      _neutralZoneFill = await controller.addFill(
+        FillOptions(
+          geometry: [ring],
+          fillColor: _colorToHex(semantic.territoryNeutral),
+          fillOpacity: 0.08,
+          fillOutlineColor: _colorToHex(semantic.territoryNeutral),
+        ),
+      );
+    } else {
+      await controller.updateFill(
+        _neutralZoneFill!,
+        FillOptions(geometry: [ring]),
+      );
+    }
   }
 
   /// Bounty zones are few and global (not per-viewport like territories),
@@ -221,15 +323,17 @@ class _TerritoryPageState extends State<TerritoryPage> {
       await controller.removeFills(existingFills);
     }
     _bountyFillsByZoneId.clear();
+    if (!mounted) return;
+    final semantic = context.semanticColors;
 
     for (final zone in zones) {
       final ring = _circlePolygon(zone.centerLat, zone.centerLng, zone.radiusM);
       final fill = await controller.addFill(
         FillOptions(
           geometry: [ring],
-          fillColor: _colorToHex(const Color(0xFFFFD700)),
+          fillColor: _colorToHex(semantic.bountyGold),
           fillOpacity: 0.25,
-          fillOutlineColor: _colorToHex(const Color(0xFFFFAB00)),
+          fillOutlineColor: _colorToHex(semantic.bountyGold),
         ),
       );
       _bountyFillsByZoneId[zone.id] = [fill];
@@ -266,11 +370,34 @@ class _TerritoryPageState extends State<TerritoryPage> {
   void _onTerritoriesChanged(List<Territory> territories) {
     _lastTerritories = territories;
     unawaited(_redrawFills());
+    unawaited(_redrawSquadHeatmap());
+  }
+
+  /// Health (0-100) for an owned territory, derived from
+  /// `TerritoryAtRisk.lastDefendedAt`/`expiresAt` (the only decay signal
+  /// this app's backend currently exposes to the client — `Territory`
+  /// itself has no `health` column). A territory absent from the at-risk
+  /// list is outside the decay warning window entirely, i.e. full health.
+  /// Used to fade owned-fill opacity (item 6) and to gate the pulsing
+  /// at-risk border (item 5).
+  double _healthOf(
+    String territoryId,
+    Map<String, TerritoryAtRisk> atRiskById,
+  ) {
+    final risk = atRiskById[territoryId];
+    if (risk == null) return 100;
+    final totalWindowSec = risk.expiresAt
+        .difference(risk.lastDefendedAt)
+        .inSeconds;
+    if (totalWindowSec <= 0) return 0;
+    final remainingSec = risk.expiresAt.difference(DateTime.now()).inSeconds;
+    return (remainingSec / totalWindowSec * 100).clamp(0, 100).toDouble();
   }
 
   Future<void> _redrawFills() async {
     final controller = _controller;
-    if (controller == null) return;
+    if (controller == null || !mounted) return;
+    final semantic = context.semanticColors;
 
     final allFills = _fillsByTerritoryId.values.expand((f) => f).toList();
     if (allFills.isNotEmpty) {
@@ -278,29 +405,238 @@ class _TerritoryPageState extends State<TerritoryPage> {
     }
     _fillsByTerritoryId.clear();
 
+    final allOutlineLines = [
+      ..._outlineLinesByTerritoryId.values.expand((l) => l),
+      ..._atRiskPulseLinesByTerritoryId.values.expand((l) => l),
+    ];
+    if (allOutlineLines.isNotEmpty) {
+      await controller.removeLines(allOutlineLines);
+    }
+    _outlineLinesByTerritoryId.clear();
+    _atRiskPulseLinesByTerritoryId.clear();
+
+    final atRiskById = {for (final t in _atRisk) t.id: t};
+
+    // A territory that's mine now but wasn't a moment ago just got
+    // captured (item 7) — animated in via `_animateCaptureGrowIn` below
+    // instead of popping straight to full opacity.
+    final currentMineIds = _lastTerritories
+        .where((t) => t.isMine)
+        .map((t) => t.id)
+        .toSet();
+    final newlyCaptured = currentMineIds.difference(_knownMineIds);
+    _knownMineIds = currentMineIds;
+
     for (final territory in _lastTerritories) {
       if (!territory.isMine && !_showRivalTerritory) continue;
       final polygons = TerritoryMapStyle.territoryPolygonsToLatLng(territory);
       final fills = <Fill>[];
+      final lines = <Line>[];
+
+      // Single source of truth for ownership colors (item 2) — both this
+      // fill/outline logic and `_TerritoryLegend` below now read the same
+      // `context.semanticColors` roles instead of two independently
+      // hardcoded hex literals.
       final fillColor = territory.isMine
-          ? const Color(0xFF1E66FF)
-          : const Color(0xFFFF2A6D);
+          ? semantic.territoryOwnedFill
+          : semantic.territoryRivalFill;
       final outlineColor = territory.isMine
-          ? const Color(0xFF00E5FF)
-          : const Color(0xFFFF5252);
+          ? semantic.territoryOwned
+          : semantic.territoryRival;
+
+      // Health decay texture (item 6): fade owned-fill opacity down as
+      // health drops, so defending territory feels visually urgent on the
+      // map itself. Full opacity at health 100, ~40% of the base opacity
+      // by health 25 and below. Rival territory has no health signal
+      // available to this client, so it stays at a flat base opacity.
+      final baseOpacity = territory.isMine ? 0.40 : 0.32;
+      final health = territory.isMine
+          ? _healthOf(territory.id, atRiskById)
+          : 100.0;
+      final healthFactor = (0.4 + 0.6 * ((health - 25).clamp(0, 75) / 75))
+          .clamp(0.4, 1.0);
+      final targetOpacity = territory.isMine
+          ? baseOpacity * healthFactor
+          : baseOpacity;
+
+      final isAnimatingCapture =
+          territory.isMine && newlyCaptured.contains(territory.id);
 
       for (final rings in polygons) {
         final fill = await controller.addFill(
           FillOptions(
             geometry: rings,
             fillColor: _colorToHex(fillColor),
-            fillOpacity: 0.40,
+            fillOpacity: isAnimatingCapture ? 0 : targetOpacity,
             fillOutlineColor: _colorToHex(outlineColor),
           ),
         );
         fills.add(fill);
+
+        if (rings.isEmpty) continue;
+        final outerRing = rings.first;
+
+        if (!territory.isMine) {
+          // Color-only differentiation fix (item 3): rival territory gets
+          // a dashed outline built from broken line segments (see
+          // `TerritoryMapStyle.ringToDashSegments`'s doc comment on why —
+          // this `maplibre_gl` version has no line-dash paint property),
+          // distinct from owned territory's solid `fillOutlineColor`.
+          for (final segment in TerritoryMapStyle.ringToDashSegments(
+            outerRing,
+          )) {
+            if (segment.length < 2) continue;
+            final line = await controller.addLine(
+              LineOptions(
+                geometry: segment,
+                lineColor: _colorToHex(outlineColor),
+                lineWidth: 2,
+              ),
+            );
+            lines.add(line);
+          }
+        } else if (atRiskById.containsKey(territory.id)) {
+          // Pulsing at-risk border (item 5) — a separate solid `Line` on
+          // top of the fill, whose width/opacity are ticked by
+          // `_tickPulse` via `updateLine` (see `_updatePulseTimer`).
+          final line = await controller.addLine(
+            LineOptions(
+              geometry: outerRing,
+              lineColor: _colorToHex(semantic.territoryAtRisk),
+              lineWidth: 3,
+            ),
+          );
+          _atRiskPulseLinesByTerritoryId
+              .putIfAbsent(territory.id, () => [])
+              .add(line);
+        }
       }
       _fillsByTerritoryId[territory.id] = fills;
+      if (lines.isNotEmpty) _outlineLinesByTerritoryId[territory.id] = lines;
+
+      if (isAnimatingCapture) {
+        unawaited(_animateCaptureGrowIn(fills, targetOpacity));
+      }
+    }
+
+    _updatePulseTimer();
+  }
+
+  /// Capture is an event, not a state swap (item 7): a newly-captured
+  /// territory's fill ramps from transparent to its target opacity over
+  /// `MotionTokens.defaultSpatial` (~500ms) instead of popping straight to
+  /// full color. `maplibre_gl`'s annotation API has no built-in
+  /// paint-property animation/interpolation — `updateFill` sets a value
+  /// immediately — so this drives it with a stepped ramp of `updateFill`
+  /// calls instead, which is the option available within that API.
+  Future<void> _animateCaptureGrowIn(
+    List<Fill> fills,
+    double targetOpacity,
+  ) async {
+    if (fills.isEmpty) return;
+    final controllerAtStart = _controller;
+    if (controllerAtStart == null) return;
+    if (mounted && MediaQuery.disableAnimationsOf(context)) {
+      for (final fill in fills) {
+        await controllerAtStart.updateFill(
+          fill,
+          FillOptions(fillOpacity: targetOpacity),
+        );
+      }
+      return;
+    }
+    const steps = 6;
+    final stepMs = (MotionTokens.defaultSpatial.inMilliseconds / steps).round();
+    for (var i = 1; i <= steps; i++) {
+      await Future<void>.delayed(Duration(milliseconds: stepMs));
+      // A style-tier swap tears down and recreates the native map view
+      // mid-animation — its Fill handles belong to a destroyed view, so
+      // bail rather than call `updateFill` against a stale controller.
+      if (_controller != controllerAtStart) return;
+      final opacity = targetOpacity * (i / steps);
+      for (final fill in fills) {
+        await controllerAtStart.updateFill(
+          fill,
+          FillOptions(fillOpacity: opacity),
+        );
+      }
+    }
+  }
+
+  /// Starts/stops the periodic `updateLine` ticker driving the pulsing
+  /// at-risk border (item 5). Guarded by `MediaQuery.disableAnimationsOf`
+  /// for reduce-motion — a static (non-pulsing, still-present) border still
+  /// gets drawn in `_redrawFills` either way, so reduce-motion users don't
+  /// lose the at-risk signal, only its animation.
+  void _updatePulseTimer() {
+    if (_atRiskPulseLinesByTerritoryId.isEmpty) {
+      _pulseTimer?.cancel();
+      _pulseTimer = null;
+      return;
+    }
+    if (_pulseTimer != null) return;
+    if (mounted && MediaQuery.disableAnimationsOf(context)) return;
+    _pulseTimer = Timer.periodic(
+      const Duration(milliseconds: 120),
+      (_) => unawaited(_tickPulse()),
+    );
+  }
+
+  Future<void> _tickPulse() async {
+    final controller = _controller;
+    if (controller == null || _atRiskPulseLinesByTerritoryId.isEmpty) return;
+    _pulseT += 0.12;
+    final t = (math.sin(_pulseT * math.pi) + 1) / 2; // 0..1..0 loop
+    final width = 2.0 + t * 3.0;
+    final opacity = 0.5 + t * 0.5;
+    for (final lines in _atRiskPulseLinesByTerritoryId.values) {
+      for (final line in lines) {
+        await controller.updateLine(
+          line,
+          LineOptions(lineWidth: width, lineOpacity: opacity),
+        );
+      }
+    }
+  }
+
+  /// Squad territory heatmap (item 11) — an aggregated tinted overlay
+  /// distinct from the individual owned/rival colors above, covering every
+  /// territory owned by the caller or by an online squad member. Drawn as
+  /// a second, low-opacity underlay so it doesn't obscure the per-member
+  /// coloring it's layered on top of.
+  Future<void> _redrawSquadHeatmap() async {
+    final controller = _controller;
+    if (controller == null || !mounted) return;
+
+    final existing = _squadHeatmapFillsByTerritoryId.values
+        .expand((f) => f)
+        .toList();
+    if (existing.isNotEmpty) {
+      await controller.removeFills(existing);
+    }
+    _squadHeatmapFillsByTerritoryId.clear();
+
+    if (!_showSquadHeatmap || !mounted) return;
+    final semantic = context.semanticColors;
+    final tint = Color.lerp(semantic.territoryOwned, Colors.white, 0.15)!;
+
+    for (final territory in _lastTerritories) {
+      if (!territory.isMine && !_squadMemberIds.contains(territory.ownerId)) {
+        continue;
+      }
+      final polygons = TerritoryMapStyle.territoryPolygonsToLatLng(territory);
+      final fills = <Fill>[];
+      for (final rings in polygons) {
+        final fill = await controller.addFill(
+          FillOptions(
+            geometry: rings,
+            fillColor: _colorToHex(tint),
+            fillOpacity: 0.22,
+          ),
+        );
+        fills.add(fill);
+      }
+      _squadHeatmapFillsByTerritoryId[territory.id] = fills;
     }
   }
 
@@ -414,6 +750,12 @@ class _TerritoryPageState extends State<TerritoryPage> {
             MapStyleRetryingBanner(top: topPadding + 64),
           if (_styleLoader.status == MapStyleLoadStatus.failed)
             MapStyleFailureOverlay(onRetry: _styleLoader.retry),
+          // Persistent — stays up for as long as the loader is on the
+          // bundled fallback tier, unlike the retrying banner above (which
+          // disappears the instant *any* tier, including this one, finishes
+          // loading). See `MapStyleLoader.isDegradedFallback`'s doc comment.
+          if (_styleLoader.isDegradedFallback)
+            MapDegradedModeChip(top: topPadding + 64),
 
           // OSM Attribution
           Positioned(
@@ -461,10 +803,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    _TerritoryLegend(
-                      scheme: scheme,
-                      showRivalTerritory: _showRivalTerritory,
-                    ),
+                    _TerritoryLegend(showRivalTerritory: _showRivalTerritory),
                   ],
                 ),
                 const _SyncStatusBanner(),
@@ -553,7 +892,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
                               width: 9,
                               height: 9,
                               decoration: BoxDecoration(
-                                color: const Color(0xFFFF2A6D),
+                                color: context.semanticColors.territoryRival,
                                 shape: BoxShape.circle,
                                 border: Border.all(
                                   color: scheme.surfaceContainerHigh,
@@ -672,6 +1011,40 @@ class _TerritoryPageState extends State<TerritoryPage> {
                                 setState(() => _showRivalTerritory = value);
                                 unawaited(_redrawFills());
                               },
+                            ),
+                          ),
+                          // Squad territory heatmap (item 11) — an
+                          // aggregated overlay of every squad member's
+                          // owned territory. Disabled with an explanatory
+                          // subtitle rather than hidden entirely when the
+                          // caller isn't in a squad, so the layer's
+                          // existence isn't a surprise once they join one.
+                          Material(
+                            type: MaterialType.transparency,
+                            child: SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text(
+                                'Squad territory heatmap',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              subtitle: Text(
+                                _mySquad == null
+                                    ? 'Join a squad to highlight its combined turf'
+                                    : "Highlight your squad's combined turf",
+                                style: TextStyle(
+                                  color: secondaryLabelColor(sheetContext),
+                                ),
+                              ),
+                              value: _showSquadHeatmap,
+                              onChanged: _mySquad == null
+                                  ? null
+                                  : (value) {
+                                      setSheetState(
+                                        () => _showSquadHeatmap = value,
+                                      );
+                                      setState(() => _showSquadHeatmap = value);
+                                      unawaited(_redrawSquadHeatmap());
+                                    },
                             ),
                           ),
                         ],
@@ -819,23 +1192,25 @@ class _OwnedAreaChip extends StatelessWidget {
 }
 
 class _TerritoryLegend extends StatelessWidget {
-  const _TerritoryLegend({
-    required this.scheme,
-    required this.showRivalTerritory,
-  });
+  const _TerritoryLegend({required this.showRivalTerritory});
 
-  final ColorScheme scheme;
   final bool showRivalTerritory;
 
   @override
   Widget build(BuildContext context) {
+    // Single source of truth (item 2): reads the same
+    // `context.semanticColors` roles the map's own fill/outline redraw
+    // logic uses in `_TerritoryPageState._redrawFills`, instead of a
+    // second, independently-hardcoded set of hex literals.
+    final scheme = Theme.of(context).colorScheme;
+    final semantic = context.semanticColors;
     return AppleGlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       borderRadius: BorderRadius.circular(999),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _LegendDot(color: const Color(0xFF00E5FF)),
+          _LegendDot(color: semantic.territoryOwned),
           const SizedBox(width: 6),
           Text(
             'YOU',
@@ -848,7 +1223,11 @@ class _TerritoryLegend extends StatelessWidget {
           ),
           if (showRivalTerritory) ...[
             const SizedBox(width: 12),
-            _LegendDot(color: const Color(0xFFFF2A6D)),
+            // Dashed ring around the dot (rather than a plain solid dot)
+            // mirrors the map's own dashed-outline cue for rival territory
+            // (item 3) — colorblind users get the same secondary shape
+            // signal in the legend as on the map itself.
+            _LegendDot(color: semantic.territoryRival, dashed: true),
             const SizedBox(width: 6),
             Text(
               'RIVALS',
@@ -860,6 +1239,18 @@ class _TerritoryLegend extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(width: 12),
+          _LegendDot(color: semantic.territoryNeutral, hollow: true),
+          const SizedBox(width: 6),
+          Text(
+            'OPEN',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
@@ -886,18 +1277,22 @@ class _AtRiskBanner extends StatelessWidget {
     final label = territories.length == 1
         ? "1 territory undefended — reverts in $timeLeft"
         : "${territories.length} territories undefended — reverts in $timeLeft";
+    // Same role the map's own pulsing at-risk border uses (item 5/2) —
+    // this banner and the map polygon it's describing now share one color
+    // source instead of two independently chosen "warning orange" hexes.
+    final atRiskColor = context.semanticColors.territoryAtRisk;
 
     return AppleGlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       borderRadius: BorderRadius.circular(16),
-      borderColor: const Color(0xFFFF9500).withValues(alpha: 0.6),
+      borderColor: atRiskColor.withValues(alpha: 0.6),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             padding: const EdgeInsets.all(5),
-            decoration: const BoxDecoration(
-              color: Color(0xFFFF9500),
+            decoration: BoxDecoration(
+              color: atRiskColor,
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -912,13 +1307,13 @@ class _AtRiskBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
+                Text(
                   'DEFEND TERRITORY',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0.8,
-                    color: Color(0xFFFF9500),
+                    color: atRiskColor,
                   ),
                 ),
                 Text(
@@ -950,7 +1345,9 @@ class _RivalCard extends StatelessWidget {
     final areaLabel =
         '${(rival.areaTakenSqm / 1000000).toStringAsFixed(3)} km²';
     final isWinner = rival.asWinner;
-    final accentColor = isWinner ? scheme.primary : const Color(0xFFFF2A6D);
+    final accentColor = isWinner
+        ? scheme.primary
+        : context.semanticColors.territoryRival;
     final label = isWinner
         ? 'Captured $areaLabel from $name'
         : '$name seized $areaLabel from you';
@@ -1000,6 +1397,27 @@ class _RivalCard extends StatelessWidget {
               ],
             ),
           ),
+          // Only shown when the rival took land from the caller — a win
+          // already reads as resolved and doesn't need a follow-up CTA.
+          // `Rival` (domain/entities/rival.dart) carries no coordinate, and
+          // `ActiveRunPage` takes no start-location param, so this opens the
+          // normal active-run flow rather than a rival-centered map — a
+          // real gap, not a client oversight (see squad_page.dart audit
+          // note near `_RivalCard`'s import in this file).
+          if (!isWinner) ...[
+            const SizedBox(width: 8),
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: accentColor,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                minimumSize: const Size(0, 36),
+              ),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const ActiveRunPage()),
+              ),
+              child: const Text('Steal back'),
+            ),
+          ],
         ],
       ),
     );
@@ -1007,12 +1425,33 @@ class _RivalCard extends StatelessWidget {
 }
 
 class _LegendDot extends StatelessWidget {
-  const _LegendDot({required this.color});
+  const _LegendDot({
+    required this.color,
+    this.dashed = false,
+    this.hollow = false,
+  });
 
   final Color color;
 
+  /// Ring instead of a filled dot, with a dashed-looking border — mirrors
+  /// the map's dashed rival outline (item 3) as a shape cue, not just hue.
+  final bool dashed;
+
+  /// Outline-only, no fill — mirrors the neutral-zone ring style (item 4).
+  final bool hollow;
+
   @override
   Widget build(BuildContext context) {
+    if (dashed || hollow) {
+      return Container(
+        width: 9,
+        height: 9,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: color, width: dashed ? 2 : 1.5),
+        ),
+      );
+    }
     return Container(
       width: 9,
       height: 9,

@@ -1,6 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 
+import 'motion_tokens.dart';
+import 'shape_tokens.dart';
+
 /// Shared M3-Expressive-style building blocks used across the redesigned
 /// alarm/verification/onboarding screens (see the "Awaken Flutter Mobile
 /// App" Claude Design handoff, `m3x.css`). Core Flutter ships none of this
@@ -69,7 +72,7 @@ class AppleGlassContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = scheme.brightness == Brightness.dark;
-    final effectiveRadius = borderRadius ?? BorderRadius.circular(16);
+    final effectiveRadius = borderRadius ?? ShapeTokens.mediumLarge;
 
     // Apple HIG Translucent Glossy Glass Tints
     final glassColor = isDark
@@ -322,8 +325,8 @@ class ExpressiveFlower extends StatelessWidget {
     if (!animatePop || MediaQuery.disableAnimationsOf(context)) return blob;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeOutBack,
+      duration: MotionTokens.defaultSpatial,
+      curve: MotionTokens.spatialCurve,
       builder: (context, value, scaledChild) =>
           Transform.scale(scale: value, child: scaledChild),
       child: blob,
@@ -370,6 +373,20 @@ class _ExpressiveLoaderState extends State<ExpressiveLoader>
   @override
   Widget build(BuildContext context) {
     final color = widget.color ?? Theme.of(context).colorScheme.primary;
+    // Reduce-motion: freeze on the resting shape instead of looping the
+    // morph/spin — matches the guard already applied to [ExpressiveFlower].
+    if (MediaQuery.disableAnimationsOf(context)) {
+      if (_controller.isAnimating) _controller.stop();
+      return Container(
+        width: widget.size,
+        height: widget.size,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(widget.size * _shapeStops.first),
+        ),
+      );
+    }
+    if (!_controller.isAnimating) _controller.repeat();
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -430,8 +447,8 @@ class ExpressiveSwitch extends StatelessWidget {
           height: 48,
           child: Center(
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              curve: Curves.easeOut,
+              duration: MotionTokens.fastEffects,
+              curve: MotionTokens.effectsCurve,
               width: 56,
               height: 32,
               decoration: BoxDecoration(
@@ -443,14 +460,14 @@ class ExpressiveSwitch extends StatelessWidget {
                 ),
               ),
               child: AnimatedAlign(
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeOutBack,
+                duration: MotionTokens.fastSpatial,
+                curve: MotionTokens.spatialCurve,
                 alignment: value ? Alignment.centerRight : Alignment.centerLeft,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 350),
-                    curve: Curves.easeOutBack,
+                    duration: MotionTokens.fastSpatial,
+                    curve: MotionTokens.spatialCurve,
                     width: value ? 24 : 18,
                     height: value ? 24 : 18,
                     decoration: BoxDecoration(
@@ -477,8 +494,8 @@ class ExpressiveSwitch extends StatelessWidget {
 BorderRadius groupedItemRadius({
   required int index,
   required int count,
-  double outer = 24,
-  double inner = 8,
+  double outer = 24, // ShapeTokens.extraLarge
+  double inner = 8, // ShapeTokens.small
 }) {
   final top = index == 0 ? outer : inner;
   final bottom = index == count - 1 ? outer : inner;
@@ -499,7 +516,7 @@ class StatTile extends StatelessWidget {
     required this.value,
     required this.label,
     this.icon,
-    this.radius = const BorderRadius.all(Radius.circular(8)),
+    this.radius = ShapeTokens.small,
     this.hasError = false,
     super.key,
   });

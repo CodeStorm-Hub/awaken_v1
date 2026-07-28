@@ -5,10 +5,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/gamification_widgets.dart';
+import '../../../../core/theme/semantic_colors.dart';
+import '../../../../core/theme/shape_tokens.dart';
 import '../../../alarm/domain/entities/alarm_schedule.dart';
 import '../../../alarm/presentation/bloc/alarm_cubit.dart';
 import '../../../alarm/presentation/bloc/alarm_state.dart';
 import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
+import '../../../squad/domain/entities/streak_tier.dart';
 import '../../domain/entities/recent_activity_entry.dart';
 import '../bloc/home_cubit.dart';
 import '../bloc/home_state.dart';
@@ -58,12 +62,19 @@ class HomePage extends StatelessWidget {
                               const _GreetingText(),
                               Text(
                                 'Awaken',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.5,
-                                  color: scheme.onSurface,
-                                ),
+                                style:
+                                    Theme.of(context).textTheme.titleLarge
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.5,
+                                          color: scheme.onSurface,
+                                        ) ??
+                                    TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.5,
+                                      color: scheme.onSurface,
+                                    ),
                               ),
                             ],
                           ),
@@ -85,33 +96,40 @@ class HomePage extends StatelessWidget {
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(
-                                    0xFFFF9F0A,
-                                  ).withValues(alpha: 0.15),
+                                  color: context.semanticColors.streakFlame
+                                      .withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Icons.local_fire_department,
                                       size: 14,
-                                      color: Color(0xFFFF9F0A),
+                                      color: context.semanticColors.streakFlame,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       '${home.streak}',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
-                                        color: Color(0xFFFF9F0A),
+                                        color:
+                                            context.semanticColors.streakFlame,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              const CurrentUserAvatarButton(),
+                              StreakTierAvatarRing(
+                                tier: streakTierForDays(home.streak),
+                                // 44 (the avatar's own tap target) + ring
+                                // width/padding so the ring wraps around the
+                                // button instead of clipping it down.
+                                size: 53,
+                                child: const CurrentUserAvatarButton(),
+                              ),
                             ],
                           ),
                         ],
@@ -119,90 +137,124 @@ class HomePage extends StatelessWidget {
                     ),
                   ),
                   Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _NextAlarmCardBloc(onViewAlarms: onOpenAlarms),
-                          const SizedBox(height: 12),
-                          if (home.streak == 0 && home.ownedAreaSqm == 0)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Text(
-                                "Dismiss an alarm or capture territory to build your stats.",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: secondaryLabelColor(context),
+                    child: RefreshIndicator(
+                      onRefresh: () => context.read<HomeCubit>().refresh(),
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _NextAlarmCardBloc(onViewAlarms: onOpenAlarms),
+                            const SizedBox(height: 12),
+                            if (home.wakeUpTaxMultiplier > 1.0)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: WakeUpTaxMeter(
+                                  multiplier: home.wakeUpTaxMultiplier,
                                 ),
                               ),
+                            if (home.streak == 0 &&
+                                home.ownedAreaSqm == 0 &&
+                                !home.streakError &&
+                                !home.ownedAreaError &&
+                                !home.streakLoading &&
+                                !home.ownedAreaLoading)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                  "Dismiss an alarm or capture territory to build your stats.",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: secondaryLabelColor(context),
+                                  ),
+                                ),
+                              ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: home.streakLoading
+                                      ? const _SkeletonStatTile(
+                                          radius: BorderRadius.horizontal(
+                                            left: Radius.circular(14),
+                                          ),
+                                        )
+                                      : StatTile(
+                                          bg: scheme.surfaceContainer,
+                                          fg: scheme.primary,
+                                          icon: Icons.local_fire_department,
+                                          value: '${home.streak}',
+                                          label: 'Day streak',
+                                          hasError: home.streakError,
+                                          radius: const BorderRadius.horizontal(
+                                            left: Radius.circular(14),
+                                          ),
+                                        ),
+                                ),
+                                const SizedBox(width: 2),
+                                Expanded(
+                                  child: home.ownedAreaLoading
+                                      ? const _SkeletonStatTile()
+                                      : StatTile(
+                                          bg: scheme.surfaceContainer,
+                                          fg: context
+                                              .semanticColors
+                                              .territoryOwned,
+                                          icon: Icons.landscape,
+                                          value: (home.ownedAreaSqm / 1000000)
+                                              .toStringAsFixed(2),
+                                          label: 'km² owned',
+                                          hasError: home.ownedAreaError,
+                                        ),
+                                ),
+                                const SizedBox(width: 2),
+                                Expanded(
+                                  child: StatTile(
+                                    bg: scheme.surfaceContainer,
+                                    fg: context.semanticColors.success,
+                                    icon: Icons.emoji_events,
+                                    value: home.squadRank == null
+                                        ? '—'
+                                        : '#${home.squadRank}',
+                                    label: 'Squad rank',
+                                    hasError: home.squadRankError,
+                                    radius: const BorderRadius.horizontal(
+                                      right: Radius.circular(14),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: StatTile(
-                                  bg: scheme.surfaceContainer,
-                                  fg: scheme.primary,
-                                  icon: Icons.local_fire_department,
-                                  value: '${home.streak}',
-                                  label: 'Day streak',
-                                  hasError: home.streakError,
-                                  radius: const BorderRadius.horizontal(
-                                    left: Radius.circular(14),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 2),
-                              Expanded(
-                                child: StatTile(
-                                  bg: scheme.surfaceContainer,
-                                  fg: const Color(0xFFFF9F0A),
-                                  icon: Icons.landscape,
-                                  value: (home.ownedAreaSqm / 1000000)
-                                      .toStringAsFixed(2),
-                                  label: 'km² owned',
-                                  hasError: home.ownedAreaError,
-                                ),
-                              ),
-                              const SizedBox(width: 2),
-                              Expanded(
-                                child: StatTile(
-                                  bg: scheme.surfaceContainer,
-                                  fg: const Color(0xFF30D158),
-                                  icon: Icons.emoji_events,
-                                  value: home.squadRank == null
-                                      ? '—'
-                                      : '#${home.squadRank}',
-                                  label: 'Squad rank',
-                                  hasError: home.squadRankError,
-                                  radius: const BorderRadius.horizontal(
-                                    right: Radius.circular(14),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-                          _QuickActionsPill(
-                            onOpenTerritory: onOpenTerritory,
-                            onOpenSquad: onOpenSquad,
-                          ),
-                          const SizedBox(height: 14),
-                          const _SectionLabel('ACHIEVEMENTS'),
-                          _AchievementsRow(
-                            streak: home.streak,
-                            ownedAreaSqm: home.ownedAreaSqm,
-                            hasSquad: home.squad != null,
-                          ),
-                          const SizedBox(height: 14),
-                          const _SectionLabel('RECENT ACTIVITY'),
-                          _RecentActivitySection(
-                            activity: home.recentActivity,
-                            hasError: home.recentActivityError,
-                            onRetry: () =>
-                                context.read<HomeCubit>().retryRecentActivity(),
-                          ),
-                        ],
+                            const SizedBox(height: 14),
+                            _QuickActionsPill(
+                              onOpenTerritory: onOpenTerritory,
+                              onOpenSquad: onOpenSquad,
+                            ),
+                            const SizedBox(height: 14),
+                            Semantics(
+                              header: true,
+                              child: const _SectionLabel('ACHIEVEMENTS'),
+                            ),
+                            _AchievementsRow(
+                              streak: home.streak,
+                              ownedAreaSqm: home.ownedAreaSqm,
+                              hasSquad: home.squad != null,
+                            ),
+                            const SizedBox(height: 14),
+                            Semantics(
+                              header: true,
+                              child: const _SectionLabel('RECENT ACTIVITY'),
+                            ),
+                            _RecentActivitySection(
+                              activity: home.recentActivity,
+                              hasError: home.recentActivityError,
+                              loading: home.recentActivityLoading,
+                              onRetry: () => context
+                                  .read<HomeCubit>()
+                                  .retryRecentActivity(),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -235,10 +287,26 @@ class _AchievementsRow extends StatelessWidget {
         icon: Icons.local_fire_department,
         label: '4d Streak',
         unlocked: streak >= 4,
+        requirement: 'Dismiss alarms 4 days in a row to unlock.',
       ),
-      (icon: Icons.landscape, label: 'Territory', unlocked: ownedAreaSqm > 0),
-      (icon: Icons.groups, label: 'Squad', unlocked: hasSquad),
-      (icon: Icons.emoji_events, label: '30d Streak', unlocked: streak >= 30),
+      (
+        icon: Icons.landscape,
+        label: 'Territory',
+        unlocked: ownedAreaSqm > 0,
+        requirement: 'Complete a run that closes a loop to capture territory.',
+      ),
+      (
+        icon: Icons.groups,
+        label: 'Squad',
+        unlocked: hasSquad,
+        requirement: 'Join or create a squad to unlock.',
+      ),
+      (
+        icon: Icons.emoji_events,
+        label: '30d Streak',
+        unlocked: streak >= 30,
+        requirement: 'Dismiss alarms 30 days in a row to unlock.',
+      ),
     ];
     return AppleGlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -248,39 +316,55 @@ class _AchievementsRow extends StatelessWidget {
         children: achievements.map((a) {
           return Semantics(
             label: '${a.label}, ${a.unlocked ? 'unlocked' : 'locked'}',
+            button: !a.unlocked,
+            hint: a.unlocked ? null : a.requirement,
             child: ExcludeSemantics(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: a.unlocked
-                          ? scheme.primary.withValues(alpha: 0.2)
-                          : scheme.surfaceContainerHigh,
-                      shape: BoxShape.circle,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: a.unlocked
+                    ? null
+                    : () {
+                        ScaffoldMessenger.of(context)
+                          ..hideCurrentSnackBar()
+                          ..showSnackBar(
+                            SnackBar(
+                              content: Text('${a.label}: ${a.requirement}'),
+                            ),
+                          );
+                      },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: a.unlocked
+                            ? scheme.primary.withValues(alpha: 0.2)
+                            : scheme.surfaceContainerHigh,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        a.icon,
+                        size: 18,
+                        color: a.unlocked
+                            ? scheme.primary
+                            : secondaryLabelColor(context),
+                      ),
                     ),
-                    child: Icon(
-                      a.icon,
-                      size: 18,
-                      color: a.unlocked
-                          ? scheme.primary
-                          : secondaryLabelColor(context),
+                    const SizedBox(height: 4),
+                    Text(
+                      a.label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: a.unlocked
+                            ? scheme.onSurface
+                            : secondaryLabelColor(context),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    a.label,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: a.unlocked
-                          ? scheme.onSurface
-                          : secondaryLabelColor(context),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           );
@@ -290,16 +374,44 @@ class _AchievementsRow extends StatelessWidget {
   }
 }
 
-class _RecentActivitySection extends StatelessWidget {
+class _RecentActivitySection extends StatefulWidget {
   const _RecentActivitySection({
     required this.activity,
     required this.hasError,
+    required this.loading,
     required this.onRetry,
   });
 
   final List<RecentActivityEntry> activity;
   final bool hasError;
+  final bool loading;
   final VoidCallback onRetry;
+
+  @override
+  State<_RecentActivitySection> createState() =>
+      _RecentActivitySectionState();
+}
+
+/// Ticks the relative-time labels ("Just now" / "5m ago") on the same coarse
+/// timer pattern as `_GreetingTextState` — previously computed once per
+/// build and never re-evaluated, so an entry would say "Just now" forever
+/// until some unrelated rebuild happened to occur.
+class _RecentActivitySectionState extends State<_RecentActivitySection> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   String _relativeTime(DateTime dt) {
     final diff = DateTime.now().difference(dt);
@@ -314,7 +426,21 @@ class _RecentActivitySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    if (hasError) {
+    if (widget.loading) {
+      return Column(
+        children: List.generate(
+          3,
+          (i) => Padding(
+            padding: const EdgeInsets.only(bottom: 3),
+            child: _SkeletonBlock(
+              height: 50,
+              radius: groupedItemRadius(index: i, count: 3, outer: 14),
+            ),
+          ),
+        ),
+      );
+    }
+    if (widget.hasError) {
       return Row(
         children: [
           Expanded(
@@ -323,19 +449,23 @@ class _RecentActivitySection extends StatelessWidget {
               style: TextStyle(fontSize: 13, color: scheme.error),
             ),
           ),
-          TextButton(onPressed: onRetry, child: const Text('Try again')),
+          TextButton(
+            style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+            onPressed: widget.onRetry,
+            child: const Text('Try again'),
+          ),
         ],
       );
     }
-    if (activity.isEmpty) {
+    if (widget.activity.isEmpty) {
       return Text(
         'No activity yet — dismiss an alarm or capture territory.',
         style: TextStyle(fontSize: 12, color: secondaryLabelColor(context)),
       );
     }
     return Column(
-      children: List.generate(activity.length, (i) {
-        final a = activity[i];
+      children: List.generate(widget.activity.length, (i) {
+        final a = widget.activity[i];
         final icon = a.kind == RecentActivityKind.alarmDismissed
             ? Icons.check_circle_outline
             : Icons.landscape_outlined;
@@ -345,7 +475,7 @@ class _RecentActivitySection extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             borderRadius: groupedItemRadius(
               index: i,
-              count: activity.length,
+              count: widget.activity.length,
               outer: 14,
             ),
             child: Row(
@@ -495,8 +625,8 @@ class _NextAlarmCard extends StatelessWidget {
           const SizedBox(width: 12),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: scheme.primary.withValues(alpha: 0.18),
-              foregroundColor: scheme.primary,
+              backgroundColor: scheme.primaryContainer,
+              foregroundColor: scheme.onPrimaryContainer,
               elevation: 0,
               minimumSize: const Size(0, 36),
               shape: RoundedRectangleBorder(
@@ -602,6 +732,137 @@ class _SectionLabel extends StatelessWidget {
           color: secondaryLabelColor(context),
         ),
       ),
+    );
+  }
+}
+
+/// Loading placeholder for `StatTile` — same size/shape (padding, icon
+/// circle, value/label lines) as the real tile, so the layout doesn't jump
+/// once the underlying stream produces its first value. Wrapped in
+/// [_Pulsing] rather than a static gray block so it doesn't read as a
+/// permanently-broken tile.
+class _SkeletonStatTile extends StatelessWidget {
+  const _SkeletonStatTile({this.radius = ShapeTokens.small});
+
+  final BorderRadius radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return _Pulsing(
+      child: Container(
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainer,
+          borderRadius: radius,
+          border: Border.all(
+            color: scheme.outline.withValues(alpha: 0.15),
+            width: 1,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                width: 32,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                width: 48,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Generic pulsing placeholder block — used for `_RecentActivitySection`'s
+/// loading rows, matching each real row's approximate height/shape.
+class _SkeletonBlock extends StatelessWidget {
+  const _SkeletonBlock({required this.height, required this.radius});
+
+  final double height;
+  final BorderRadius radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return _Pulsing(
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainer,
+          borderRadius: radius,
+          border: Border.all(
+            color: scheme.outline.withValues(alpha: 0.15),
+            width: 1,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shared shimmer loop for the skeleton placeholders above — a plain
+/// `AnimatedOpacity` toggled on a timer between 0.4 and 1.0, per the audit's
+/// "no new package needed" note (no `shimmer`/`skeletonizer` dependency).
+class _Pulsing extends StatefulWidget {
+  const _Pulsing({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_Pulsing> createState() => _PulsingState();
+}
+
+class _PulsingState extends State<_Pulsing> {
+  bool _dim = false;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 700), (_) {
+      if (mounted) setState(() => _dim = !_dim);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) return widget.child;
+    return AnimatedOpacity(
+      opacity: _dim ? 0.4 : 1.0,
+      duration: const Duration(milliseconds: 700),
+      curve: Curves.easeInOut,
+      child: widget.child,
     );
   }
 }

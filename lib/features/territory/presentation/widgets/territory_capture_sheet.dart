@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/semantic_colors.dart';
 
 /// Territory-captured celebration (Claude Design handoff —
 /// `isTerritoryCelebrate`). `areaLabel` comes from the real `submit_run()`
@@ -22,6 +23,7 @@ class TerritoryCaptureSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final semantic = context.semanticColors;
 
     return SafeArea(
       top: false,
@@ -119,21 +121,22 @@ class TerritoryCaptureSheet extends StatelessWidget {
               ),
               if (bountyMultiplier != null && bountyMultiplier! > 1.0) ...[
                 const SizedBox(height: 8),
+                // Was hardcoded dark-gold-on-black regardless of theme
+                // (audit finding — clashed in light mode). Reads from
+                // `context.semanticColors.bountyGold`/`bountyGoldContainer`
+                // now, so it stays legible and on-brand in both themes.
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2E2300),
+                    color: semantic.bountyGoldContainer,
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: const Color(0xFFFFD700),
-                      width: 1.5,
-                    ),
+                    border: Border.all(color: semantic.bountyGold, width: 1.5),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                        color: semantic.bountyGold.withValues(alpha: 0.3),
                         blurRadius: 8,
                       ),
                     ],
@@ -141,19 +144,19 @@ class TerritoryCaptureSheet extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.local_fire_department,
                         size: 15,
-                        color: Color(0xFFFFD700),
+                        color: semantic.bountyGold,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         'BOUNTY ZONE — ${bountyMultiplier!.toStringAsFixed(0)}x credit applied',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0.5,
-                          color: Color(0xFFFFD700),
+                          color: semantic.bountyGold,
                         ),
                       ),
                     ],

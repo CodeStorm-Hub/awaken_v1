@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
@@ -422,7 +423,15 @@ class _StatusBannerState extends State<_StatusBanner>
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           decoration: BoxDecoration(
             color: Colors.black.withValues(alpha: 0.54),
-            borderRadius: BorderRadius.circular(999),
+            // Was `circular(999)` (a true pill) — the low-light guidance
+            // message ("Can't see you clearly — step back or find better
+            // light.") is long enough to wrap to two lines on narrower
+            // phones, and a two-line pill with fully-rounded ends looks
+            // broken (near-circular caps squeezing the wrapped text).
+            // A smaller rounded-rect radius still reads as a soft banner
+            // chip on the single-line messages and doesn't visually break
+            // when the text wraps.
+            borderRadius: BorderRadius.circular(18),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -754,6 +763,19 @@ class _PermissionDeniedView extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
+            // Previously the only escape hatch was giving up on the
+            // exercise entirely — if the denial was accidental (or the user
+            // just didn't understand the system prompt) there was no way
+            // to fix it without leaving this screen, finding the app in OS
+            // settings themselves, and coming back. `openAppSettings()`
+            // (permission_handler) jumps straight to Awaken's app-settings
+            // page, matching the same pattern already used elsewhere in the
+            // app for permission recovery.
+            FilledButton(
+              onPressed: () => unawaited(openAppSettings()),
+              child: const Text('Open Settings'),
+            ),
+            const SizedBox(height: 8),
             TextButton(
               onPressed: () => Navigator.of(context).pop(
                 const VerificationResult(completed: false, repsCompleted: 0),

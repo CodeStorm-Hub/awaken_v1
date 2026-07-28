@@ -12,15 +12,21 @@ class OsmAttribution extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Was a hardcoded `Colors.white.withValues(alpha: 0.7)` — a bright
+    // patch that clashed with the rest of the map chrome's dark glass
+    // styling in dark mode (audit finding). Reading from the theme instead
+    // keeps this in step with `AppleGlassContainer` and friends in both
+    // brightnesses.
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.7),
+        color: scheme.surface.withValues(alpha: 0.75),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: const Text(
+      child: Text(
         '© OpenStreetMap contributors',
-        style: TextStyle(fontSize: 9, color: Colors.black87),
+        style: TextStyle(fontSize: 9, color: scheme.onSurface.withValues(alpha: 0.85)),
       ),
     );
   }

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../sync/outbox/sync_worker.dart';
+import '../../../../sync/sync_status.dart';
 import '../../../alarm/presentation/pages/alarm_list_page.dart';
 import '../../../home/presentation/pages/home_page.dart';
 import '../../../squad/presentation/pages/squad_page.dart';
@@ -45,23 +48,108 @@ class _AppShellPageState extends State<AppShellPage> {
 
   void _goTo(int index) => setState(() => _index = index);
 
+  // Previously constructed inline in `build()`, on every shell rebuild
+  // (e.g. every `_goTo` tab switch) — that handed `IndexedStack` a brand
+  // new `Widget` instance for every page each time, so it couldn't tell the
+  // subtrees were "the same" page across rebuilds and reconstructed all
+  // four (including their `State`) instead of just switching which one is
+  // visible. Building once in `initState` and keeping the list in a
+  // `late final` field lets `IndexedStack` preserve each tab's state
+  // (scroll position, in-flight animations, etc.) across tab switches.
+  late final List<Widget> _pages = [
+    HomePage(
+      onOpenAlarms: () => _goTo(1),
+      onOpenTerritory: () => _goTo(2),
+      onOpenSquad: () => _goTo(3),
+    ),
+    const AlarmListPage(),
+    const TerritoryPage(),
+    const SquadPage(),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      HomePage(
-        onOpenAlarms: () => _goTo(1),
-        onOpenTerritory: () => _goTo(2),
-        onOpenSquad: () => _goTo(3),
-      ),
-      const AlarmListPage(),
-      const TerritoryPage(),
-      const SquadPage(),
-    ];
     return AdaptiveNavScaffold(
       selectedIndex: _index,
       onDestinationSelected: _goTo,
       destinations: _destinations,
-      body: IndexedStack(index: _index, children: pages),
+      body: Stack(
+        children: [
+          IndexedStack(index: _index, children: _pages),
+          const Positioned(top: 0, right: 0, child: SafeArea(child: _ShellSyncBadge())),
+        ],
+      ),
+    );
+  }
+}
+
+/// Small, non-intrusive sync/offline indicator for the shell chrome —
+/// previously `SyncWorker.status` had no consumer anywhere reachable from
+/// every tab, so a stuck outbox drain (pending writes not reaching the
+/// server) or a plain offline state was invisible unless the user happened
+/// to be on `TerritoryPage` (which has its own, more verbose banner). Only
+/// renders when there's something worth flagging — hidden entirely on
+/// `SyncStatus.idle` (nothing pending, already synced).
+class _ShellSyncBadge extends StatelessWidget {
+  const _ShellSyncBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return StreamBuilder<SyncStatus>(
+      stream: getIt<SyncWorker>().status,
+      builder: (context, snapshot) {
+        final status = snapshot.data;
+        if (status == null || status == SyncStatus.idle) {
+          return const SizedBox.shrink();
+        }
+
+        final (icon, bg, fg) = switch (status) {
+          SyncStatus.syncing => (
+            Icons.sync,
+            scheme.surfaceContainerHigh,
+            scheme.onSurfaceVariant,
+          ),
+          SyncStatus.offline => (
+            Icons.cloud_off,
+            scheme.surfaceContainerHigh,
+            scheme.onSurfaceVariant,
+          ),
+          SyncStatus.error => (
+            Icons.sync_problem,
+            scheme.errorContainer,
+            scheme.onErrorContainer,
+          ),
+          SyncStatus.idle => (Icons.cloud_done, scheme.surface, scheme.onSurface),
+        };
+
+        return Padding(
+          padding: const EdgeInsets.only(top: 8, right: 12),
+          child: Tooltip(
+            message: switch (status) {
+              SyncStatus.syncing => 'Syncing…',
+              SyncStatus.offline =>
+                "Offline — will sync when you're back online",
+              SyncStatus.error => "Couldn't sync some changes",
+              SyncStatus.idle => '',
+            },
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+              child: status == SyncStatus.syncing
+                  ? Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: fg,
+                      ),
+                    )
+                  : Icon(icon, size: 16, color: fg),
+            ),
+          ),
+        );
+      },
     );
   }
 }

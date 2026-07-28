@@ -9,6 +9,12 @@ class GetGlobalLeaderboard {
 
   final SquadRepository _repository;
 
-  Future<List<LeaderboardEntry>> call({required bool weekly}) =>
-      _repository.fetchGlobalLeaderboard(weekly: weekly);
+  /// [timeWindow] is `'all_time'`, `'weekly'`, or `'daily'`.
+  Future<List<LeaderboardEntry>> call({
+    required String timeWindow,
+    int rowLimit = 50,
+  }) => _repository.fetchGlobalLeaderboard(
+    timeWindow: timeWindow,
+    rowLimit: rowLimit,
+  );
 }

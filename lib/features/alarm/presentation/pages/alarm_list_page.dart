@@ -485,7 +485,6 @@ class _AlarmCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final bg = on ? scheme.surfaceContainer : scheme.surfaceContainerHigh;
-    final fg = on ? scheme.onSurface : scheme.onSurfaceVariant;
     final chipBg = on
         ? scheme.primary.withValues(alpha: 0.12)
         : scheme.surfaceContainer;
@@ -569,7 +568,12 @@ class _AlarmCard extends StatelessWidget {
                     const SizedBox(height: 16),
                     IconButton(
                       icon: const Icon(Icons.delete_outline),
-                      color: fg,
+                      // Tinted with the error role instead of the same
+                      // neutral `fg` as the rest of the card — a delete
+                      // action should read as destructive before the
+                      // confirmation dialog even opens, not blend in with
+                      // the rest of the card's icons.
+                      color: scheme.error,
                       onPressed: onDelete,
                       tooltip: 'Delete alarm',
                       style: IconButton.styleFrom(

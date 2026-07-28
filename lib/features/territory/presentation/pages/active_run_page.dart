@@ -8,6 +8,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/semantic_colors.dart';
 import '../../domain/entities/gps_quality.dart';
 import '../../domain/entities/run_track_state.dart';
 import '../../domain/entities/track_point.dart';
@@ -464,6 +465,12 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                   MapStyleFailureOverlay(
                                     onRetry: _styleLoader.retry,
                                   ),
+                                // Persistent, unlike the retrying banner
+                                // above — stays up for as long as the
+                                // loader is on the bundled offline fallback
+                                // tier (see `MapStyleLoader.isDegradedFallback`).
+                                if (_styleLoader.isDegradedFallback)
+                                  const MapDegradedModeChip(top: 10),
                               ],
                             ),
                           ),
@@ -652,58 +659,80 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                   ),
                                   child: Column(
                                     children: [
-                                      TweenAnimationBuilder<double>(
-                                        tween: Tween(
-                                          begin: 0.96,
-                                          end: loopClosed ? 1 : 0.96,
-                                        ),
-                                        duration: const Duration(
-                                          milliseconds: 350,
-                                        ),
-                                        curve: Curves.easeOutBack,
-                                        builder: (context, scale, child) =>
-                                            Transform.scale(
-                                              scale: scale,
-                                              child: child,
-                                            ),
-                                        child: SizedBox(
-                                          width: double.infinity,
-                                          child: FilledButton(
-                                            style: FilledButton.styleFrom(
-                                              minimumSize:
-                                                  const Size.fromHeight(60),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(999),
+                                      // Audit finding (item 10): the button
+                                      // gave no accessible explanation of
+                                      // *why* it was disabled pre-closure —
+                                      // a screen-reader user heard only
+                                      // "Close loop & capture, disabled."
+                                      // The hint below sources the same
+                                      // remaining-distance figures the
+                                      // sighted progress bar above already
+                                      // shows.
+                                      Semantics(
+                                        hint: loopClosed
+                                            ? null
+                                            : loopProgress < 1
+                                            ? '${(400 - state.distanceMeters).clamp(0, 400).toStringAsFixed(0)} '
+                                                  'more meters of minimum distance needed before this can '
+                                                  'be enabled.'
+                                            : '${state.distanceToStartMeters.toStringAsFixed(0)} '
+                                                  'meters from your starting point — get within 30 meters '
+                                                  'to close the loop and enable this.',
+                                        child: TweenAnimationBuilder<double>(
+                                          tween: Tween(
+                                            begin: 0.96,
+                                            end: loopClosed ? 1 : 0.96,
+                                          ),
+                                          duration: const Duration(
+                                            milliseconds: 350,
+                                          ),
+                                          curve: Curves.easeOutBack,
+                                          builder: (context, scale, child) =>
+                                              Transform.scale(
+                                                scale: scale,
+                                                child: child,
                                               ),
-                                            ),
-                                            onPressed: (loopClosed && !_busy)
-                                                ? () => _capture(cubit)
-                                                : null,
-                                            child: _busy
-                                                ? const SizedBox(
-                                                    width: 22,
-                                                    height: 22,
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                          strokeWidth: 2.5,
+                                          child: SizedBox(
+                                            width: double.infinity,
+                                            child: FilledButton(
+                                              style: FilledButton.styleFrom(
+                                                minimumSize:
+                                                    const Size.fromHeight(60),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                        999,
+                                                      ),
+                                                ),
+                                              ),
+                                              onPressed: (loopClosed && !_busy)
+                                                  ? () => _capture(cubit)
+                                                  : null,
+                                              child: _busy
+                                                  ? const SizedBox(
+                                                      width: 22,
+                                                      height: 22,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2.5,
+                                                          ),
+                                                    )
+                                                  : Row(
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment
+                                                              .center,
+                                                      children: const [
+                                                        Icon(
+                                                          Icons.flag,
+                                                          size: 22,
                                                         ),
-                                                  )
-                                                : Row(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment
-                                                            .center,
-                                                    children: const [
-                                                      Icon(
-                                                        Icons.flag,
-                                                        size: 22,
-                                                      ),
-                                                      SizedBox(width: 8),
-                                                      Text(
-                                                        'Close loop & capture',
-                                                      ),
-                                                    ],
-                                                  ),
+                                                        SizedBox(width: 8),
+                                                        Text(
+                                                          'Close loop & capture',
+                                                        ),
+                                                      ],
+                                                    ),
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -820,11 +849,21 @@ class _GpsQualityChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final label = switch (quality) {
-      GpsQuality.none => 'Finding GPS…',
-      GpsQuality.good => 'GPS good',
-      GpsQuality.degraded => 'GPS fair',
-      GpsQuality.poor => 'GPS weak',
+    final semantic = context.semanticColors;
+    // Audit finding (item 3): previously every quality band used the same
+    // `primaryContainer` background and the same `gps_fixed` icon — "weak"
+    // and "good" were indistinguishable to anyone relying on shape/icon
+    // rather than reading the label text. Now each band gets its own icon
+    // and its own `gpsGood`/`gpsWeak` tint.
+    final (label, icon, color) = switch (quality) {
+      GpsQuality.none => (
+        'Finding GPS…',
+        Icons.location_searching,
+        scheme.onSurfaceVariant,
+      ),
+      GpsQuality.good => ('GPS good', Icons.gps_fixed, semantic.gpsGood),
+      GpsQuality.degraded => ('GPS fair', Icons.gps_not_fixed, semantic.gpsWeak),
+      GpsQuality.poor => ('GPS weak', Icons.gps_off, semantic.gpsWeak),
     };
     return Container(
       // A hard `height:` forces the child Row into that exact cross-axis
@@ -834,20 +873,21 @@ class _GpsQualityChip extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 32),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: scheme.primaryContainer,
+        color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.45)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.gps_fixed, size: 15, color: scheme.onPrimaryContainer),
+          Icon(icon, size: 15, color: color),
           const SizedBox(width: 5),
           Text(
             label,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,
-              color: scheme.onPrimaryContainer,
+              color: color,
             ),
           ),
         ],

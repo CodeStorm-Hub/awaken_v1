@@ -93,6 +93,18 @@ class _OnboardingPageState extends State<OnboardingPage> {
   void _skipToPermissionSetup() =>
       setState(() => _step = _OnboardingStep.notificationRationale);
 
+  /// Back navigation was previously one-way (marketing → notification
+  /// rationale → battery exemption, no way back) — these two callbacks
+  /// let the notification-rationale and battery-exemption steps step back
+  /// to the previous step instead of only ever advancing.
+  void _backToMarketing() => setState(() {
+    _cardIndex = _cards.length - 1;
+    _step = _OnboardingStep.marketing;
+  });
+
+  void _backToNotificationRationale() =>
+      setState(() => _step = _OnboardingStep.notificationRationale);
+
   Future<void> _continueFromNotificationRationale() async {
     if (_requestingNotificationPermission) return;
     setState(() => _requestingNotificationPermission = true);
@@ -130,9 +142,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
       _OnboardingStep.notificationRationale => _NotificationRationaleCard(
         requesting: _requestingNotificationPermission,
         onContinue: _continueFromNotificationRationale,
+        onBack: _backToMarketing,
       ),
       _OnboardingStep.batteryExemption => BatteryExemptionPage(
         onContinue: widget.onFinished,
+        onBack: _backToNotificationRationale,
       ),
     };
   }
@@ -324,7 +338,7 @@ class _MarketingCarouselState extends State<_MarketingCarousel> {
                         foregroundColor: card.fg(scheme).withValues(alpha: 0.7),
                       ),
                       onPressed: widget.onSkip,
-                      child: const Text('Skip'),
+                      child: const Text('Skip intro'),
                     ),
                     const SizedBox(width: 4),
                   ],
@@ -372,10 +386,12 @@ class _NotificationRationaleCard extends StatelessWidget {
   const _NotificationRationaleCard({
     required this.requesting,
     required this.onContinue,
+    required this.onBack,
   });
 
   final bool requesting;
   final VoidCallback onContinue;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -389,7 +405,15 @@ class _NotificationRationaleCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 6),
+              padding: const EdgeInsets.fromLTRB(4, 8, 20, 0),
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: 'Back',
+                onPressed: onBack,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 6),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

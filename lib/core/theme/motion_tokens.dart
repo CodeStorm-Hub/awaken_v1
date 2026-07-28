@@ -40,4 +40,26 @@ abstract final class MotionTokens {
   /// navigation-rail transitions, secondary structural animations.
   static final SpringDescription standardDefaultSpatial =
       _spring(dampingRatio: 0.27, stiffness: 1060);
+
+  // `Duration`/`Curve` pairs for the (more common) `AnimatedContainer`-style
+  // call sites that don't use a raw `SpringDescription`. Values mirror the
+  // resolution times documented on the springs above so both animation
+  // styles feel consistent, rather than each screen picking its own
+  // duration ad hoc (the 2026-07-29 audit found 150/200/250/350/500ms all
+  // in use for comparable interactions with no shared scale).
+
+  /// Micro-interactions: toggles, button presses, color state changes.
+  /// Pair with [effectsCurve].
+  static const Duration fastEffects = Duration(milliseconds: 150);
+
+  /// Attention-grabbing layout changes: expanding cards, badge pop-ins.
+  /// Pair with [spatialCurve].
+  static const Duration fastSpatial = Duration(milliseconds: 350);
+
+  /// Page transitions, sliding panels, standard interactive gestures.
+  /// Pair with [spatialCurve].
+  static const Duration defaultSpatial = Duration(milliseconds: 500);
+
+  static const Curve effectsCurve = Curves.easeOut;
+  static const Curve spatialCurve = Curves.easeOutBack;
 }

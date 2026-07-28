@@ -71,25 +71,69 @@ class SquadRemoteDataSource {
     return (result as List).cast<Map<String, dynamic>>();
   }
 
-  /// [timeWindow] is `'all_time'` or `'weekly'` (matches the RPCs'
-  /// `p_time_window` check constraint).
+  /// [timeWindow] is `'all_time'`, `'weekly'`, or `'daily'` (matches the
+  /// RPCs' `p_time_window` check constraint). [rowLimit] is `p_row_limit`
+  /// (1-500) — the RPC has no offset/cursor param, so pagination is done by
+  /// refetching with a larger [rowLimit], not a true cursor.
   Future<List<Map<String, dynamic>>> fetchNearbyLeaderboard({
     required double radiusM,
     required String timeWindow,
+    int rowLimit = 50,
   }) async {
     final result = await _supabase.rpc(
       'nearby_leaderboard',
-      params: {'p_radius_m': radiusM, 'p_time_window': timeWindow},
+      params: {
+        'p_radius_m': radiusM,
+        'p_time_window': timeWindow,
+        'p_row_limit': rowLimit,
+      },
     );
     return (result as List).cast<Map<String, dynamic>>();
   }
 
   Future<List<Map<String, dynamic>>> fetchGlobalLeaderboard({
     required String timeWindow,
+    int rowLimit = 50,
   }) async {
     final result = await _supabase.rpc(
       'global_leaderboard',
+      params: {'p_time_window': timeWindow, 'p_row_limit': rowLimit},
+    );
+    return (result as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Caller's own rank — independent targeted query backing the leaderboard
+  /// sheet's pinned "You: #N" row (`my_global_rank`/`my_nearby_rank` RPCs,
+  /// added alongside the leaderboard sheet's pagination/pinned-row rework).
+  Future<int?> fetchMyGlobalRank({required String timeWindow}) async {
+    final result = await _supabase.rpc(
+      'my_global_rank',
       params: {'p_time_window': timeWindow},
+    );
+    return (result as num?)?.toInt();
+  }
+
+  Future<int?> fetchMyNearbyRank({
+    required double radiusM,
+    required String timeWindow,
+  }) async {
+    final result = await _supabase.rpc(
+      'my_nearby_rank',
+      params: {'p_radius_m': radiusM, 'p_time_window': timeWindow},
+    );
+    return (result as num?)?.toInt();
+  }
+
+  /// "Conquest ticker" recent-captures feed (`recent_territory_captures`
+  /// RPC) — bypasses `territory_captures`' own select-own RLS via a
+  /// SECURITY DEFINER function, same public-aggregate posture as the
+  /// leaderboard RPCs.
+  Future<List<Map<String, dynamic>>> fetchRecentTerritoryCaptures({
+    int rowLimit = 10,
+  }) async {
+    final result = await _supabase.rpc(
+      'recent_territory_captures',
+      params: {'p_row_limit': rowLimit},
     );
     return (result as List).cast<Map<String, dynamic>>();
   }

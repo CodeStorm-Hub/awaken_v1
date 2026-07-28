@@ -66,6 +66,18 @@ class MapStyleLoader {
   /// should clamp to this when non-null.
   double? get dataMaxZoom => _tier == 2 ? bundledFallbackMaxZoom : null;
 
+  /// True once the loader has settled on the bundled offline fallback tier
+  /// (tier 2) — the lowest-quality tier, only reachable when both the
+  /// primary and hosted-fallback style URLs failed to load in time.
+  /// Distinct from [status]: `status` flips to [MapStyleLoadStatus.loaded]
+  /// as soon as *any* tier (including this one) finishes loading, and the
+  /// retry banner disappears with it — leaving no indicator that the map is
+  /// degraded unless a caller checks this separately (audit finding: the
+  /// low-zoom fallback tier could silently masquerade as a fully-loaded
+  /// map). Callers should show a persistent, non-auto-dismissing chip
+  /// whenever this is true, for as long as it stays true.
+  bool get isDegradedFallback => _tier == 2;
+
   late String styleString = Env.mapStyleUrl(isDark: _isDark);
   Key styleKey = const ValueKey('map-style-0');
   MapStyleLoadStatus status = MapStyleLoadStatus.loading;

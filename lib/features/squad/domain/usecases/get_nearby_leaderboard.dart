@@ -6,11 +6,15 @@ import '../repositories/squad_repository.dart';
 class GetNearbyLeaderboardParams {
   const GetNearbyLeaderboardParams({
     required this.radiusM,
-    required this.weekly,
+    required this.timeWindow,
+    this.rowLimit = 50,
   });
 
   final double radiusM;
-  final bool weekly;
+
+  /// `'all_time'`, `'weekly'`, or `'daily'`.
+  final String timeWindow;
+  final int rowLimit;
 }
 
 @injectable
@@ -22,6 +26,7 @@ class GetNearbyLeaderboard {
   Future<List<LeaderboardEntry>> call(GetNearbyLeaderboardParams params) =>
       _repository.fetchNearbyLeaderboard(
         radiusM: params.radiusM,
-        weekly: params.weekly,
+        timeWindow: params.timeWindow,
+        rowLimit: params.rowLimit,
       );
 }

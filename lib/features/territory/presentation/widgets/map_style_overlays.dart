@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/semantic_colors.dart';
+
 /// Blocking overlay shown once every configured style tier
 /// ([MapStyleLoader]) has timed out. Offers a manual retry rather than
 /// leaving the user on a dead-end blank map.
@@ -98,6 +100,68 @@ class MapStyleRetryingBanner extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Persistent (never auto-dismissing) indicator shown whenever
+/// `MapStyleLoader.isDegradedFallback` is true — i.e. the loader gave up on
+/// the primary/hosted-fallback style hosts and settled on the bundled,
+/// low-zoom offline extract. Audit finding: `onStyleLoaded()` flips
+/// `status` to `loaded` as soon as *any* tier finishes, including this one,
+/// so [MapStyleRetryingBanner] disappears the instant the degraded tier
+/// starts rendering — leaving the user with no ongoing signal that the map
+/// they're looking at is missing most detail. Unlike that banner, this chip
+/// stays up for as long as [MapStyleLoader.isDegradedFallback] is true, not
+/// just while a retry is in flight.
+class MapDegradedModeChip extends StatelessWidget {
+  const MapDegradedModeChip({this.top, this.bottom, super.key})
+    : assert(top == null || bottom == null, 'pass only one of top/bottom');
+
+  final double? top;
+  final double? bottom;
+
+  @override
+  Widget build(BuildContext context) {
+    final semantic = context.semanticColors;
+    return Positioned(
+      top: top,
+      bottom: top == null ? (bottom ?? 48) : null,
+      left: 14,
+      right: 14,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Semantics(
+          liveRegion: true,
+          label: 'Limited map mode — showing a low-detail offline map',
+          child: Material(
+            color: semantic.warningContainer,
+            borderRadius: BorderRadius.circular(999),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.signal_wifi_off,
+                    size: 14,
+                    color: semantic.onWarningContainer,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Limited map (offline)',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: semantic.onWarningContainer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

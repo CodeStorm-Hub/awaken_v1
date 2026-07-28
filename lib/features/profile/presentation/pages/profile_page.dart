@@ -4,11 +4,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/gamification_widgets.dart';
 import '../../../../core/theme/google_logo.dart';
+import '../../../../core/theme/semantic_colors.dart';
 import '../../../../core/theme/theme_mode_cubit.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../../alarm/presentation/pages/alarm_reliability_test_page.dart';
 import '../../../onboarding/presentation/pages/battery_exemption_page.dart';
+import '../../../squad/domain/entities/streak_tier.dart';
 import '../../domain/usecases/delete_account.dart';
 import '../../domain/usecases/link_with_email.dart';
 import '../../domain/usecases/link_with_google.dart';
@@ -79,12 +82,12 @@ class ProfilePage extends StatelessWidget {
                       const SizedBox(width: 8),
                       Text(
                         'Profile',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
-                          color: scheme.onSurface,
-                        ),
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                              color: scheme.onSurface,
+                            ),
                       ),
                     ],
                   ),
@@ -126,38 +129,41 @@ class ProfilePage extends StatelessWidget {
                             borderRadius: BorderRadius.circular(16),
                             child: Column(
                               children: [
-                                if (avatarUrl != null)
-                                  ClipOval(
-                                    child: Image.network(
-                                      avatarUrl,
-                                      width: 84,
-                                      height: 84,
-                                      fit: BoxFit.cover,
-                                      cacheWidth: (84 * dpr).round(),
-                                      cacheHeight: (84 * dpr).round(),
-                                      errorBuilder:
-                                          (context, error, stackTrace) =>
-                                              _InitialAvatar(
-                                                initial: initial,
-                                                scheme: scheme,
-                                              ),
-                                      loadingBuilder:
-                                          (context, child, progress) {
-                                            if (progress == null) {
-                                              return child;
-                                            }
-                                            return _InitialAvatar(
-                                              initial: initial,
-                                              scheme: scheme,
-                                            );
-                                          },
-                                    ),
-                                  )
-                                else
-                                  _InitialAvatar(
-                                    initial: initial,
-                                    scheme: scheme,
-                                  ),
+                                StreakTierAvatarRing(
+                                  tier: streakTierForDays(profile.streak),
+                                  size: 96,
+                                  child: avatarUrl != null
+                                      ? ClipOval(
+                                          child: Image.network(
+                                            avatarUrl,
+                                            width: 84,
+                                            height: 84,
+                                            fit: BoxFit.cover,
+                                            cacheWidth: (84 * dpr).round(),
+                                            cacheHeight: (84 * dpr).round(),
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    _InitialAvatar(
+                                                      initial: initial,
+                                                      scheme: scheme,
+                                                    ),
+                                            loadingBuilder:
+                                                (context, child, progress) {
+                                                  if (progress == null) {
+                                                    return child;
+                                                  }
+                                                  return _InitialAvatar(
+                                                    initial: initial,
+                                                    scheme: scheme,
+                                                  );
+                                                },
+                                          ),
+                                        )
+                                      : _InitialAvatar(
+                                          initial: initial,
+                                          scheme: scheme,
+                                        ),
+                                ),
                                 const SizedBox(height: 10),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -166,28 +172,35 @@ class ProfilePage extends StatelessWidget {
                                       child: Text(
                                         title,
                                         textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 20,
-                                          color: scheme.onSurface,
-                                        ),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge
+                                            ?.copyWith(color: scheme.onSurface),
                                       ),
                                     ),
                                     const SizedBox(width: 4),
                                     Tooltip(
                                       message: 'Edit name',
-                                      child: InkWell(
-                                        customBorder: const CircleBorder(),
-                                        onTap: () => _showEditNameDialog(
-                                          context,
-                                          currentName: displayName ?? '',
-                                        ),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(6),
-                                          child: Icon(
-                                            Icons.edit,
-                                            size: 16,
-                                            color: scheme.primary,
+                                      child: Material(
+                                        color: Colors.transparent,
+                                        shape: const CircleBorder(),
+                                        child: InkWell(
+                                          customBorder: const CircleBorder(),
+                                          onTap: () => _showEditNameDialog(
+                                            context,
+                                            currentName: displayName ?? '',
+                                          ),
+                                          // Was ~28x28 effective — below the
+                                          // 44x44 WCAG 2.5.5 minimum already
+                                          // applied to the back button above.
+                                          child: SizedBox(
+                                            width: 44,
+                                            height: 44,
+                                            child: Icon(
+                                              Icons.edit,
+                                              size: 16,
+                                              color: scheme.primary,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -198,10 +211,10 @@ class ProfilePage extends StatelessWidget {
                                 Text(
                                   subtitle,
                                   textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: secondaryLabelColor(context),
-                                  ),
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: secondaryLabelColor(context),
+                                      ),
                                 ),
                                 if (isAnonymous) ...[
                                   const SizedBox(height: 14),
@@ -262,7 +275,7 @@ class ProfilePage extends StatelessWidget {
                               Expanded(
                                 child: StatTile(
                                   bg: scheme.surfaceContainer,
-                                  fg: const Color(0xFFFF9F0A),
+                                  fg: context.semanticColors.streakFlame,
                                   value: '${profile.streak}',
                                   label: 'Day streak',
                                   hasError: profile.streakError,
@@ -278,12 +291,12 @@ class ProfilePage extends StatelessWidget {
                             padding: const EdgeInsets.only(left: 4, bottom: 8),
                             child: Text(
                               'SETTINGS',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.5,
-                                color: secondaryLabelColor(context),
-                              ),
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                    color: secondaryLabelColor(context),
+                                  ),
                             ),
                           ),
                           AppleGlassContainer(
@@ -331,25 +344,7 @@ class ProfilePage extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 24),
-                          Center(
-                            child: TextButton(
-                              style: TextButton.styleFrom(
-                                foregroundColor: secondaryLabelColor(context),
-                              ),
-                              onPressed: () => _showSignOutDialog(context),
-                              child: const Text('Sign out'),
-                            ),
-                          ),
-                          Center(
-                            child: TextButton(
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.redAccent,
-                              ),
-                              onPressed: () =>
-                                  _showDeleteAccountDialog(context),
-                              child: const Text('Delete account'),
-                            ),
-                          ),
+                          _AccountActionsSection(displayName: displayName),
                         ],
                       ),
                     );
@@ -404,37 +399,241 @@ Future<void> _showAppearanceDialog(BuildContext context) async {
   );
 }
 
-Future<void> _showSignOutDialog(BuildContext context) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Sign out?'),
-      content: const Text(
-        'This clears your data from this device. If you linked an email or Google account, '
-        "it's still safe in the cloud — sign back in any time to get it back.",
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Cancel'),
+/// Sign-out and delete-account both sit here, deliberately separated from
+/// the settings list above by their own spacing/divider/section so delete
+/// reads as materially more consequential before the user ever taps it —
+/// previously the two were stacked peer `TextButton`s differentiated only
+/// by color. Each button owns an in-flight boolean (`_signingOut`/
+/// `_deleting`) so the async sign-out/delete-account calls show a spinner
+/// and disable the trigger instead of leaving the UI silently unresponsive
+/// mid-request; the boolean only resets on failure (success either closes
+/// this page or the state becomes moot).
+class _AccountActionsSection extends StatefulWidget {
+  const _AccountActionsSection({required this.displayName});
+
+  final String? displayName;
+
+  @override
+  State<_AccountActionsSection> createState() => _AccountActionsSectionState();
+}
+
+class _AccountActionsSectionState extends State<_AccountActionsSection> {
+  var _signingOut = false;
+  var _deleting = false;
+
+  Future<void> _signOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text(
+          'This clears your data from this device. If you linked an email or Google account, '
+          "it's still safe in the cloud — sign back in any time to get it back.",
         ),
-        FilledButton(
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Sign out'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _signingOut = true);
+    try {
+      await getIt<SignOut>()(const NoParams());
+      // No app-level auth-state listener redirects on its own (the root
+      // widget always shows `AppShellPage` regardless of auth state — see
+      // `app.dart`); `ProfilePage` was pushed on top, so pop it back so the
+      // user isn't left staring at their own now-signed-out profile page.
+      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _signingOut = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(friendlyAuthErrorMessage(e))));
+      }
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _DeleteAccountDialog(displayName: widget.displayName),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    try {
+      await getIt<DeleteAccount>()(const NoParams());
+      if (mounted) {
+        // Same reasoning as sign-out above: nothing redirects automatically,
+        // so pop back to the signed-out root explicitly rather than
+        // stranding the user on a stale Profile page for a deleted account.
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Account deleted.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _deleting = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(friendlyAuthErrorMessage(e))));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        Center(
+          child: TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: secondaryLabelColor(context),
+            ),
+            onPressed: _signingOut ? null : _signOut,
+            child: _signingOut
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Sign out'),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Divider(color: scheme.outline),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: scheme.error),
+            onPressed: _deleting ? null : _deleteAccount,
+            icon: _deleting
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: scheme.error,
+                    ),
+                  )
+                : Icon(
+                    Icons.warning_amber_rounded,
+                    size: 18,
+                    color: scheme.error,
+                  ),
+            label: const Text('Delete account'),
+          ),
         ),
       ],
-    ),
-  );
-  if (confirmed != true) return;
+    );
+  }
+}
 
-  try {
-    await getIt<SignOut>()(const NoParams());
-  } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(friendlyAuthErrorMessage(e))));
-    }
+/// Delete-account confirmation. A single accidental tap used to be enough
+/// to permanently delete the account and all cloud data — this now
+/// requires typing an exact match (the user's display name, or the literal
+/// word "DELETE") before the Delete button enables at all. Cancel is the
+/// autofocused/visually-default action (`FilledButton.tonal`) and Delete
+/// stays a plain, disabled-by-default `TextButton` so the destructive
+/// action never reads as the default choice.
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog({required this.displayName});
+
+  final String? displayName;
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _controller = TextEditingController();
+  var _matches = false;
+
+  String get _requiredText {
+    final name = widget.displayName?.trim();
+    return (name != null && name.isNotEmpty) ? name : 'DELETE';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() {
+      final matches = _controller.text == _requiredText;
+      if (matches != _matches) setState(() => _matches = matches);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: const Text('Delete account?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Your alarms, run history, and territory will be permanently "
+            "deleted. This can't be undone.",
+          ),
+          const SizedBox(height: 16),
+          Text.rich(
+            TextSpan(
+              style: Theme.of(context).textTheme.bodyMedium,
+              children: [
+                const TextSpan(text: 'Type '),
+                TextSpan(
+                  text: _requiredText,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const TextSpan(text: ' to confirm.'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _controller,
+            autofocus: false,
+            decoration: InputDecoration(
+              hintText: _requiredText,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        FilledButton.tonal(
+          autofocus: true,
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          style: TextButton.styleFrom(foregroundColor: scheme.error),
+          onPressed: _matches ? () => Navigator.of(context).pop(true) : null,
+          child: const Text('Delete'),
+        ),
+      ],
+    );
   }
 }
 
@@ -523,9 +722,8 @@ class _EditNameDialogState extends State<_EditNameDialog> {
             const SizedBox(height: 8),
             Text(
               _error!,
-              style: TextStyle(
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.error,
-                fontSize: 13,
               ),
             ),
           ],
@@ -548,48 +746,6 @@ class _EditNameDialogState extends State<_EditNameDialog> {
         ),
       ],
     );
-  }
-}
-
-Future<void> _showDeleteAccountDialog(BuildContext context) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Delete account?'),
-      content: const Text(
-        'This permanently deletes your account and all cloud-synced data — alarms, sessions, '
-        'runs, territories, and squad membership. This cannot be undone.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: Theme.of(dialogContext).colorScheme.error,
-          ),
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Delete'),
-        ),
-      ],
-    ),
-  );
-  if (confirmed != true) return;
-
-  try {
-    await getIt<DeleteAccount>()(const NoParams());
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Account deleted.')));
-    }
-  } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(friendlyAuthErrorMessage(e))));
-    }
   }
 }
 
@@ -829,9 +985,8 @@ class _AuthDialogState extends State<_AuthDialog> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     _error!,
-                    style: TextStyle(
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.error,
-                      fontSize: 13,
                     ),
                   ),
                 ),
@@ -910,8 +1065,7 @@ class _InitialAvatar extends StatelessWidget {
       borderColor: scheme.outline,
       child: Text(
         initial,
-        style: TextStyle(
-          fontSize: 28,
+        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
           fontWeight: FontWeight.w800,
           color: scheme.onSecondaryContainer,
         ),
@@ -966,11 +1120,9 @@ class _SettingsRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    color: scheme.onSurface,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(color: scheme.onSurface),
                 ),
               ),
               Icon(

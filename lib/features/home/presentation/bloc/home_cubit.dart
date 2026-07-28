@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 
+import '../../../../sync/pull/pull_down_sync.dart';
+import '../../../alarm/data/datasources/wake_up_tax_store.dart';
 import '../../../alarm/domain/usecases/watch_current_streak.dart';
 import '../../../squad/domain/entities/squad.dart';
 import '../../../squad/domain/usecases/watch_my_rank.dart';
@@ -25,14 +27,26 @@ class HomeCubit extends Cubit<HomeState> {
     this._watchMyRank,
     this._watchMySquad,
     this._watchRecentActivity,
+    this._wakeUpTaxStore,
+    this._pullDownSync,
   ) : super(const HomeState()) {
     _streakSub = _watchCurrentStreak().listen(
-      (v) => emit(state.copyWith(streak: v, streakError: false)),
-      onError: (_) => emit(state.copyWith(streakError: true)),
+      (v) => emit(
+        state.copyWith(streak: v, streakError: false, streakLoading: false),
+      ),
+      onError: (_) =>
+          emit(state.copyWith(streakError: true, streakLoading: false)),
     );
     _areaSub = _watchOwnedArea().listen(
-      (v) => emit(state.copyWith(ownedAreaSqm: v, ownedAreaError: false)),
-      onError: (_) => emit(state.copyWith(ownedAreaError: true)),
+      (v) => emit(
+        state.copyWith(
+          ownedAreaSqm: v,
+          ownedAreaError: false,
+          ownedAreaLoading: false,
+        ),
+      ),
+      onError: (_) =>
+          emit(state.copyWith(ownedAreaError: true, ownedAreaLoading: false)),
     );
     _rankSub = _watchMyRank().listen(
       (v) => emit(
@@ -51,9 +65,19 @@ class HomeCubit extends Cubit<HomeState> {
       onError: (_) => emit(state.copyWith(squadError: true)),
     );
     _activitySub = _watchRecentActivity().listen(
-      (v) =>
-          emit(state.copyWith(recentActivity: v, recentActivityError: false)),
-      onError: (_) => emit(state.copyWith(recentActivityError: true)),
+      (v) => emit(
+        state.copyWith(
+          recentActivity: v,
+          recentActivityError: false,
+          recentActivityLoading: false,
+        ),
+      ),
+      onError: (_) => emit(
+        state.copyWith(recentActivityError: true, recentActivityLoading: false),
+      ),
+    );
+    _taxSub = _wakeUpTaxStore.watch().listen(
+      (v) => emit(state.copyWith(wakeUpTaxMultiplier: v)),
     );
   }
 
@@ -62,12 +86,15 @@ class HomeCubit extends Cubit<HomeState> {
   final WatchMyRank _watchMyRank;
   final WatchMySquad _watchMySquad;
   final WatchRecentActivity _watchRecentActivity;
+  final WakeUpTaxStore _wakeUpTaxStore;
+  final PullDownSync _pullDownSync;
 
   late final StreamSubscription<int> _streakSub;
   late final StreamSubscription<double> _areaSub;
   late final StreamSubscription<int?> _rankSub;
   late final StreamSubscription<Squad?> _squadSub;
   late StreamSubscription<List<RecentActivityEntry>> _activitySub;
+  late final StreamSubscription<double> _taxSub;
 
   /// Re-subscribes after `recentActivityError` — previously there was no
   /// way to recover from a failed fetch short of restarting the app,
@@ -75,13 +102,28 @@ class HomeCubit extends Cubit<HomeState> {
   /// actions), which all offer a retry.
   void retryRecentActivity() {
     unawaited(_activitySub.cancel());
-    emit(state.copyWith(recentActivityError: false));
+    emit(state.copyWith(recentActivityError: false, recentActivityLoading: true));
     _activitySub = _watchRecentActivity().listen(
-      (v) =>
-          emit(state.copyWith(recentActivity: v, recentActivityError: false)),
-      onError: (_) => emit(state.copyWith(recentActivityError: true)),
+      (v) => emit(
+        state.copyWith(
+          recentActivity: v,
+          recentActivityError: false,
+          recentActivityLoading: false,
+        ),
+      ),
+      onError: (_) => emit(
+        state.copyWith(recentActivityError: true, recentActivityLoading: false),
+      ),
     );
   }
+
+  /// Backs the page's `RefreshIndicator` — re-runs the same remote→local
+  /// delta pull (`PullDownSync.run()`) that bootstrap/`SyncWorker` already
+  /// use. The section streams above are live Drift watches, so once the
+  /// pull writes fresh rows they update on their own; this just forces an
+  /// out-of-band pull instead of waiting for the next connectivity-triggered
+  /// `SyncWorker` cycle.
+  Future<void> refresh() => _pullDownSync.run();
 
   @override
   Future<void> close() async {
@@ -90,6 +132,7 @@ class HomeCubit extends Cubit<HomeState> {
     await _rankSub.cancel();
     await _squadSub.cancel();
     await _activitySub.cancel();
+    await _taxSub.cancel();
     return super.close();
   }
 }
