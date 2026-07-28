@@ -10,12 +10,17 @@ class SquadPresenceMember extends Equatable {
     required this.userId,
     required this.displayName,
     this.activity,
+    this.avatarUrl,
   });
 
   final String userId;
   final String displayName;
   final String? activity;
 
+  /// Self-asserted in this device's own tracked Presence payload (sourced
+  /// from `profiles.avatar_url`) — null for accounts with no linked photo.
+  final String? avatarUrl;
+
   @override
-  List<Object?> get props => [userId, displayName, activity];
+  List<Object?> get props => [userId, displayName, activity, avatarUrl];
 }

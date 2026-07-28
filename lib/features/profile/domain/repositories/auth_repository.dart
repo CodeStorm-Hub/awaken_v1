@@ -27,7 +27,20 @@ abstract interface class AuthRepository {
   /// `updateUser` on an anonymous session attaches credentials to it rather
   /// than creating a new account). Supabase sends a confirmation email;
   /// the account isn't fully "linked" until the user clicks it.
-  Future<void> linkWithEmail({required String email, required String password});
+  /// [displayName] is required — this is the only sign-up path (email/
+  /// password) that previously had no way to capture a real name at all.
+  Future<void> linkWithEmail({
+    required String email,
+    required String password,
+    required String displayName,
+  });
+
+  /// Updates the signed-in user's display name — the profile editor's
+  /// "add/change your name" action, for accounts (typically email/password
+  /// sign-ups from before this existed) stuck with the generated
+  /// "Runner-XXXXXXXX" placeholder. Throws on a `display_name` uniqueness
+  /// collision so the UI can ask for a different name.
+  Future<void> updateDisplayName(String name);
 
   /// Signs in as a returning linked user, replacing whatever session
   /// (typically anonymous) is currently active. The counterpart to

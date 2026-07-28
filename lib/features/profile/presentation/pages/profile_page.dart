@@ -16,6 +16,7 @@ import '../../domain/usecases/send_password_reset_email.dart';
 import '../../domain/usecases/sign_in_with_google.dart';
 import '../../domain/usecases/sign_in_with_password.dart';
 import '../../domain/usecases/sign_out.dart';
+import '../../domain/usecases/update_display_name.dart';
 import '../auth_error_message.dart';
 import '../bloc/profile_cubit.dart';
 import '../bloc/profile_state.dart';
@@ -158,14 +159,40 @@ class ProfilePage extends StatelessWidget {
                                     scheme: scheme,
                                   ),
                                 const SizedBox(height: 10),
-                                Text(
-                                  title,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 20,
-                                    color: scheme.onSurface,
-                                  ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        title,
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 20,
+                                          color: scheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Tooltip(
+                                      message: 'Edit name',
+                                      child: InkWell(
+                                        customBorder: const CircleBorder(),
+                                        onTap: () => _showEditNameDialog(
+                                          context,
+                                          currentName: displayName ?? '',
+                                        ),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(6),
+                                          child: Icon(
+                                            Icons.edit,
+                                            size: 16,
+                                            color: scheme.primary,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
@@ -411,6 +438,119 @@ Future<void> _showSignOutDialog(BuildContext context) async {
   }
 }
 
+/// Profile-completion entry point for accounts (typically email/password
+/// sign-ups from before signing up asked for a name) stuck with the
+/// generated "Runner-XXXXXXXX" placeholder. A proper `StatefulWidget` — same
+/// shape as squad_page.dart's `_TextPromptDialog` — not a top-level function
+/// owning a `TextEditingController` outside any widget's lifecycle: an
+/// earlier version of this dialog did exactly that (create the controller
+/// in the function, dispose it manually after `showDialog` resolved) and it
+/// crashed live (`ChangeNotifier.addListener` on an already-disposed
+/// notifier, cascading into a `_dependents.isEmpty` assertion) — a
+/// controller/`Tooltip`-driven `Listenable` outliving or racing the dialog
+/// route's own element teardown. Every other dialog in this codebase avoids
+/// that by keeping the controller in a `State`, disposed in `State.dispose`.
+Future<void> _showEditNameDialog(
+  BuildContext context, {
+  required String currentName,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (_) => _EditNameDialog(currentName: currentName),
+  );
+}
+
+class _EditNameDialog extends StatefulWidget {
+  const _EditNameDialog({required this.currentName});
+
+  final String currentName;
+
+  @override
+  State<_EditNameDialog> createState() => _EditNameDialogState();
+}
+
+class _EditNameDialogState extends State<_EditNameDialog> {
+  late final _controller = TextEditingController(text: widget.currentName);
+  var _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _controller.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Enter your name.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await getIt<UpdateDisplayName>()(name);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _error = friendlyAuthErrorMessage(e);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit name'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            enabled: !_submitting,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(labelText: 'Your name'),
+            onSubmitted: (_) => _submit(),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          child: _submitting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
 Future<void> _showDeleteAccountDialog(BuildContext context) async {
   final confirmed = await showDialog<bool>(
     context: context,
@@ -476,6 +616,7 @@ class _AuthDialog extends StatefulWidget {
 class _AuthDialogState extends State<_AuthDialog> {
   late var _mode = widget.mode;
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   var _obscurePassword = true;
@@ -484,9 +625,17 @@ class _AuthDialogState extends State<_AuthDialog> {
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  String? _validateName(String? value) {
+    if ((value ?? '').trim().isEmpty) {
+      return 'Enter your name.';
+    }
+    return null;
   }
 
   String? _validateEmail(String? value) {
@@ -506,6 +655,7 @@ class _AuthDialogState extends State<_AuthDialog> {
 
   Future<void> _submitEmail() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     setState(() {
@@ -514,7 +664,11 @@ class _AuthDialogState extends State<_AuthDialog> {
     });
     try {
       if (_mode == _AuthDialogMode.link) {
-        await getIt<LinkWithEmail>()(email: email, password: password);
+        await getIt<LinkWithEmail>()(
+          email: email,
+          password: password,
+          displayName: name,
+        );
         if (mounted) {
           // Captured before `pop()` — `ScaffoldMessenger.of(context)` after
           // popping this dialog's own context can resolve against an
@@ -615,6 +769,17 @@ class _AuthDialogState extends State<_AuthDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (isLink) ...[
+                TextFormField(
+                  controller: _nameController,
+                  enabled: !_submitting,
+                  textCapitalization: TextCapitalization.words,
+                  autofillHints: const [AutofillHints.name],
+                  decoration: const InputDecoration(labelText: 'Your name'),
+                  validator: _validateName,
+                ),
+                const SizedBox(height: 8),
+              ],
               TextFormField(
                 controller: _emailController,
                 enabled: !_submitting,

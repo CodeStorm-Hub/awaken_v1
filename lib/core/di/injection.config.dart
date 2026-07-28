@@ -89,6 +89,8 @@ import '../../features/profile/domain/usecases/sign_in_with_google.dart'
 import '../../features/profile/domain/usecases/sign_in_with_password.dart'
     as _i224;
 import '../../features/profile/domain/usecases/sign_out.dart' as _i487;
+import '../../features/profile/domain/usecases/update_display_name.dart'
+    as _i28;
 import '../../features/profile/domain/usecases/watch_current_user.dart'
     as _i560;
 import '../../features/profile/presentation/bloc/profile_cubit.dart' as _i800;
@@ -496,6 +498,9 @@ _i174.GetIt init(
     () => _i224.SignInWithPassword(gh<_i487.AuthRepository>()),
   );
   gh.factory<_i487.SignOut>(() => _i487.SignOut(gh<_i487.AuthRepository>()));
+  gh.factory<_i28.UpdateDisplayName>(
+    () => _i28.UpdateDisplayName(gh<_i487.AuthRepository>()),
+  );
   gh.factory<_i560.WatchCurrentUser>(
     () => _i560.WatchCurrentUser(gh<_i487.AuthRepository>()),
   );

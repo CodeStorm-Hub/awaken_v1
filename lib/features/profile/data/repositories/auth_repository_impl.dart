@@ -83,7 +83,16 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> linkWithEmail({
     required String email,
     required String password,
-  }) => _remote.linkWithEmail(email: email, password: password);
+    required String displayName,
+  }) => _remote.linkWithEmail(
+    email: email,
+    password: password,
+    displayName: displayName,
+  );
+
+  @override
+  Future<void> updateDisplayName(String name) =>
+      _remote.updateDisplayName(name);
 
   @override
   Future<void> linkWithGoogle() async {

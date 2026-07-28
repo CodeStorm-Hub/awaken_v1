@@ -36,5 +36,13 @@ String friendlyAuthErrorMessage(Object error) {
     }
     return error.message;
   }
+  if (error is PostgrestException) {
+    // 23505 = unique_violation — `profiles.display_name` has a UNIQUE
+    // constraint (see `syncProfileDisplayName`'s doc comment).
+    if (error.code == '23505' ||
+        error.message.toLowerCase().contains('display_name')) {
+      return 'That name is already taken — try another.';
+    }
+  }
   return 'Something went wrong. Please try again.';
 }

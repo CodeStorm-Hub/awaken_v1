@@ -12,6 +12,7 @@ class LeaderboardEntry extends Equatable {
     required this.streakTier,
     required this.areaSqm,
     required this.isYou,
+    this.avatarUrl,
   });
 
   final int rank;
@@ -21,6 +22,10 @@ class LeaderboardEntry extends Equatable {
   final double areaSqm;
   final bool isYou;
 
+  /// From `profiles.avatar_url` — null for accounts that have never linked
+  /// Google (or any other provider whose metadata carries a photo).
+  final String? avatarUrl;
+
   @override
   List<Object?> get props => [
     rank,
@@ -29,5 +34,6 @@ class LeaderboardEntry extends Equatable {
     streakTier,
     areaSqm,
     isYou,
+    avatarUrl,
   ];
 }

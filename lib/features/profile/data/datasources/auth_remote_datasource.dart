@@ -34,13 +34,26 @@ class AuthRemoteDataSource {
   /// credentials to the *same* user id rather than creating a new account
   /// (plan H8 — no re-keying). Supabase emails a confirmation link; the
   /// identity isn't fully non-anonymous until it's clicked.
+  ///
+  /// [displayName] is folded into the same `updateUser` call's metadata
+  /// (`full_name`) so it lands in the same place Google-linked accounts'
+  /// names already live — `_toAppUser` reads from there, not `profiles`.
+  /// [syncProfileDisplayName] then copies it to `profiles.display_name`,
+  /// the column every cross-user view (leaderboards, squad presence) reads
+  /// instead, since `profiles` RLS is select-own-row-only.
   Future<void> linkWithEmail({
     required String email,
     required String password,
+    required String displayName,
   }) async {
     await _client.auth.updateUser(
-      UserAttributes(email: email, password: password),
+      UserAttributes(
+        email: email,
+        password: password,
+        data: {'full_name': displayName},
+      ),
     );
+    await syncProfileDisplayName(displayName);
   }
 
   /// Signs in as a *returning* linked user — deliberately distinct from
@@ -155,12 +168,36 @@ class AuthRemoteDataSource {
         metadata?['full_name'] as String? ?? metadata?['name'] as String?;
     if (user == null || name == null || name.trim().isEmpty) return;
     try {
-      await _client.from('profiles').update({
-        'display_name': name,
-      }).eq('id', user.id);
+      await syncProfileDisplayName(name);
     } on PostgrestException {
       // Best-effort — see doc comment above.
     }
+  }
+
+  /// Writes [name] to `profiles.display_name` only — the column every
+  /// cross-user view (leaderboards, squad presence) reads. Unlike
+  /// [syncDisplayNameFromMetadata]'s best-effort swallow (a cosmetic sync
+  /// riding along an auth flow that must not fail over it), this is called
+  /// from flows where the name *is* the point (sign-up, the profile editor)
+  /// — a `display_name` unique-constraint collision propagates so the
+  /// caller can tell the user to pick another name instead of silently
+  /// losing it.
+  Future<void> syncProfileDisplayName(String name) {
+    final user = _client.auth.currentUser;
+    if (user == null) return Future.value();
+    return _client
+        .from('profiles')
+        .update({'display_name': name})
+        .eq('id', user.id);
+  }
+
+  /// User-initiated name change (the profile editor) — updates both the
+  /// auth metadata `_toAppUser` reads for the signed-in user's own display
+  /// (so the change shows immediately without a full re-auth) and
+  /// `profiles.display_name` for everyone else's view of this user.
+  Future<void> updateDisplayName(String name) async {
+    await _client.auth.updateUser(UserAttributes(data: {'full_name': name}));
+    await syncProfileDisplayName(name);
   }
 
   Future<void> signOut() => _client.auth.signOut();

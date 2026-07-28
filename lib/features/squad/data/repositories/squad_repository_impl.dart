@@ -153,6 +153,7 @@ class SquadRepositoryImpl implements SquadRepository {
           ),
           areaSqm: (rows[i]['area_sqm'] as num?)?.toDouble() ?? 0,
           isYou: rows[i]['user_id'] == userId,
+          avatarUrl: rows[i]['avatar_url'] as String?,
         ),
     ];
   }
@@ -228,6 +229,7 @@ class SquadRepositoryImpl implements SquadRepository {
               activity:
                   activityOverrides[userId] ??
                   presence.payload['activity'] as String?,
+              avatarUrl: presence.payload['avatar_url'] as String?,
             ),
           );
         }
@@ -267,18 +269,18 @@ class SquadRepositoryImpl implements SquadRepository {
     final squad = _cachedSquad;
     final userId = _currentUserId;
     if (squad == null || userId == null) return;
-    final displayName =
-        (await _supabase
-                .from('profiles')
-                .select('display_name')
-                .eq('id', userId)
-                .maybeSingle())?['display_name']
-            as String? ??
-        'You';
+    final profile = await _supabase
+        .from('profiles')
+        .select('display_name, avatar_url')
+        .eq('id', userId)
+        .maybeSingle();
+    final displayName = profile?['display_name'] as String? ?? 'You';
+    final avatarUrl = profile?['avatar_url'] as String?;
     await _remote.trackPresence(squad.id, {
       'user_id': userId,
       'display_name': displayName,
       'activity': activity,
+      'avatar_url': ?avatarUrl,
     });
   }
 
