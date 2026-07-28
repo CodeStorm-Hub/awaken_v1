@@ -140,8 +140,20 @@ class LocalWriter {
         operation: OutboxOperation.upsert,
         payload: {
           'id': id,
-          'started_at': startedAt.toIso8601String(),
-          'ended_at': endedAt?.toIso8601String(),
+          // `.toUtc()` is load-bearing, not cosmetic: `submit_run()` compares
+          // these against each GPS fix's timestamp (already UTC — geolocator
+          // returns UTC `Position.timestamp`) with only a 5-minute tolerance.
+          // `startedAt` here can originate from a bare `DateTime.now()`
+          // (local time) — serializing that without `.toUtc()` drops the
+          // offset from the ISO string, so Postgres reads it as UTC and every
+          // timestamp is off by the device's UTC offset. For any non-UTC
+          // timezone that's >5 minutes, so the RPC unconditionally threw
+          // "point timestamps outside submitted run window" and no run/
+          // territory was ever persisted server-side — reproduced live: every
+          // closed-loop run submission failed this way regardless of actual
+          // GPS validity.
+          'started_at': startedAt.toUtc().toIso8601String(),
+          'ended_at': endedAt?.toUtc().toIso8601String(),
           'point_count': pointCount,
           'path': pathGeoJson,
           'point_timestamps': pointTimestampsJson,

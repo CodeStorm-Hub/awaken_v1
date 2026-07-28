@@ -94,7 +94,11 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
 
     await _beginTracking(
       runId: const Uuid().v4(),
-      startedAt: DateTime.now(),
+      // UTC, not local — this value flows into `submit_run()`'s
+      // `p_started_at` (via `LocalWriter.insertRun`), which is compared
+      // against GPS-fix timestamps (already UTC) with only a 5-minute
+      // tolerance. See `LocalWriter.insertRun`'s doc comment.
+      startedAt: DateTime.now().toUtc(),
       initialPoints: const [],
       initialDistance: 0,
     );
