@@ -86,7 +86,10 @@ class AuthRepositoryImpl implements AuthRepository {
   }) => _remote.linkWithEmail(email: email, password: password);
 
   @override
-  Future<void> linkWithGoogle() => _remote.linkWithGoogle();
+  Future<void> linkWithGoogle() async {
+    await _remote.linkWithGoogle();
+    await _remote.syncDisplayNameFromMetadata();
+  }
 
   @override
   Future<void> signInWithPassword({
@@ -112,6 +115,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> signInWithGoogle() async {
     await _clearIdentityState();
     await _remote.signInWithGoogle();
+    await _remote.syncDisplayNameFromMetadata();
     await _pullDownSync.run();
   }
 

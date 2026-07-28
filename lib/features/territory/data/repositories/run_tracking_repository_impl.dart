@@ -19,6 +19,7 @@ import '../../domain/entities/track_point.dart';
 import '../../domain/repositories/run_tracking_repository.dart';
 import '../datasources/location_provider_factory.dart';
 import '../datasources/run_foreground_service.dart';
+import '../datasources/run_progress_remote_datasource.dart';
 import '../mappers/path_simplifier.dart';
 
 @LazySingleton(as: RunTrackingRepository)
@@ -29,12 +30,14 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     this._syncWorker,
     this._db,
     this._locationProviderFactory,
+    this._runProgress,
   );
 
   final RunForegroundService _foregroundService;
   final LocalWriter _localWriter;
   final SyncWorker _syncWorker;
   final AppDatabase _db;
+  final RunProgressRemoteDataSource _runProgress;
 
   /// Real GPS in production, a fixture-replaying provider in `main_e2e.dart`
   /// builds — see `RegisterModule.locationProviderFactory`.
@@ -252,6 +255,14 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
   /// Throttled disk checkpoint — refined territory plan's resilience
   /// requirement. Best-effort: a write failure here must never interrupt
   /// live tracking, so errors are swallowed rather than surfaced.
+  ///
+  /// Also mirrors the same snapshot to the `active_runs` Supabase table
+  /// (real-time backup, distinct from the local-only checkpoint above) —
+  /// so an in-progress run survives worse than an app-process kill (device
+  /// loss, uninstall, local DB corruption) instead of existing only on this
+  /// one device until the final `submit_run()` call succeeds. Same
+  /// best-effort policy: a failed push (offline, etc.) is silently retried
+  /// on the next tick, never surfaced to the tracking UI.
   Future<void> _maybeWriteCheckpoint() async {
     final runId = _runId;
     final startedAt = _startedAt;
@@ -260,6 +271,7 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     final last = _lastCheckpointAt;
     if (last != null && now.difference(last) < _checkpointInterval) return;
     _lastCheckpointAt = now;
+    final points = _state.points;
     try {
       await _db
           .into(_db.runCheckpoints)
@@ -269,7 +281,7 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
               runId: runId,
               startedAt: startedAt,
               pointsJson: jsonEncode(
-                _state.points.map((p) => p.toJson()).toList(),
+                points.map((p) => p.toJson()).toList(),
               ),
               distanceMeters: _state.distanceMeters,
               updatedAt: now,
@@ -278,10 +290,30 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     } catch (_) {
       // Best-effort — see doc comment above.
     }
+    if (points.length < 2) return;
+    try {
+      await _runProgress.upsertProgress(
+        runId: runId,
+        startedAt: startedAt,
+        path: PathSimplifier.toGeoJsonMap(points),
+        pointTimestamps: [
+          for (final p in points) p.timestamp.toUtc().toIso8601String(),
+        ],
+        distanceMeters: _state.distanceMeters,
+      );
+    } catch (_) {
+      // Best-effort — see doc comment above.
+    }
   }
 
   Future<void> _clearCheckpoint() async {
     await (_db.delete(_db.runCheckpoints)..where((t) => t.id.equals(1))).go();
+    try {
+      await _runProgress.clearProgress();
+    } catch (_) {
+      // Best-effort — a leftover row is harmless (overwritten by the next
+      // run's first checkpoint) and must never block finishing this one.
+    }
   }
 
   @override

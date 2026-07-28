@@ -73,13 +73,17 @@ abstract final class PathSimplifier {
     return math.sqrt(dx * dx + dy * dy);
   }
 
-  static String toGeoJsonLineString(List<TrackPoint> points) {
-    return jsonEncode({
+  static Map<String, Object?> toGeoJsonMap(List<TrackPoint> points) {
+    return {
       'type': 'LineString',
       'coordinates': [
         for (final p in points) [p.longitude, p.latitude],
       ],
-    });
+    };
+  }
+
+  static String toGeoJsonLineString(List<TrackPoint> points) {
+    return jsonEncode(toGeoJsonMap(points));
   }
 
   /// Per-point capture timestamps, same order as [toGeoJsonLineString]'s

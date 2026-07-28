@@ -115,6 +115,8 @@ import '../../features/territory/data/datasources/location_provider_factory.dart
     as _i427;
 import '../../features/territory/data/datasources/run_foreground_service.dart'
     as _i862;
+import '../../features/territory/data/datasources/run_progress_remote_datasource.dart'
+    as _i563;
 import '../../features/territory/data/datasources/territory_remote_datasource.dart'
     as _i246;
 import '../../features/territory/data/repositories/run_tracking_repository_impl.dart'
@@ -200,6 +202,9 @@ _i174.GetIt init(
   );
   gh.lazySingleton<_i427.LocationProviderFactory>(
     () => _i427.GeolocatorLocationProviderFactory(),
+  );
+  gh.factory<_i563.RunProgressRemoteDataSource>(
+    () => _i563.RunProgressRemoteDataSource(gh<_i454.SupabaseClient>()),
   );
   gh.factory<_i246.TerritoryRemoteDataSource>(
     () => _i246.TerritoryRemoteDataSource(gh<_i454.SupabaseClient>()),
@@ -346,6 +351,7 @@ _i174.GetIt init(
       gh<_i666.SyncWorker>(),
       gh<_i90.AppDatabase>(),
       gh<_i427.LocationProviderFactory>(),
+      gh<_i563.RunProgressRemoteDataSource>(),
     ),
   );
   gh.lazySingleton<_i1014.AlarmRepository>(

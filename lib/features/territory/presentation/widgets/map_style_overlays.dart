@@ -50,13 +50,31 @@ class MapStyleFailureOverlay extends StatelessWidget {
 /// overlay so a working-but-degraded fallback doesn't look identical to a
 /// fully broken map.
 class MapStyleRetryingBanner extends StatelessWidget {
-  const MapStyleRetryingBanner({super.key});
+  // `top`/`bottom` are mutually exclusive, matching `Positioned`'s own
+  // constraints — pass whichever edge this page wants to anchor to.
+  // Defaults to `bottom: 48` (the original, still-correct anchor for
+  // `ActiveRunPage`, which has no chrome below the map to clear).
+  // `TerritoryPage` passes `top` instead, to sit below its own top bar —
+  // it previously wrapped this widget in a *second* `Positioned`, which
+  // doesn't compose (both `Positioned`s tried to write `StackParentData`
+  // to the same underlying map `Stack`, throwing
+  // "Incorrect use of ParentDataWidget" on every build once a retry
+  // banner was shown).
+  const MapStyleRetryingBanner({this.top, this.bottom, super.key})
+    : assert(
+        top == null || bottom == null,
+        'pass only one of top/bottom',
+      );
+
+  final double? top;
+  final double? bottom;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Positioned(
-      bottom: 48,
+      top: top,
+      bottom: top == null ? (bottom ?? 48) : null,
       left: 14,
       right: 14,
       child: Material(

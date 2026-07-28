@@ -55,7 +55,10 @@ class _TerritoryPageState extends State<TerritoryPage> {
   bool _hasFix = false;
   bool _showRivalTerritory = true;
 
-  late final _styleLoader = MapStyleLoader(onChange: () => setState(() {}));
+  late final _styleLoader = MapStyleLoader(
+    onChange: () => setState(() {}),
+    isDark: Theme.of(context).brightness == Brightness.dark,
+  );
 
   final _bountyFillsByZoneId = <String, List<Fill>>{};
   Rival? _currentRival;
@@ -66,6 +69,17 @@ class _TerritoryPageState extends State<TerritoryPage> {
     super.initState();
     unawaited(_locateSelf());
     unawaited(_loadRivalAndDecayStatus());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Corrects the map for the `IndexedStack`-eager-build/`ThemeModeCubit`-
+    // async-load race the `_styleLoader` field's doc comment describes —
+    // also picks up any later in-session theme toggle for free.
+    _styleLoader.updateBrightness(
+      Theme.of(context).brightness == Brightness.dark,
+    );
   }
 
   /// Neither of these is viewport-scoped like territories/bounty zones —
@@ -397,12 +411,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
           ),
 
           if (_styleLoader.status == MapStyleLoadStatus.retrying)
-            Positioned(
-              top: topPadding + 64,
-              left: 14,
-              right: 14,
-              child: const MapStyleRetryingBanner(),
-            ),
+            MapStyleRetryingBanner(top: topPadding + 64),
           if (_styleLoader.status == MapStyleLoadStatus.failed)
             MapStyleFailureOverlay(onRetry: _styleLoader.retry),
 

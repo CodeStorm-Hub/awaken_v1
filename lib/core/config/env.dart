@@ -20,13 +20,22 @@ abstract final class Env {
   /// MapLibre style URL for the territory map (plan C3 — never the
   /// OpenStreetMap public raster tile server in production). Points at a
   /// MapLibre `style.json` — vector tiles, not raster XYZ — rendered via
-  /// `maplibre_gl`'s `MapLibreMap` widget. Defaults to OpenFreeMap's
-  /// "Liberty" style (free, no API key, commercial use permitted — see
+  /// `maplibre_gl`'s `MapLibreMap` widget. Defaults to one of OpenFreeMap's
+  /// bundled styles (free, no API key, commercial use permitted — see
   /// openfreemap.org) so the map works out of the box; override for a
   /// self-hosted or commercial style. Attribution is baked into the style
   /// document itself and rendered by the map automatically — no separate
   /// attribution string needed, unlike the old raster-tile setup.
-  static String get mapStyleUrl {
+  ///
+  /// [isDark] picks which *default* to fall back to — the map previously
+  /// always used the dark style regardless of the app's own theme, which
+  /// left a light-mode session with light `AppleGlassContainer` chrome
+  /// (translucent white glass, by design) sitting on a permanently-dark
+  /// basemap: low-contrast, and visually inconsistent with the rest of a
+  /// light-themed page. An explicit `MAP_STYLE_URL` override still wins
+  /// unconditionally in both cases — an operator who set one wanted that
+  /// exact style, not a theme-dependent swap.
+  static String mapStyleUrl({required bool isDark}) {
     // Real bug found via live emulator testing: `.env.client` deliberately
     // ships `MAP_STYLE_URL=` (present, empty — a placeholder for later
     // overriding) rather than omitting the key. `dotenv.maybeGet` returns
@@ -36,8 +45,10 @@ abstract final class Env {
     // logcat, map renders solid black). Must explicitly check `isEmpty` too
     // — same pattern `_require` below already uses for required keys.
     final value = dotenv.maybeGet('MAP_STYLE_URL');
-    if (value == null || value.isEmpty) return 'https://tiles.openfreemap.org/styles/dark';
-    return value;
+    if (value != null && value.isNotEmpty) return value;
+    return isDark
+        ? 'https://tiles.openfreemap.org/styles/dark'
+        : 'https://tiles.openfreemap.org/styles/liberty';
   }
 
   /// Optional second style URL to fall back to manually (e.g. in

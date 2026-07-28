@@ -66,12 +66,20 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
   bool _busy = false;
   ColorScheme? _scheme;
 
-  late final _styleLoader = MapStyleLoader(onChange: () => setState(() {}));
+  late final _styleLoader = MapStyleLoader(
+    onChange: () => setState(() {}),
+    isDark: Theme.of(context).brightness == Brightness.dark,
+  );
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _scheme = Theme.of(context).colorScheme;
+    // Same correction as `TerritoryPage` — see `_styleLoader` field's doc
+    // comment on `MapStyleLoader._isDark`.
+    _styleLoader.updateBrightness(
+      Theme.of(context).brightness == Brightness.dark,
+    );
   }
 
   @override

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:awaken/features/territory/data/datasources/location_provider_factory.dart';
 import 'package:awaken/features/territory/data/datasources/run_foreground_service.dart';
+import 'package:awaken/features/territory/data/datasources/run_progress_remote_datasource.dart';
 import 'package:awaken/features/territory/data/repositories/run_tracking_repository_impl.dart';
 import 'package:awaken/sync/local/database.dart';
 import 'package:awaken/sync/outbox/local_writer.dart';
@@ -30,6 +31,8 @@ class _MockSyncWorker extends Mock implements SyncWorker {}
 
 class _MockLocationProviderFactory extends Mock implements LocationProviderFactory {}
 
+class _MockRunProgressRemoteDataSource extends Mock implements RunProgressRemoteDataSource {}
+
 /// Never emits a position — this test only exercises the resume-from-
 /// checkpoint path (does startRun() correctly restore prior state?), not
 /// live GPS accumulation.
@@ -57,6 +60,7 @@ void main() {
   late _MockLocalWriter localWriter;
   late _MockSyncWorker syncWorker;
   late _MockLocationProviderFactory locationProviderFactory;
+  late _MockRunProgressRemoteDataSource runProgress;
   late RunTrackingRepositoryImpl repository;
 
   setUp(() {
@@ -65,10 +69,21 @@ void main() {
     localWriter = _MockLocalWriter();
     syncWorker = _MockSyncWorker();
     locationProviderFactory = _MockLocationProviderFactory();
+    runProgress = _MockRunProgressRemoteDataSource();
 
     when(() => foregroundService.start()).thenAnswer((_) async {});
     when(() => foregroundService.stop()).thenAnswer((_) async {});
     when(() => locationProviderFactory.create()).thenReturn(_SilentLocationProvider());
+    when(
+      () => runProgress.upsertProgress(
+        runId: any(named: 'runId'),
+        startedAt: any(named: 'startedAt'),
+        path: any(named: 'path'),
+        pointTimestamps: any(named: 'pointTimestamps'),
+        distanceMeters: any(named: 'distanceMeters'),
+      ),
+    ).thenAnswer((_) async {});
+    when(() => runProgress.clearProgress()).thenAnswer((_) async {});
 
     repository = RunTrackingRepositoryImpl(
       foregroundService,
@@ -76,6 +91,7 @@ void main() {
       syncWorker,
       db,
       locationProviderFactory,
+      runProgress,
     );
   });
 

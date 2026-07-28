@@ -139,6 +139,30 @@ class AuthRemoteDataSource {
     await _client.auth.refreshSession();
   }
 
+  /// Best-effort sync of `profiles.display_name` to the name a newly-linked
+  /// identity actually carries — `handle_new_user()` only ever populates it
+  /// once, at account creation, so a user who starts anonymous (getting a
+  /// generated "Runner-XXXXXXXX" placeholder) and later links Google would
+  /// otherwise keep that placeholder forever on every leaderboard/squad
+  /// view even though a real name is now available. `display_name` carries
+  /// a UNIQUE constraint, so a collision here is swallowed rather than
+  /// thrown — losing this cosmetic update is preferable to breaking the
+  /// link/sign-in flow that triggered it.
+  Future<void> syncDisplayNameFromMetadata() async {
+    final user = _client.auth.currentUser;
+    final metadata = user?.userMetadata;
+    final name =
+        metadata?['full_name'] as String? ?? metadata?['name'] as String?;
+    if (user == null || name == null || name.trim().isEmpty) return;
+    try {
+      await _client.from('profiles').update({
+        'display_name': name,
+      }).eq('id', user.id);
+    } on PostgrestException {
+      // Best-effort — see doc comment above.
+    }
+  }
+
   Future<void> signOut() => _client.auth.signOut();
 
   /// Calls the `delete-account` Edge Function (deployed server-side with

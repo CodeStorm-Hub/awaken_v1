@@ -15,7 +15,7 @@ enum MapStyleLoadStatus { loading, loaded, retrying, failed }
 /// a new style is to give the `MapLibreMap` widget a new [styleKey], which
 /// forces Flutter to tear down and recreate the native view.
 ///
-/// Tiers, in order: primary ([Env.mapStyleUrl]) → manually configured
+/// Tiers, in order: primary (`Env.mapStyleUrl`) → manually configured
 /// hosted fallback ([Env.mapStyleFallbackUrl]) → bundled self-hosted
 /// fallback (a local-asset style pointing at [Env.tileWorkerUrl], a global
 /// low-zoom OSM extract — degraded detail, but doesn't depend on any
@@ -23,11 +23,26 @@ enum MapStyleLoadStatus { loading, loaded, retrying, failed }
 /// is skipped. [onChange] is called whenever [styleString]/[styleKey]/
 /// [status] change so the host `State` can `setState`.
 class MapStyleLoader {
-  MapStyleLoader({required this.onChange, Duration? timeout})
-    : _timeout = timeout ?? const Duration(seconds: 15);
+  // An initializing formal here would force callers to name the argument
+  // `_isDark` (a private identifier), not the public `isDark` every call
+  // site uses — hence the plain assignment below over `this._isDark`.
+  MapStyleLoader({required this.onChange, required bool isDark, Duration? timeout})
+    : _isDark = isDark, // ignore: prefer_initializing_formals
+      _timeout = timeout ?? const Duration(seconds: 15);
 
   final VoidCallback onChange;
   final Duration _timeout;
+
+  /// The app's theme brightness — picks which default style tier 0 falls
+  /// back to (see `Env.mapStyleUrl`'s doc comment). Mutable, via
+  /// [updateBrightness]: `IndexedStack`-based tab shells (this app's,
+  /// `AppShellPage`) build every tab eagerly at startup, which can run
+  /// before `ThemeModeCubit` finishes loading the persisted preference from
+  /// disk — a map page built at that exact moment would otherwise lock onto
+  /// a transient, possibly-wrong brightness forever (the chrome around it
+  /// doesn't have this problem since `AppleGlassContainer` re-reads
+  /// `Theme.of(context)` on every rebuild instead of caching it once).
+  bool _isDark;
 
   static const _bundledFallbackAssetPath = 'assets/map/fallback_style.json';
   static const _bundledFallbackPlaceholder = '{{TILE_WORKER_BASE_URL}}';
@@ -51,7 +66,7 @@ class MapStyleLoader {
   /// should clamp to this when non-null.
   double? get dataMaxZoom => _tier == 2 ? bundledFallbackMaxZoom : null;
 
-  String styleString = Env.mapStyleUrl;
+  late String styleString = Env.mapStyleUrl(isDark: _isDark);
   Key styleKey = const ValueKey('map-style-0');
   MapStyleLoadStatus status = MapStyleLoadStatus.loading;
 
@@ -78,7 +93,21 @@ class MapStyleLoader {
   /// button after [status] reaches [MapStyleLoadStatus.failed].
   void retry() {
     _tier = 0;
-    _swapTo(Env.mapStyleUrl, status: MapStyleLoadStatus.retrying);
+    _swapTo(Env.mapStyleUrl(isDark: _isDark), status: MapStyleLoadStatus.retrying);
+  }
+
+  /// Call from the host `State`'s `didChangeDependencies` with the current
+  /// `Theme.of(context).brightness == Brightness.dark`. A no-op unless the
+  /// brightness actually changed and the loader is still on tier 0/1 (a
+  /// tier-2 bundled-fallback swap means the primary/fallback hosts are
+  /// unreachable — reverting to a tier-0 URL there would just restart a
+  /// doomed load instead of leaving the working degraded map alone).
+  void updateBrightness(bool isDark) {
+    if (isDark == _isDark || _tier > 1) return;
+    _isDark = isDark;
+    if (_tier == 0) {
+      _swapTo(Env.mapStyleUrl(isDark: isDark), status: MapStyleLoadStatus.retrying);
+    }
   }
 
   void dispose() {
