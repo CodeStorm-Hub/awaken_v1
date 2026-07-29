@@ -34,18 +34,27 @@ abstract final class TerritoryMapStyle {
     Territory territory,
     Map<String, dynamic> properties,
   ) {
+    // A ring needs >= 3 distinct points to be a valid GeoJSON LinearRing
+    // once closed (4 positions minimum, including the repeated closing
+    // point). The previous version emitted an empty `[]` placeholder for
+    // an empty ring instead of dropping it, handing the native renderer a
+    // polygon component with a degenerate ring — the confirmed cause of
+    // "Invalid geometry in line layer" warnings seen in live logcat output
+    // (flutter_run_logs.md), since the outline LineLayer reads this same
+    // source. Filtering here (both the ring and, if every ring in a
+    // component was degenerate, the whole component) keeps only valid
+    // geometry reaching `addGeoJsonSource`/`setGeoJsonSource`.
     final coordinates = [
       for (final rings in territory.polygons)
-        [
-          for (final ring in rings)
-            if (ring.isNotEmpty)
-              [
-                for (final point in ring) [point.longitude, point.latitude],
-                [ring.first.longitude, ring.first.latitude],
-              ]
-            else
-              <List<double>>[],
-        ],
+        if (rings.any((ring) => ring.length >= 3))
+          [
+            for (final ring in rings)
+              if (ring.length >= 3)
+                [
+                  for (final point in ring) [point.longitude, point.latitude],
+                  [ring.first.longitude, ring.first.latitude],
+                ],
+          ],
     ];
     return {
       'type': 'Feature',
@@ -112,6 +121,20 @@ abstract final class TerritoryBasemapRecolor {
   // values.
   static const _roadLabelHalo = 'rgba(0,0,0,0.55)';
   static const _boundaryColor = '#E4E1E1';
+  // Both `styles/liberty` and `styles/dark` declare every text layer's
+  // `text-font` as `['Noto Sans Regular']` (confirmed by fetching both
+  // style documents directly) — OpenFreeMap only hosts Noto Sans glyphs.
+  // `SymbolLayerProperties.textFont`'s own doc comment records its SDK
+  // default as `[Open Sans Regular, Arial Unicode MS Regular]`, and
+  // `setLayerProperties` serializes with `skipNulls: false` (confirmed via
+  // package source), so any `SymbolLayerProperties(...)` call below that
+  // left `textFont` unset was sending an explicit `text-font: null`,  which
+  // the native side was applying as that Open-Sans SDK default instead of
+  // leaving Noto Sans alone — the confirmed cause of the
+  // "Failed to load glyph range ... HTTP 404" errors in live logcat output
+  // (flutter_run_logs.md): OpenFreeMap doesn't host Open Sans at all.
+  // Every `SymbolLayerProperties` construction below must repeat this.
+  static const _notoSansRegular = ['Noto Sans Regular'];
   // The brief's POI treatment ("pale mint fill #CAFFD2 with white stroke")
   // describes a filled shape, but OpenFreeMap's POI layers are `symbol`
   // layers (icon + text label), not fills — there's no POI polygon to fill.
@@ -261,6 +284,7 @@ abstract final class TerritoryBasemapRecolor {
       const maplibre.SymbolLayerProperties(
         textColor: _roadLabelColor,
         textHaloColor: _roadLabelHalo,
+        textFont: _notoSansRegular,
       ),
     );
 
@@ -289,6 +313,7 @@ abstract final class TerritoryBasemapRecolor {
         const maplibre.SymbolLayerProperties(
           textColor: _poiTextColor,
           textHaloColor: _poiHalo,
+          textFont: _notoSansRegular,
         ),
       );
       await line(_lightBoundaryLine, _boundaryColor);

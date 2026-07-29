@@ -63,19 +63,38 @@ class _TerritoryPageState extends State<TerritoryPage> {
   List<Territory> _lastTerritories = const [];
 
   // Territory fill/outline rendering (items 2/3/5/6/7) runs entirely off one
-  // `GeoJsonSource` + two style layers instead of per-territory `Fill`/`Line`
-  // annotations — see this file's class doc comment. `_territoryLayersReady`
-  // guards the one-time `addGeoJsonSource`/`addLayer` calls; later redraws
-  // just call `setGeoJsonSource` on the existing source. Rival territory's
-  // dashed outline (item 3) is a real `line-dasharray` data expression on
-  // `_territoryOutlineLayerId` now — no more broken-segment faking (compare
-  // the now-deleted `TerritoryMapStyle.ringToDashSegments`). The pulsing
-  // at-risk border (item 5) is a second, filtered outline layer
+  // `GeoJsonSource` + several style layers instead of per-territory
+  // `Fill`/`Line` annotations — see this file's class doc comment.
+  // `_territoryLayersReady` guards the one-time `addGeoJsonSource`/
+  // `addLayer` calls; later redraws just call `setGeoJsonSource` on the
+  // existing source. Rival territory's dashed outline (item 3) is a real
+  // `line-dasharray` *literal* on its own filtered layer
+  // (`_territoryOutlineRivalLayerId`, separate from
+  // `_territoryOutlineOwnedLayerId`) — no more broken-segment faking
+  // (compare the now-deleted `TerritoryMapStyle.ringToDashSegments`), and no
+  // data-driven dasharray expression either, since MapLibre Native doesn't
+  // support that for this property (see that layer's own creation comment).
+  // The pulsing at-risk border (item 5) is a third, filtered outline layer
   // (`_territoryAtRiskOutlineLayerId`) whose `lineWidth`/`lineOpacity` are
   // ticked via `setLayerProperties` instead of re-adding `Line` annotations.
   static const _territorySourceId = 'territories-source';
   static const _territoryFillLayerId = 'territories-fill-layer';
-  static const _territoryOutlineLayerId = 'territories-outline-layer';
+  // Split into two feature-filtered layers rather than one layer with a
+  // data-driven `line-dasharray` expression (`['case', ['==', ['get',
+  // 'owner'], 'rival'], ...]`) — confirmed via the official MapLibre style
+  // spec's SDK support table that `line-dasharray` never supports
+  // data-driven styling on MapLibre Native Android/iOS (only MapLibre GL
+  // JS does; tracked upstream as maplibre-native#744). That data expression
+  // was being silently rejected on every single call — both the one-time
+  // initial set below and every 80ms ant-path tick — confirmed live via
+  // logcat's `[JNI]: Error setting property: line-dasharray data
+  // expressions not supported`, spamming continuously (flutter_run_logs.md).
+  // A layer-level `filter` (not a paint-property expression) IS supported,
+  // so each layer here only ever contains one territory type and its
+  // `lineDasharray` is always a plain `['literal', [...]]` — no data
+  // expression, no rejection.
+  static const _territoryOutlineOwnedLayerId = 'territories-outline-owned-layer';
+  static const _territoryOutlineRivalLayerId = 'territories-outline-rival-layer';
   static const _territoryExtrusionLayerId = 'territories-extrusion-layer';
   static const _territoryAtRiskOutlineLayerId =
       'territories-atrisk-outline-layer';
@@ -102,13 +121,15 @@ class _TerritoryPageState extends State<TerritoryPage> {
   double _pulseT = 0;
 
   /// Animated "ant path" dashed rival outline — steps
-  /// `_territoryOutlineLayerId`'s rival-branch `line-dasharray` through
+  /// `_territoryOutlineRivalLayerId`'s `line-dasharray` through
   /// [_antPathDashSequence] on a timer, same structural pattern as
   /// `_pulseTimer`/`_tickPulse` above (including the reduce-motion guard in
   /// `_updateAntPathTimer`, mirroring `_updatePulseTimer`'s
-  /// `hasAtRisk`-gating). The OWNED branch of the outline layer's `case`
-  /// expression always stays `[1, 0]` (solid) — only the rival branch's
-  /// dasharray value cycles.
+  /// `hasAtRisk`-gating). Owned territories are a separate layer
+  /// (`_territoryOutlineOwnedLayerId`) with no `lineDasharray` at all
+  /// (always solid) — see that layer's own creation comment for why a
+  /// single shared layer with a data-driven dasharray doesn't work on
+  /// native Android/iOS.
   Timer? _antPathTimer;
   int _antPathStep = 0;
 
@@ -579,6 +600,13 @@ class _TerritoryPageState extends State<TerritoryPage> {
           textColor: '#1C1C1E',
           textAllowOverlap: true,
           textIgnorePlacement: true,
+          // Both OpenFreeMap base styles only host Noto Sans glyphs — an
+          // omitted `textFont` sends an explicit null that the native SDK
+          // fills with its own default (`Open Sans Regular, Arial Unicode
+          // MS Regular`), which OpenFreeMap doesn't serve at all (confirmed
+          // 404 in live logcat output). See `TerritoryBasemapRecolor`'s
+          // `_notoSansRegular` doc comment for the full explanation.
+          textFont: ['Noto Sans Regular'],
         ),
         filter: ['has', 'point_count'],
       );
@@ -733,31 +761,41 @@ class _TerritoryPageState extends State<TerritoryPage> {
           fillOutlineColor: ['get', 'outlineColor'],
         ),
       );
-      // Rival territory's dashed outline (item 3) is a real data-driven
-      // `line-dasharray` expression now — `[1, 0]` (dash length 1, gap 0)
-      // reads as solid for everyone else. Replaces
-      // `TerritoryMapStyle.ringToDashSegments`'s broken-line-segment fake,
-      // which existed only because the old annotation-manager `LineOptions`
-      // had no dash-pattern paint property at all.
+      // Owned territory's outline — always solid, no `lineDasharray` at all
+      // (the property's absence renders as a solid line; no literal
+      // needed). Replaces `TerritoryMapStyle.ringToDashSegments`'s
+      // broken-line-segment fake, which existed only because the old
+      // annotation-manager `LineOptions` had no dash-pattern paint
+      // property at all.
       await controller.addLineLayer(
         _territorySourceId,
-        _territoryOutlineLayerId,
+        _territoryOutlineOwnedLayerId,
         const LineLayerProperties(
           lineColor: ['get', 'outlineColor'],
           lineWidth: 2,
-          lineDasharray: [
-            'case',
-            ['==', ['get', 'owner'], 'rival'],
-            ['literal', [2, 1.5]],
-            ['literal', [1, 0]],
-          ],
         ),
+        filter: ['==', ['get', 'owner'], 'me'],
+      );
+      // Rival territory's dashed outline (item 3) — a real `line-dasharray`
+      // *literal* (see class-field-level comment above for why this can't
+      // be a data expression). `_tickAntPath` animates this layer's
+      // dasharray through `_antPathDashSequence`; the initial value here is
+      // just that sequence's first step.
+      await controller.addLineLayer(
+        _territorySourceId,
+        _territoryOutlineRivalLayerId,
+        LineLayerProperties(
+          lineColor: const ['get', 'outlineColor'],
+          lineWidth: 2,
+          lineDasharray: ['literal', _antPathDashSequence.first],
+        ),
+        filter: ['==', ['get', 'owner'], 'rival'],
       );
       // Territory "skyline" (skyline redesign item 1) — a 3D fill-extrusion
       // reading the *same* `_territorySourceId` source (the geometry's
       // already there; no new source needed). `belowLayerId:
-      // _territoryOutlineLayerId` places it directly under the outline
-      // layer added just above — outlines (and, below that call, the
+      // _territoryOutlineOwnedLayerId` places it directly under the outline
+      // layers added just above — outlines (and, below that call, the
       // at-risk pulse border) still draw crisply on top of the extruded
       // blocks instead of getting buried under a 3D face. `fillColor`
       // reuses the exact `['get', 'fillColor']` expression the flat fill
@@ -790,7 +828,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
             20000, 160,
           ],
         ),
-        belowLayerId: _territoryOutlineLayerId,
+        belowLayerId: _territoryOutlineOwnedLayerId,
       );
       // Pulsing at-risk border (item 5) — a second outline layer reading
       // the same source, filtered to only at-risk features via the style
@@ -917,10 +955,12 @@ class _TerritoryPageState extends State<TerritoryPage> {
   /// Starts/stops the periodic `setLayerProperties` ticker driving the
   /// rival "ant path" dashed outline (item 3) — same
   /// gate/reduce-motion-guard structure as `_updatePulseTimer` above. A
-  /// static (non-animated, still dashed via the outline layer's original
-  /// `case` expression) rival outline is drawn regardless either way, so
-  /// reduce-motion users still get the dashed-vs-solid ownership cue, just
-  /// not the marching animation.
+  /// static (non-animated) dashed rival outline is drawn regardless either
+  /// way — `_territoryOutlineRivalLayerId`'s `lineDasharray` is initialized
+  /// to `_antPathDashSequence.first` when the layer is created and simply
+  /// never gets ticked further under reduce-motion — so reduce-motion users
+  /// still get the dashed-vs-solid ownership cue, just not the marching
+  /// animation.
   void _updateAntPathTimer(bool hasRival) {
     if (!hasRival) {
       _antPathTimer?.cancel();
@@ -940,16 +980,14 @@ class _TerritoryPageState extends State<TerritoryPage> {
     if (controller == null || !_territoryLayersReady) return;
     _antPathStep = (_antPathStep + 1) % _antPathDashSequence.length;
     final dash = _antPathDashSequence[_antPathStep];
+    // Plain literal array, no `case`/`get` — this layer (filtered to
+    // `owner == 'rival'` at creation) only ever contains rival features, so
+    // there's no per-feature branching left to express. See the field-level
+    // comment on `_territoryOutlineRivalLayerId` for why a data expression
+    // here would silently fail on native Android/iOS.
     await controller.setLayerProperties(
-      _territoryOutlineLayerId,
-      LineLayerProperties(
-        lineDasharray: [
-          'case',
-          ['==', ['get', 'owner'], 'rival'],
-          ['literal', dash],
-          ['literal', [1, 0]],
-        ],
-      ),
+      _territoryOutlineRivalLayerId,
+      LineLayerProperties(lineDasharray: ['literal', dash]),
     );
   }
 
@@ -1153,6 +1191,9 @@ class _TerritoryPageState extends State<TerritoryPage> {
           textColor: '#FFFFFF',
           textAllowOverlap: true,
           textIgnorePlacement: true,
+          // See the bounty cluster-count layer's identical comment above —
+          // same fix, same reason (OpenFreeMap only hosts Noto Sans).
+          textFont: ['Noto Sans Regular'],
         ),
         filter: ['has', 'point_count'],
       );
