@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:injectable/injectable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../core/di/injection.dart';
+import '../../../../core/usecase/usecase.dart';
+import '../../../territory/domain/usecases/get_current_position.dart';
 import '../../domain/entities/leaderboard_entry.dart';
 import '../../domain/entities/squad.dart';
 import '../../domain/entities/squad_presence_member.dart';
@@ -144,9 +147,19 @@ class SquadRepositoryImpl implements SquadRepository {
   /// sorted desc by `area_sqm` from the RPC, so equal-area neighbors share a
   /// rank; the UI (`_LeaderboardRow`) renders a shared rank as "T-N" by
   /// comparing a row's rank against its neighbors'.
+  ///
+  /// [rankOffset] is the number of rows that precede this page (i.e. the
+  /// `p_offset` the page was fetched with) — needed now that
+  /// [fetchGlobalLeaderboard]/[fetchNearbyLeaderboard] page via a true
+  /// server-side cursor instead of always refetching from row 0, so `rank`
+  /// must be `rankOffset + i + 1`, not a page-local `i + 1`. A tie that
+  /// straddles a page boundary (last row of one page == first row of the
+  /// next) isn't detected across the two separate calls — an accepted, rare
+  /// edge case given `area_sqm` is a continuous float.
   List<LeaderboardEntry> _mapLeaderboardRows(
     List<Map<String, dynamic>> rows, {
     String defaultName = 'Player',
+    int rankOffset = 0,
   }) {
     final userId = _currentUserId;
     final entries = <LeaderboardEntry>[];
@@ -156,7 +169,7 @@ class SquadRepositoryImpl implements SquadRepository {
       final area = (rows[i]['area_sqm'] as num?)?.toDouble() ?? 0;
       final rank = (previousArea != null && area == previousArea)
           ? previousRank!
-          : i + 1;
+          : rankOffset + i + 1;
       previousRank = rank;
       previousArea = area;
       entries.add(
@@ -200,25 +213,29 @@ class SquadRepositoryImpl implements SquadRepository {
     required double radiusM,
     required String timeWindow,
     int rowLimit = 50,
+    int offset = 0,
   }) async {
     final rows = await _remote.fetchNearbyLeaderboard(
       radiusM: radiusM,
       timeWindow: timeWindow,
       rowLimit: rowLimit,
+      offset: offset,
     );
-    return _mapLeaderboardRows(rows);
+    return _mapLeaderboardRows(rows, rankOffset: offset);
   }
 
   @override
   Future<List<LeaderboardEntry>> fetchGlobalLeaderboard({
     required String timeWindow,
     int rowLimit = 50,
+    int offset = 0,
   }) async {
     final rows = await _remote.fetchGlobalLeaderboard(
       timeWindow: timeWindow,
       rowLimit: rowLimit,
+      offset: offset,
     );
-    return _mapLeaderboardRows(rows);
+    return _mapLeaderboardRows(rows, rankOffset: offset);
   }
 
   @override
@@ -230,6 +247,12 @@ class SquadRepositoryImpl implements SquadRepository {
     required double radiusM,
     required String timeWindow,
   }) => _remote.fetchMyNearbyRank(radiusM: radiusM, timeWindow: timeWindow);
+
+  @override
+  Future<int?> fetchMySquadRank({
+    required String squadId,
+    String timeWindow = 'all_time',
+  }) => _remote.fetchMySquadRank(squadId: squadId, timeWindow: timeWindow);
 
   @override
   Future<List<TerritoryCaptureFeedItem>> fetchRecentTerritoryCaptures({
@@ -247,6 +270,8 @@ class SquadRepositoryImpl implements SquadRepository {
           loserDisplayName: row['loser_display_name'] as String?,
           areaTakenSqm: (row['area_taken_sqm'] as num?)?.toDouble() ?? 0,
           createdAt: DateTime.parse(row['created_at'] as String),
+          lat: (row['lat'] as num?)?.toDouble(),
+          lng: (row['lng'] as num?)?.toDouble(),
         ),
     ];
   }
@@ -282,6 +307,8 @@ class SquadRepositoryImpl implements SquadRepository {
                   activityOverrides[userId] ??
                   presence.payload['activity'] as String?,
               avatarUrl: presence.payload['avatar_url'] as String?,
+              lat: (presence.payload['lat'] as num?)?.toDouble(),
+              lng: (presence.payload['lng'] as num?)?.toDouble(),
             ),
           );
         }
@@ -328,11 +355,22 @@ class SquadRepositoryImpl implements SquadRepository {
         .maybeSingle();
     final displayName = profile?['display_name'] as String? ?? 'You';
     final avatarUrl = profile?['avatar_url'] as String?;
+    // Best-effort — a location fetch failing/timing out (denied permission,
+    // no fix yet) must never block presence tracking itself; the map
+    // clustering layer that consumes this is purely optional UI.
+    ({double latitude, double longitude})? position;
+    try {
+      position = await getIt<GetCurrentPosition>()(const NoParams());
+    } catch (_) {
+      position = null;
+    }
     await _remote.trackPresence(squad.id, {
       'user_id': userId,
       'display_name': displayName,
       'activity': activity,
       'avatar_url': ?avatarUrl,
+      if (position != null) 'lat': position.latitude,
+      if (position != null) 'lng': position.longitude,
     });
   }
 

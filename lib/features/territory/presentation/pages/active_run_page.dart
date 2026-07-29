@@ -38,19 +38,28 @@ import '../widgets/territory_map_style.dart';
 /// 1-second elapsed tick touches only the (cheap) stat-tile text, never the
 /// map.
 class ActiveRunPage extends StatelessWidget {
-  const ActiveRunPage({super.key});
+  const ActiveRunPage({super.key, this.focusLocation});
+
+  /// Where the map should start centered, before any GPS fix arrives —
+  /// used by `TerritoryPage`'s "Steal back" CTA to open this page already
+  /// looking at the rival's territory instead of the default
+  /// `LatLng(20, 0)` zoomed-out world view. Null (the default) keeps the
+  /// old behavior.
+  final LatLng? focusLocation;
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider<RunTrackingCubit>(
       create: (_) => getIt<RunTrackingCubit>()..begin(),
-      child: const _ActiveRunView(),
+      child: _ActiveRunView(focusLocation: focusLocation),
     );
   }
 }
 
 class _ActiveRunView extends StatefulWidget {
-  const _ActiveRunView();
+  const _ActiveRunView({this.focusLocation});
+
+  final LatLng? focusLocation;
 
   @override
   State<_ActiveRunView> createState() => _ActiveRunViewState();
@@ -112,7 +121,37 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
   Future<void> _onStyleLoaded() async {
     _styleLoaded = true;
     _styleLoader.onStyleLoaded();
+    // Captured before any `await` below (the new focus-location
+    // `animateCamera` call among them) — `context.read` after an async gap
+    // trips `use_build_context_synchronously` even though this widget's
+    // `context` doesn't actually change across the gap.
     final cubit = context.read<RunTrackingCubit>();
+    final controller = _controller;
+    if (controller != null) {
+      // Same Pokémon-GO-inspired basemap recolor as `TerritoryPage` — see
+      // `TerritoryBasemapRecolor`'s doc comment for the mechanism (applied
+      // per style load via `setLayerProperties`, not a pre-patched style
+      // JSON). Kept in sync here too since this page renders its own
+      // `MapLibreMap` on the same OpenFreeMap style tiers.
+      unawaited(
+        TerritoryBasemapRecolor.apply(
+          controller,
+          isDark: mounted && Theme.of(context).brightness == Brightness.dark,
+        ),
+      );
+      // Re-affirm the focus location once the style is actually ready,
+      // mirroring `TerritoryPage._onStyleLoaded`'s explicit follow-up after
+      // `initialCameraPosition` — belt-and-braces in case a real GPS fix
+      // (which would otherwise recenter via `_syncMapAnnotations`'s
+      // `_autoFollow` branch) hasn't arrived yet. Only while no route point
+      // has been drawn yet, so this never fights a live run already in
+      // progress after a style-tier fallback swap.
+      if (widget.focusLocation != null && _currentMarker == null) {
+        await controller.animateCamera(
+          CameraUpdate.newLatLngZoom(widget.focusLocation!, _focusZoom),
+        );
+      }
+    }
     await _handleStateChange(cubit.state);
   }
 
@@ -418,10 +457,16 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                   child: MapLibreMap(
                                     key: _styleLoader.styleKey,
                                     styleString: _styleLoader.styleString,
-                                    initialCameraPosition: const CameraPosition(
-                                      target: LatLng(20, 0),
-                                      zoom: 2,
-                                    ),
+                                    initialCameraPosition:
+                                        widget.focusLocation != null
+                                        ? CameraPosition(
+                                            target: widget.focusLocation!,
+                                            zoom: _focusZoom,
+                                          )
+                                        : const CameraPosition(
+                                            target: LatLng(20, 0),
+                                            zoom: 2,
+                                          ),
                                     onMapCreated: _onMapCreated,
                                     onStyleLoadedCallback: _onStyleLoaded,
                                     myLocationEnabled: false,

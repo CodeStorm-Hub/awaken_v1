@@ -73,12 +73,14 @@ class SquadRemoteDataSource {
 
   /// [timeWindow] is `'all_time'`, `'weekly'`, or `'daily'` (matches the
   /// RPCs' `p_time_window` check constraint). [rowLimit] is `p_row_limit`
-  /// (1-500) — the RPC has no offset/cursor param, so pagination is done by
-  /// refetching with a larger [rowLimit], not a true cursor.
+  /// (1-500). [offset] is `p_offset` (>= 0) — both RPCs gained a true
+  /// offset/cursor param, so "load more" pages via [offset] rather than
+  /// refetching with a larger [rowLimit].
   Future<List<Map<String, dynamic>>> fetchNearbyLeaderboard({
     required double radiusM,
     required String timeWindow,
     int rowLimit = 50,
+    int offset = 0,
   }) async {
     final result = await _supabase.rpc(
       'nearby_leaderboard',
@@ -86,6 +88,7 @@ class SquadRemoteDataSource {
         'p_radius_m': radiusM,
         'p_time_window': timeWindow,
         'p_row_limit': rowLimit,
+        'p_offset': offset,
       },
     );
     return (result as List).cast<Map<String, dynamic>>();
@@ -94,10 +97,15 @@ class SquadRemoteDataSource {
   Future<List<Map<String, dynamic>>> fetchGlobalLeaderboard({
     required String timeWindow,
     int rowLimit = 50,
+    int offset = 0,
   }) async {
     final result = await _supabase.rpc(
       'global_leaderboard',
-      params: {'p_time_window': timeWindow, 'p_row_limit': rowLimit},
+      params: {
+        'p_time_window': timeWindow,
+        'p_row_limit': rowLimit,
+        'p_offset': offset,
+      },
     );
     return (result as List).cast<Map<String, dynamic>>();
   }
@@ -120,6 +128,20 @@ class SquadRemoteDataSource {
     final result = await _supabase.rpc(
       'my_nearby_rank',
       params: {'p_radius_m': radiusM, 'p_time_window': timeWindow},
+    );
+    return (result as num?)?.toInt();
+  }
+
+  /// Caller's own rank within a specific squad (`my_squad_rank` RPC) — backs
+  /// the weekly-reset ceremony's squad-scoped rank display, mirroring
+  /// [fetchMyGlobalRank]/[fetchMyNearbyRank]'s shape.
+  Future<int?> fetchMySquadRank({
+    required String squadId,
+    String timeWindow = 'all_time',
+  }) async {
+    final result = await _supabase.rpc(
+      'my_squad_rank',
+      params: {'p_squad_id': squadId, 'p_time_window': timeWindow},
     );
     return (result as num?)?.toInt();
   }

@@ -20,6 +20,11 @@ class Territories extends Table {
   /// a later refresh (e.g. recaptured) can simply have this cleared.
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
+  /// Server-computed decay health (0-100) from `territories_in_bbox()`'s
+  /// `health` column — nullable so rows cached before this column existed
+  /// (pre-migration) don't need a backfill.
+  IntColumn get health => integer().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

@@ -26,20 +26,22 @@ abstract interface class SquadRepository {
   /// the caller has never submitted a run (`profiles.last_run_location` is
   /// null server-side). [timeWindow] is `'all_time'`/`'weekly'`/`'daily'`
   /// (matches the RPC's `p_time_window` check constraint). [rowLimit] is
-  /// the RPC's `p_row_limit` (1-500) — there's no server-side offset/cursor,
-  /// so "load more" is implemented by refetching with a larger [rowLimit],
-  /// not a true paged cursor.
+  /// the RPC's `p_row_limit` (1-500); [offset] is `p_offset` (>= 0) — a true
+  /// server-side cursor, so "load more" pages via [offset] rather than
+  /// refetching with a larger [rowLimit].
   Future<List<LeaderboardEntry>> fetchNearbyLeaderboard({
     required double radiusM,
     required String timeWindow,
     int rowLimit = 50,
+    int offset = 0,
   });
 
   /// One-shot global top-N leaderboard. See [fetchNearbyLeaderboard] for
-  /// [timeWindow]/[rowLimit] semantics.
+  /// [timeWindow]/[rowLimit]/[offset] semantics.
   Future<List<LeaderboardEntry>> fetchGlobalLeaderboard({
     required String timeWindow,
     int rowLimit = 50,
+    int offset = 0,
   });
 
   /// Caller's own rank in [fetchGlobalLeaderboard]'s ordering, fetched as an
@@ -53,6 +55,15 @@ abstract interface class SquadRepository {
   Future<int?> fetchMyNearbyRank({
     required double radiusM,
     required String timeWindow,
+  });
+
+  /// Caller's own rank within [squadId] (`my_squad_rank` RPC) — squad-scoped
+  /// equivalent of [fetchMyGlobalRank], backing the weekly-reset ceremony
+  /// when the caller is in a squad. Null if the caller has captured no area
+  /// yet within that squad's window.
+  Future<int?> fetchMySquadRank({
+    required String squadId,
+    String timeWindow = 'all_time',
   });
 
   /// Recent territory captures across all users (`recent_territory_captures`

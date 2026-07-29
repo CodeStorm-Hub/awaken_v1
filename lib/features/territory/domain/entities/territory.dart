@@ -15,6 +15,7 @@ class Territory extends Equatable {
     required this.areaSqm,
     required this.polygons,
     required this.isMine,
+    this.health,
   });
 
   final String id;
@@ -23,6 +24,13 @@ class Territory extends Equatable {
   final List<List<List<LatLng>>> polygons;
   final bool isMine;
 
+  /// Server-computed decay health (0-100), from `territories_in_bbox()`'s
+  /// `health` column. Nullable since older cached/local rows fetched before
+  /// this column existed won't have it — callers should fall back to the
+  /// client-side at-risk-window approximation when null (see
+  /// `TerritoryPage._healthOf`).
+  final int? health;
+
   @override
-  List<Object?> get props => [id, ownerId, areaSqm, polygons, isMine];
+  List<Object?> get props => [id, ownerId, areaSqm, polygons, isMine, health];
 }

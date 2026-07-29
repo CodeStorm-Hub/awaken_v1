@@ -2180,6 +2180,15 @@ class $TerritoriesTable extends Territories
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _healthMeta = const VerificationMeta('health');
+  @override
+  late final GeneratedColumn<int> health = GeneratedColumn<int>(
+    'health',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2188,6 +2197,7 @@ class $TerritoriesTable extends Territories
     areaSqm,
     updatedAt,
     deletedAt,
+    health,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2244,6 +2254,12 @@ class $TerritoriesTable extends Territories
         deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
       );
     }
+    if (data.containsKey('health')) {
+      context.handle(
+        _healthMeta,
+        health.isAcceptableOrUnknown(data['health']!, _healthMeta),
+      );
+    }
     return context;
   }
 
@@ -2277,6 +2293,10 @@ class $TerritoriesTable extends Territories
         DriftSqlType.dateTime,
         data['${effectivePrefix}deleted_at'],
       ),
+      health: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}health'],
+      ),
     );
   }
 
@@ -2300,6 +2320,11 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
   /// Kept rather than hard-deleting immediately so a row that reappears in
   /// a later refresh (e.g. recaptured) can simply have this cleared.
   final DateTime? deletedAt;
+
+  /// Server-computed decay health (0-100) from `territories_in_bbox()`'s
+  /// `health` column — nullable so rows cached before this column existed
+  /// (pre-migration) don't need a backfill.
+  final int? health;
   const TerritoryRow({
     required this.id,
     required this.ownerId,
@@ -2307,6 +2332,7 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
     required this.areaSqm,
     required this.updatedAt,
     this.deletedAt,
+    this.health,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2318,6 +2344,9 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    if (!nullToAbsent || health != null) {
+      map['health'] = Variable<int>(health);
     }
     return map;
   }
@@ -2332,6 +2361,9 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedAt),
+      health: health == null && nullToAbsent
+          ? const Value.absent()
+          : Value(health),
     );
   }
 
@@ -2347,6 +2379,7 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
       areaSqm: serializer.fromJson<double>(json['areaSqm']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+      health: serializer.fromJson<int?>(json['health']),
     );
   }
   @override
@@ -2359,6 +2392,7 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
       'areaSqm': serializer.toJson<double>(areaSqm),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+      'health': serializer.toJson<int?>(health),
     };
   }
 
@@ -2369,6 +2403,7 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
     double? areaSqm,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
+    Value<int?> health = const Value.absent(),
   }) => TerritoryRow(
     id: id ?? this.id,
     ownerId: ownerId ?? this.ownerId,
@@ -2376,6 +2411,7 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
     areaSqm: areaSqm ?? this.areaSqm,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+    health: health.present ? health.value : this.health,
   );
   TerritoryRow copyWithCompanion(TerritoriesCompanion data) {
     return TerritoryRow(
@@ -2385,6 +2421,7 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
       areaSqm: data.areaSqm.present ? data.areaSqm.value : this.areaSqm,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+      health: data.health.present ? data.health.value : this.health,
     );
   }
 
@@ -2396,14 +2433,15 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
           ..write('geoJson: $geoJson, ')
           ..write('areaSqm: $areaSqm, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('deletedAt: $deletedAt')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('health: $health')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode =>
-      Object.hash(id, ownerId, geoJson, areaSqm, updatedAt, deletedAt);
+      Object.hash(id, ownerId, geoJson, areaSqm, updatedAt, deletedAt, health);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2413,7 +2451,8 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
           other.geoJson == this.geoJson &&
           other.areaSqm == this.areaSqm &&
           other.updatedAt == this.updatedAt &&
-          other.deletedAt == this.deletedAt);
+          other.deletedAt == this.deletedAt &&
+          other.health == this.health);
 }
 
 class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
@@ -2423,6 +2462,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
   final Value<double> areaSqm;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
+  final Value<int?> health;
   final Value<int> rowid;
   const TerritoriesCompanion({
     this.id = const Value.absent(),
@@ -2431,6 +2471,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     this.areaSqm = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
+    this.health = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TerritoriesCompanion.insert({
@@ -2440,6 +2481,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     required double areaSqm,
     required DateTime updatedAt,
     this.deletedAt = const Value.absent(),
+    this.health = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        ownerId = Value(ownerId),
@@ -2453,6 +2495,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     Expression<double>? areaSqm,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
+    Expression<int>? health,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2462,6 +2505,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
       if (areaSqm != null) 'area_sqm': areaSqm,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
+      if (health != null) 'health': health,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2473,6 +2517,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     Value<double>? areaSqm,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
+    Value<int?>? health,
     Value<int>? rowid,
   }) {
     return TerritoriesCompanion(
@@ -2482,6 +2527,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
       areaSqm: areaSqm ?? this.areaSqm,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
+      health: health ?? this.health,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2507,6 +2553,9 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     if (deletedAt.present) {
       map['deleted_at'] = Variable<DateTime>(deletedAt.value);
     }
+    if (health.present) {
+      map['health'] = Variable<int>(health.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2522,6 +2571,7 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
           ..write('areaSqm: $areaSqm, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
+          ..write('health: $health, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5092,6 +5142,7 @@ typedef $$TerritoriesTableCreateCompanionBuilder =
       required double areaSqm,
       required DateTime updatedAt,
       Value<DateTime?> deletedAt,
+      Value<int?> health,
       Value<int> rowid,
     });
 typedef $$TerritoriesTableUpdateCompanionBuilder =
@@ -5102,6 +5153,7 @@ typedef $$TerritoriesTableUpdateCompanionBuilder =
       Value<double> areaSqm,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
+      Value<int?> health,
       Value<int> rowid,
     });
 
@@ -5141,6 +5193,11 @@ class $$TerritoriesTableFilterComposer
 
   ColumnFilters<DateTime> get deletedAt => $composableBuilder(
     column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get health => $composableBuilder(
+    column: $table.health,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -5183,6 +5240,11 @@ class $$TerritoriesTableOrderingComposer
     column: $table.deletedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get health => $composableBuilder(
+    column: $table.health,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$TerritoriesTableAnnotationComposer
@@ -5211,6 +5273,9 @@ class $$TerritoriesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get deletedAt =>
       $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get health =>
+      $composableBuilder(column: $table.health, builder: (column) => column);
 }
 
 class $$TerritoriesTableTableManager
@@ -5250,6 +5315,7 @@ class $$TerritoriesTableTableManager
                 Value<double> areaSqm = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int?> health = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TerritoriesCompanion(
                 id: id,
@@ -5258,6 +5324,7 @@ class $$TerritoriesTableTableManager
                 areaSqm: areaSqm,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
+                health: health,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -5268,6 +5335,7 @@ class $$TerritoriesTableTableManager
                 required double areaSqm,
                 required DateTime updatedAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int?> health = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TerritoriesCompanion.insert(
                 id: id,
@@ -5276,6 +5344,7 @@ class $$TerritoriesTableTableManager
                 areaSqm: areaSqm,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
+                health: health,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

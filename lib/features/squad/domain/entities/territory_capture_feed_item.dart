@@ -11,6 +11,8 @@ class TerritoryCaptureFeedItem extends Equatable {
     required this.loserDisplayName,
     required this.areaTakenSqm,
     required this.createdAt,
+    this.lat,
+    this.lng,
   });
 
   final String captureId;
@@ -24,6 +26,14 @@ class TerritoryCaptureFeedItem extends Equatable {
   final double areaTakenSqm;
   final DateTime createdAt;
 
+  /// Capture location, from `recent_territory_captures()`'s `lat`/`lng`
+  /// columns — null for rows captured before that migration (old rows
+  /// weren't backfilled with fake coordinates). Consumers building a map
+  /// layer from this feed (e.g. `TerritoryPage`'s capture-density heatmap)
+  /// must skip entries where either is null.
+  final double? lat;
+  final double? lng;
+
   @override
   List<Object?> get props => [
     captureId,
@@ -33,5 +43,7 @@ class TerritoryCaptureFeedItem extends Equatable {
     loserDisplayName,
     areaTakenSqm,
     createdAt,
+    lat,
+    lng,
   ];
 }

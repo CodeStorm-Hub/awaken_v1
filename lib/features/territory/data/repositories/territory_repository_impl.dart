@@ -129,6 +129,7 @@ class TerritoryRepositoryImpl implements TerritoryRepository {
               geoJson: jsonEncode(row['geom_geojson']),
               areaSqm: (row['area_sqm']! as num).toDouble(),
               updatedAt: DateTime.parse(row['updated_at']! as String),
+              health: Value((row['health'] as num?)?.toInt()),
             );
           }).toList(),
         );
@@ -172,6 +173,8 @@ class TerritoryRepositoryImpl implements TerritoryRepository {
       areaTakenSqm: (row['area_taken_sqm']! as num).toDouble(),
       asWinner: row['as_winner']! as bool,
       occurredAt: DateTime.parse(row['occurred_at']! as String),
+      territoryLat: (row['rival_territory_lat'] as num?)?.toDouble(),
+      territoryLng: (row['rival_territory_lng'] as num?)?.toDouble(),
     );
   }
 

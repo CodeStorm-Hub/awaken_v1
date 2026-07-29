@@ -17,6 +17,7 @@ import '../../domain/entities/leaderboard_entry.dart';
 import '../../domain/entities/territory_capture_feed_item.dart';
 import '../../domain/usecases/get_global_leaderboard.dart';
 import '../../domain/usecases/get_my_leaderboard_rank.dart';
+import '../../domain/usecases/get_my_squad_rank.dart';
 import '../../domain/usecases/get_nearby_leaderboard.dart';
 import '../../domain/usecases/get_recent_territory_captures.dart';
 import '../bloc/squad_cubit.dart';
@@ -1057,12 +1058,9 @@ enum _TimeWindow {
 /// members does.
 ///
 /// Pagination: the underlying RPCs (`nearby_leaderboard`/`global_leaderboard`)
-/// take a `p_row_limit` (1-500) but no offset/cursor param, so "load more"
-/// on scroll-near-bottom re-fetches the whole list with a larger limit
-/// rather than using a true paged cursor — the simplest correct thing given
-/// the RPC surface, at the cost of re-transferring already-seen rows on
-/// each page grow. A future offset-aware RPC would let this become a real
-/// cursor without any client-visible behavior change.
+/// now take a `p_offset` param, so "load more" on scroll-near-bottom fetches
+/// the NEXT page at `offset: currentItems.length` with a fixed page size and
+/// appends the result — a true cursor, not a re-fetch-with-larger-limit.
 class _LeaderboardsSheet extends StatefulWidget {
   const _LeaderboardsSheet();
 
@@ -1080,10 +1078,9 @@ class _LeaderboardsSheetState extends State<_LeaderboardsSheet> {
   var _loadingMore = false;
   String? _error;
   List<LeaderboardEntry> _entries = const [];
-  var _rowLimit = _pageSize;
 
-  /// True once a fetch returns fewer rows than requested (or hits the RPC's
-  /// 500-row ceiling) — no point requesting yet another page after that.
+  /// True once a page returns fewer than [_pageSize] rows — no point
+  /// requesting yet another page after that.
   var _hasMore = true;
 
   int? _myRank;
@@ -1116,18 +1113,20 @@ class _LeaderboardsSheetState extends State<_LeaderboardsSheet> {
     }
   }
 
-  Future<List<LeaderboardEntry>> _fetch(int rowLimit) {
+  Future<List<LeaderboardEntry>> _fetch({required int offset}) {
     return _scope == _LeaderboardScope.nearby
         ? getIt<GetNearbyLeaderboard>()(
             GetNearbyLeaderboardParams(
               radiusM: _nearbyRadiusM,
               timeWindow: _timeWindow.rpcValue,
-              rowLimit: rowLimit,
+              rowLimit: _pageSize,
+              offset: offset,
             ),
           )
         : getIt<GetGlobalLeaderboard>()(
             timeWindow: _timeWindow.rpcValue,
-            rowLimit: rowLimit,
+            rowLimit: _pageSize,
+            offset: offset,
           );
   }
 
@@ -1137,16 +1136,15 @@ class _LeaderboardsSheetState extends State<_LeaderboardsSheet> {
     setState(() {
       _loading = true;
       _error = null;
-      _rowLimit = _pageSize;
       _hasMore = true;
     });
     try {
-      final entries = await _fetch(_rowLimit);
+      final entries = await _fetch(offset: 0);
       if (!mounted) return;
       setState(() {
         _entries = entries;
         _loading = false;
-        _hasMore = entries.length >= _rowLimit && _rowLimit < 500;
+        _hasMore = entries.length >= _pageSize;
       });
     } catch (e) {
       if (!mounted) return;
@@ -1157,17 +1155,20 @@ class _LeaderboardsSheetState extends State<_LeaderboardsSheet> {
     }
   }
 
+  /// Fetches the NEXT page at `offset: _entries.length` and appends it —
+  /// a real cursor now that the RPCs take `p_offset`, rather than the old
+  /// approach of refetching the whole list from offset 0 with a larger
+  /// limit. A page returning fewer than [_pageSize] rows means there's no
+  /// more data.
   Future<void> _loadMore() async {
     setState(() => _loadingMore = true);
-    final nextLimit = (_rowLimit + _pageSize).clamp(0, 500);
     try {
-      final entries = await _fetch(nextLimit);
+      final nextPage = await _fetch(offset: _entries.length);
       if (!mounted) return;
       setState(() {
-        _entries = entries;
-        _rowLimit = nextLimit;
+        _entries = [..._entries, ...nextPage];
         _loadingMore = false;
-        _hasMore = entries.length >= nextLimit && nextLimit < 500;
+        _hasMore = nextPage.length >= _pageSize;
       });
     } catch (_) {
       // Best-effort — keep whatever page is already showing rather than
@@ -1476,11 +1477,12 @@ class _ConquestTickerState extends State<_ConquestTicker> {
 /// `SquadPage` mount (the shell's `IndexedStack` keeps this tab's `State`
 /// alive across tab switches, so "once per mount" already means "once per
 /// app session" in practice) without disturbing `_SquadView`'s own
-/// `BlocBuilder` rebuilds. Uses the global weekly rank (`my_global_rank`),
-/// not a squad-scoped one — `WatchLeaderboard`/`squad_leaderboard` has no
-/// weekly-specific stream today, only the RPC's default `'all_time'`
-/// window, so reusing the already-time-windowed global rank query is the
-/// gap-free option rather than adding a second squad-scoped rank fetch.
+/// `BlocBuilder` rebuilds. When the caller is currently in a squad (read off
+/// `SquadCubit`'s state, already provided above this widget in the tree),
+/// uses the squad-scoped weekly rank (`my_squad_rank` via [GetMySquadRank])
+/// instead of the global one, falling back to the global weekly rank
+/// (`my_global_rank` via [GetMyLeaderboardRank]) when the caller has no
+/// squad.
 class _WeeklyResetCeremonyGate extends StatefulWidget {
   const _WeeklyResetCeremonyGate({required this.child});
 
@@ -1520,10 +1522,16 @@ class _WeeklyResetCeremonyGateState extends State<_WeeklyResetCeremonyGate> {
       final currentWeek = _isoWeekKey(DateTime.now());
       final lastWeek = await store.getLastSeenWeek();
       final lastRank = await store.getLastKnownRank();
-      final currentRank = await getIt<GetMyLeaderboardRank>()(
-        nearby: false,
-        timeWindow: 'weekly',
-      );
+      // Read squad membership off the already-provided `SquadCubit` rather
+      // than fetching it again — this widget sits inside the same
+      // `BlocProvider<SquadCubit>` as `_SquadView`.
+      final squadId = mounted ? context.read<SquadCubit>().state.squad?.id : null;
+      final currentRank = squadId != null
+          ? await getIt<GetMySquadRank>()(squadId: squadId, timeWindow: 'weekly')
+          : await getIt<GetMyLeaderboardRank>()(
+              nearby: false,
+              timeWindow: 'weekly',
+            );
 
       if (lastWeek != null &&
           lastWeek != currentWeek &&

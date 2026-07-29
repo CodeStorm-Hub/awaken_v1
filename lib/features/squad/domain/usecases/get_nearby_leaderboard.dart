@@ -8,6 +8,7 @@ class GetNearbyLeaderboardParams {
     required this.radiusM,
     required this.timeWindow,
     this.rowLimit = 50,
+    this.offset = 0,
   });
 
   final double radiusM;
@@ -15,6 +16,9 @@ class GetNearbyLeaderboardParams {
   /// `'all_time'`, `'weekly'`, or `'daily'`.
   final String timeWindow;
   final int rowLimit;
+
+  /// Number of rows to skip — a true server-side cursor (`p_offset`).
+  final int offset;
 }
 
 @injectable
@@ -28,5 +32,6 @@ class GetNearbyLeaderboard {
         radiusM: params.radiusM,
         timeWindow: params.timeWindow,
         rowLimit: params.rowLimit,
+        offset: params.offset,
       );
 }

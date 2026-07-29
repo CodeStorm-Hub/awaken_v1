@@ -11,6 +11,8 @@ class SquadPresenceMember extends Equatable {
     required this.displayName,
     this.activity,
     this.avatarUrl,
+    this.lat,
+    this.lng,
   });
 
   final String userId;
@@ -21,6 +23,21 @@ class SquadPresenceMember extends Equatable {
   /// from `profiles.avatar_url`) — null for accounts with no linked photo.
   final String? avatarUrl;
 
+  /// Best-effort last known position, self-asserted in this device's own
+  /// tracked Presence payload — null if the member's device couldn't get a
+  /// fix (or hasn't tried). Presence payloads are ephemeral (not stored in
+  /// any table), so this is never more than "as of their last `.track()`
+  /// call."
+  final double? lat;
+  final double? lng;
+
   @override
-  List<Object?> get props => [userId, displayName, activity, avatarUrl];
+  List<Object?> get props => [
+    userId,
+    displayName,
+    activity,
+    avatarUrl,
+    lat,
+    lng,
+  ];
 }

@@ -9,6 +9,8 @@ class Rival extends Equatable {
     required this.areaTakenSqm,
     required this.asWinner,
     required this.occurredAt,
+    this.territoryLat,
+    this.territoryLng,
   });
 
   final String rivalId;
@@ -20,6 +22,12 @@ class Rival extends Equatable {
   final bool asWinner;
   final DateTime occurredAt;
 
+  /// Centroid of the rival's largest current territory, from
+  /// `current_rival()`'s `rival_territory_lat`/`rival_territory_lng` columns
+  /// — null if the rival currently owns no territory.
+  final double? territoryLat;
+  final double? territoryLng;
+
   @override
   List<Object?> get props => [
     rivalId,
@@ -27,5 +35,7 @@ class Rival extends Equatable {
     areaTakenSqm,
     asWinner,
     occurredAt,
+    territoryLat,
+    territoryLng,
   ];
 }

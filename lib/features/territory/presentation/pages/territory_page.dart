@@ -13,6 +13,8 @@ import '../../../../core/usecase/usecase.dart';
 import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
 import '../../../squad/domain/entities/squad.dart';
 import '../../../squad/domain/entities/squad_presence_member.dart';
+import '../../../squad/domain/entities/territory_capture_feed_item.dart';
+import '../../../squad/domain/usecases/get_recent_territory_captures.dart';
 import '../../../squad/domain/usecases/watch_my_squad.dart';
 import '../../../squad/domain/usecases/watch_squad_presence.dart';
 import '../../domain/entities/bounty_zone.dart';
@@ -40,10 +42,14 @@ import 'active_run_page.dart';
 /// earlier `flutter_map` raster setup, which couldn't consume OpenFreeMap's
 /// tiles (vector-only) without a much larger integration. The `MapLibreMap`
 /// widget is built exactly once and never rebuilt from state changes;
-/// territory polygons/markers are synced onto it *imperatively* via the
-/// controller (`addFill`/`removeFills`) so the native map view is never
-/// torn down and re-created — that rebuild-on-every-change pattern was the
-/// direct cause of this page's earlier map/GPS-page choppiness.
+/// territory polygons are synced onto it *imperatively* via a single
+/// `GeoJsonSource` (`addGeoJsonSource`/`setGeoJsonSource`) feeding
+/// `FillLayerProperties`/`LineLayerProperties` layers, so the native map
+/// view is never torn down and re-created — that rebuild-on-every-change
+/// pattern was the direct cause of this page's earlier map/GPS-page
+/// choppiness. Non-territory markers (position dot, neutral-zone ring,
+/// bounty zones) still use the simpler `Fill`/`Circle` annotation API, which
+/// is fine for infrequently-redrawn, non-animated shapes.
 class TerritoryPage extends StatefulWidget {
   const TerritoryPage({super.key});
 
@@ -54,18 +60,77 @@ class TerritoryPage extends StatefulWidget {
 class _TerritoryPageState extends State<TerritoryPage> {
   MapLibreMapController? _controller;
   StreamSubscription<List<Territory>>? _territoriesSub;
-  final _fillsByTerritoryId = <String, List<Fill>>{};
   List<Territory> _lastTerritories = const [];
 
-  // Dashed rival outlines (item 3) and pulsing at-risk borders (item 5) are
-  // both built from separate `Line` annotations layered on top of each
-  // territory's `Fill` — see `TerritoryMapStyle.ringToDashSegments`'s doc
-  // comment for why (this `maplibre_gl` version has no line-dash paint
-  // property to draw them as part of the fill's own outline).
-  final _outlineLinesByTerritoryId = <String, List<Line>>{};
-  final _atRiskPulseLinesByTerritoryId = <String, List<Line>>{};
+  // Territory fill/outline rendering (items 2/3/5/6/7) runs entirely off one
+  // `GeoJsonSource` + two style layers instead of per-territory `Fill`/`Line`
+  // annotations — see this file's class doc comment. `_territoryLayersReady`
+  // guards the one-time `addGeoJsonSource`/`addLayer` calls; later redraws
+  // just call `setGeoJsonSource` on the existing source. Rival territory's
+  // dashed outline (item 3) is a real `line-dasharray` data expression on
+  // `_territoryOutlineLayerId` now — no more broken-segment faking (compare
+  // the now-deleted `TerritoryMapStyle.ringToDashSegments`). The pulsing
+  // at-risk border (item 5) is a second, filtered outline layer
+  // (`_territoryAtRiskOutlineLayerId`) whose `lineWidth`/`lineOpacity` are
+  // ticked via `setLayerProperties` instead of re-adding `Line` annotations.
+  static const _territorySourceId = 'territories-source';
+  static const _territoryFillLayerId = 'territories-fill-layer';
+  static const _territoryOutlineLayerId = 'territories-outline-layer';
+  static const _territoryExtrusionLayerId = 'territories-extrusion-layer';
+  static const _territoryAtRiskOutlineLayerId =
+      'territories-atrisk-outline-layer';
+  bool _territoryLayersReady = false;
+
+  /// True once `onStyleLoadedCallback` has fired for the current native map
+  /// view. `_controller` goes non-null at `onMapCreated`, *before* the style
+  /// finishes loading — `_redrawSquadHeatmap` can be triggered independently
+  /// of the map's own lifecycle (via `_loadSquadInfo`'s squad-membership
+  /// stream, set up in `initState`), so a `controller != null` check alone
+  /// isn't enough to guarantee `addFillLayer`/`addGeoJsonSource` are safe to
+  /// call — confirmed live: `PlatformException(STYLE_NOT_READY, ...)` fired
+  /// on real device/emulator testing when the squad stream's first value
+  /// arrived before the style finished loading.
+  bool _styleReady = false;
+
+  /// "3D view" toggle (skyline redesign item) — animates camera `tilt`
+  /// between 0 and 45deg so the fill-extrusion "skyline" layer
+  /// (`_territoryExtrusionLayerId`) is actually visible; at tilt 0 an
+  /// extrusion renders identically to its flat footprint, so without this
+  /// the whole layer would be invisible by default.
+  bool _is3D = false;
   Timer? _pulseTimer;
   double _pulseT = 0;
+
+  /// Animated "ant path" dashed rival outline — steps
+  /// `_territoryOutlineLayerId`'s rival-branch `line-dasharray` through
+  /// [_antPathDashSequence] on a timer, same structural pattern as
+  /// `_pulseTimer`/`_tickPulse` above (including the reduce-motion guard in
+  /// `_updateAntPathTimer`, mirroring `_updatePulseTimer`'s
+  /// `hasAtRisk`-gating). The OWNED branch of the outline layer's `case`
+  /// expression always stays `[1, 0]` (solid) — only the rival branch's
+  /// dasharray value cycles.
+  Timer? _antPathTimer;
+  int _antPathStep = 0;
+
+  /// The standard MapLibre/Mapbox GL JS "ant path" dash-array sequence —
+  /// each step nudges the dash pattern's phase, so animating through them in
+  /// order reads as a marching/flowing dashed line rather than a static one.
+  static const _antPathDashSequence = <List<double>>[
+    [0, 4, 3],
+    [0.5, 4, 2.5],
+    [1, 4, 2],
+    [1.5, 4, 1.5],
+    [2, 4, 1],
+    [2.5, 4, 0.5],
+    [3, 4, 0],
+    [0, 0.5, 3, 3.5],
+    [0, 1, 3, 3],
+    [0, 1.5, 3, 2.5],
+    [0, 2, 3, 2],
+    [0, 2.5, 3, 1.5],
+    [0, 3, 3, 1],
+    [0, 3.5, 3, 0.5],
+  ];
 
   // Ids of owned territories from the *previous* redraw — a territory that
   // is mine now but wasn't a moment ago just got captured, and gets the
@@ -95,13 +160,62 @@ class _TerritoryPageState extends State<TerritoryPage> {
   // squad's online member ids. `SquadRepository` doesn't expose a
   // dedicated "all my squad's territory" query, so this reuses whatever
   // territories are already cached/visible in the current viewport rather
-  // than fetching a separate global set.
+  // than fetching a separate global set. Own `GeoJsonSource`/`FillLayer`
+  // (not folded into the main territory source above) so it can be toggled
+  // on/off cheaply via `setLayerVisibility` instead of add/remove churn.
+  static const _squadHeatmapSourceId = 'squad-heatmap-source';
+  static const _squadHeatmapFillLayerId = 'squad-heatmap-fill-layer';
+  bool _squadHeatmapLayerReady = false;
   Squad? _mySquad;
   Set<String> _squadMemberIds = {};
   StreamSubscription<Squad?>? _squadSub;
   StreamSubscription<List<SquadPresenceMember>>? _presenceSub;
   bool _showSquadHeatmap = false;
-  final _squadHeatmapFillsByTerritoryId = <String, List<Fill>>{};
+
+  // Clustered bounty-zone markers (skyline redesign item 3) — a *separate*
+  // point source/layers from `_bountyFillsByZoneId`'s existing translucent
+  // radius `Fill`s above: those show *where a bounty's effect radius is*,
+  // this shows *discrete bounty locations as markers*, clustering when
+  // several are close together at low zoom (`GeojsonSourceProperties`'s
+  // `cluster`/`clusterRadius`/`clusterMaxZoom` — see `addSource`'s doc
+  // comment on this file's imports). Uses `addSource` + `setGeoJsonSource`
+  // rather than `addGeoJsonSource`, since clustering params only exist on
+  // `GeojsonSourceProperties` (`addGeoJsonSource` has no clustering args).
+  static const _bountyMarkersSourceId = 'bounty-zones-source';
+  static const _bountyClusterCircleLayerId = 'bounty-zones-cluster-circle-layer';
+  static const _bountyClusterCountLayerId = 'bounty-zones-cluster-count-layer';
+  static const _bountyUnclusteredLayerId = 'bounty-zones-unclustered-layer';
+  bool _bountyMarkersLayerReady = false;
+
+  // Capture-density heatmap (item 4 — 2026-07-29 territory review) —
+  // `recent_territory_captures()` rows with a known lat/lng, rendered as a
+  // `HeatmapLayerProperties` layer. Toggleable via the "Map layers" sheet,
+  // same lazy-add/`setLayerVisibility` pattern as `_showSquadHeatmap`
+  // above. Old rows (before the lat/lng migration) have null coordinates
+  // and are filtered out rather than faked.
+  static const _captureHeatmapSourceId = 'capture-heatmap-source';
+  static const _captureHeatmapLayerId = 'capture-heatmap-layer';
+  bool _captureHeatmapLayerReady = false;
+  bool _showCaptureHeatmap = false;
+  Timer? _captureHeatmapRefetchTimer;
+
+  // Clustered squad-member location markers (item 5) — same clustered
+  // point-source structure as `_bountyMarkersSourceId`'s bounty markers
+  // above (`GeojsonSourceProperties(cluster: true, ...)` + an unclustered
+  // circle layer + a cluster-bubble circle layer + a cluster-count symbol
+  // layer), fed from `WatchSquadPresence`'s already-live stream
+  // (`_loadSquadInfo`) instead of a separate fetch. A distinct blue tint
+  // (`scheme.secondary`) keeps it visually apart from bounty gold and the
+  // territory owned/rival colors.
+  static const _squadMemberMarkersSourceId = 'squad-member-markers-source';
+  static const _squadMemberClusterCircleLayerId =
+      'squad-member-markers-cluster-circle-layer';
+  static const _squadMemberClusterCountLayerId =
+      'squad-member-markers-cluster-count-layer';
+  static const _squadMemberUnclusteredLayerId =
+      'squad-member-markers-unclustered-layer';
+  bool _squadMemberMarkersLayerReady = false;
+  List<SquadPresenceMember> _squadPresenceMembers = const [];
 
   @override
   void initState() {
@@ -109,6 +223,15 @@ class _TerritoryPageState extends State<TerritoryPage> {
     unawaited(_locateSelf());
     unawaited(_loadRivalAndDecayStatus());
     _loadSquadInfo();
+    // Same cadence as the Squad page's "conquest ticker" refetch
+    // (`_ConquestTickerState._refetchInterval`) — only actually redraws
+    // while the layer is toggled on, so this is a cheap no-op the rest of
+    // the time.
+    _captureHeatmapRefetchTimer = Timer.periodic(const Duration(seconds: 30), (
+      _,
+    ) {
+      if (_showCaptureHeatmap) unawaited(_redrawCaptureHeatmap());
+    });
   }
 
   @override
@@ -148,6 +271,8 @@ class _TerritoryPageState extends State<TerritoryPage> {
     unawaited(_presenceSub?.cancel());
     _bboxRefreshDebounceTimer?.cancel();
     _pulseTimer?.cancel();
+    _antPathTimer?.cancel();
+    _captureHeatmapRefetchTimer?.cancel();
     _styleLoader.dispose();
     super.dispose();
   }
@@ -161,7 +286,9 @@ class _TerritoryPageState extends State<TerritoryPage> {
       _mySquad = squad;
       if (squad == null) {
         if (mounted) setState(() => _squadMemberIds = {});
+        _squadPresenceMembers = const [];
         unawaited(_redrawSquadHeatmap());
+        unawaited(_redrawSquadMemberMarkers());
         return;
       }
       _presenceSub = getIt<WatchSquadPresence>()(squad.id).listen((members) {
@@ -169,7 +296,9 @@ class _TerritoryPageState extends State<TerritoryPage> {
         setState(() {
           _squadMemberIds = members.map((m) => m.userId).toSet();
         });
+        _squadPresenceMembers = members;
         unawaited(_redrawSquadHeatmap());
+        unawaited(_redrawSquadMemberMarkers());
       });
     });
   }
@@ -231,17 +360,22 @@ class _TerritoryPageState extends State<TerritoryPage> {
 
   Future<void> _onMapCreated(MapLibreMapController controller) async {
     // A fallback-tier style swap tears down and recreates the native map
-    // view entirely (see MapStyleLoader) — any Fill/Line handles from
-    // before the swap belong to a now-destroyed view, so they can't be
-    // passed to removeFills/removeLines on the new controller. The new view
-    // starts with none.
-    _fillsByTerritoryId.clear();
+    // view entirely (see MapStyleLoader) — any Fill/Line handles, and any
+    // previously-added GeoJSON sources/layers, belong to a now-destroyed
+    // view. The new view starts with none, so both the territory layers and
+    // the squad heatmap layer need their one-time `addGeoJsonSource`/
+    // `addLayer` setup to run again.
     _bountyFillsByZoneId.clear();
-    _outlineLinesByTerritoryId.clear();
-    _atRiskPulseLinesByTerritoryId.clear();
-    _squadHeatmapFillsByTerritoryId.clear();
+    _territoryLayersReady = false;
+    _squadHeatmapLayerReady = false;
+    _bountyMarkersLayerReady = false;
+    _captureHeatmapLayerReady = false;
+    _squadMemberMarkersLayerReady = false;
+    _styleReady = false;
     _pulseTimer?.cancel();
     _pulseTimer = null;
+    _antPathTimer?.cancel();
+    _antPathTimer = null;
     // Missed here previously: the marker handle from before the swap also
     // belongs to the now-destroyed view, so `_syncCurrentPositionMarker`'s
     // `updateCircle` on the stale handle silently no-oped against the new
@@ -255,6 +389,27 @@ class _TerritoryPageState extends State<TerritoryPage> {
 
   Future<void> _onStyleLoaded() async {
     _styleLoader.onStyleLoaded();
+    _styleReady = true;
+    // The squad-membership stream (`_loadSquadInfo`) is independent of the
+    // map's own lifecycle and may have already tried (and silently failed
+    // to run any layer calls) while the style was still loading — replay it
+    // once now that it's safe.
+    unawaited(_redrawSquadHeatmap());
+    final controller = _controller;
+    if (controller != null) {
+      // Pokémon-GO-inspired basemap recolor (item — see
+      // `TerritoryBasemapRecolor`'s doc comment for why this runs here,
+      // per-style-load via `setLayerProperties`, rather than pre-patching
+      // the style JSON). Best-effort and idempotent — safe to await inline,
+      // and must re-run on every style (re)load, including a fallback-tier
+      // swap, since that's a brand new native view with the recolor undone.
+      unawaited(
+        TerritoryBasemapRecolor.apply(
+          controller,
+          isDark: mounted && Theme.of(context).brightness == Brightness.dark,
+        ),
+      );
+    }
     if (_hasFix) {
       await _controller?.animateCamera(
         CameraUpdate.newLatLngZoom(_center, _focusZoom),
@@ -270,6 +425,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
     await _territoriesSub?.cancel();
     _territoriesSub = getIt<WatchTerritories>()().listen(_onTerritoriesChanged);
     unawaited(_drawBountyZones());
+    unawaited(_redrawCaptureHeatmap());
   }
 
   /// Unclaimed, runnable ground near the user (item 4) — a subtle
@@ -338,6 +494,106 @@ class _TerritoryPageState extends State<TerritoryPage> {
       );
       _bountyFillsByZoneId[zone.id] = [fill];
     }
+
+    unawaited(_drawBountyMarkers(zones));
+  }
+
+  /// Clustered bounty-zone center markers (skyline redesign item 3) —
+  /// distinct from the translucent radius `Fill`s drawn just above: those
+  /// show a zone's effect radius, this shows discrete bounty *locations* as
+  /// point markers, clustering nearby ones at low zoom so a dense cluster of
+  /// bounties doesn't render as an unreadable pile of overlapping dots.
+  Future<void> _drawBountyMarkers(List<BountyZone> zones) async {
+    final controller = _controller;
+    if (controller == null || !mounted) return;
+    final semantic = context.semanticColors;
+    final goldHex = _colorToHex(semantic.bountyGold);
+
+    final collection = {
+      'type': 'FeatureCollection',
+      'features': [
+        for (final zone in zones)
+          {
+            'type': 'Feature',
+            'properties': {'id': zone.id, 'multiplier': zone.multiplier},
+            'geometry': {
+              'type': 'Point',
+              'coordinates': [zone.centerLng, zone.centerLat],
+            },
+          },
+      ],
+    };
+
+    if (!_bountyMarkersLayerReady) {
+      await controller.addSource(
+        _bountyMarkersSourceId,
+        GeojsonSourceProperties(
+          data: collection,
+          cluster: true,
+          clusterRadius: 50,
+          clusterMaxZoom: 14,
+        ),
+      );
+      // Individual (unclustered) bounty markers — gold-toned per
+      // `context.semanticColors.bountyGold`, matching the radius fill and
+      // the badge `TerritoryCaptureSheet` already shows for bounty
+      // captures. `['!', ['has', 'point_count']]` is the standard
+      // MapLibre/Mapbox pattern for "not a cluster" — only cluster
+      // features get a synthetic `point_count` property.
+      await controller.addCircleLayer(
+        _bountyMarkersSourceId,
+        _bountyUnclusteredLayerId,
+        CircleLayerProperties(
+          circleRadius: 8,
+          circleColor: goldHex,
+          circleStrokeWidth: 2,
+          circleStrokeColor: '#FFFFFF',
+        ),
+        filter: [
+          '!',
+          ['has', 'point_count'],
+        ],
+      );
+      // Cluster bubbles — filtered to `['has', 'point_count']` (the
+      // inverse of the unclustered filter above).
+      await controller.addCircleLayer(
+        _bountyMarkersSourceId,
+        _bountyClusterCircleLayerId,
+        CircleLayerProperties(
+          circleRadius: 16,
+          circleColor: goldHex,
+          circleOpacity: 0.85,
+          circleStrokeWidth: 2,
+          circleStrokeColor: '#FFFFFF',
+        ),
+        filter: ['has', 'point_count'],
+      );
+      // Cluster count label — `point_count_abbreviated` (e.g. "1.2k") is
+      // the standard MapLibre/Mapbox cluster-count text-field expression.
+      await controller.addSymbolLayer(
+        _bountyMarkersSourceId,
+        _bountyClusterCountLayerId,
+        const SymbolLayerProperties(
+          textField: ['get', 'point_count_abbreviated'],
+          textSize: 12,
+          textColor: '#1C1C1E',
+          textAllowOverlap: true,
+          textIgnorePlacement: true,
+        ),
+        filter: ['has', 'point_count'],
+      );
+      _bountyMarkersLayerReady = true;
+    } else {
+      // Per `setGeoJsonSource`'s own doc comment this "only works as
+      // expected" for sources created via `addGeoJsonSource` — this source
+      // was created via `addSource` instead (required for the `cluster`
+      // param, which `addGeoJsonSource` doesn't expose). In practice both
+      // create the same underlying native "geojson" source type and
+      // `setGeoJsonSource` updates it by id regardless of which call
+      // created it; bounty zones also only redraw once per style load (see
+      // this method's caller), so this path is rarely exercised anyway.
+      await controller.setGeoJsonSource(_bountyMarkersSourceId, collection);
+    }
   }
 
   /// A 32-point polygon approximating a [radiusMeters] circle around
@@ -373,13 +629,13 @@ class _TerritoryPageState extends State<TerritoryPage> {
     unawaited(_redrawSquadHeatmap());
   }
 
-  /// Health (0-100) for an owned territory, derived from
-  /// `TerritoryAtRisk.lastDefendedAt`/`expiresAt` (the only decay signal
-  /// this app's backend currently exposes to the client — `Territory`
-  /// itself has no `health` column). A territory absent from the at-risk
-  /// list is outside the decay warning window entirely, i.e. full health.
-  /// Used to fade owned-fill opacity (item 6) and to gate the pulsing
-  /// at-risk border (item 5).
+  /// Fallback health (0-100) for an owned territory, derived from
+  /// `TerritoryAtRisk.lastDefendedAt`/`expiresAt` — used only when
+  /// `Territory.health` is null (a row cached before `territories_in_bbox()`
+  /// started returning the real server-computed `health` column, i.e. a
+  /// cache-migration safety net, not the normal path anymore). A territory
+  /// absent from the at-risk list is outside the decay warning window
+  /// entirely, i.e. full health.
   double _healthOf(
     String territoryId,
     Map<String, TerritoryAtRisk> atRiskById,
@@ -394,27 +650,54 @@ class _TerritoryPageState extends State<TerritoryPage> {
     return (remainingSec / totalWindowSec * 100).clamp(0, 100).toDouble();
   }
 
+  /// Feature properties consumed by the territory fill/outline layers' data
+  /// expressions (see `_redrawFills`) — `owner`/`atRisk` drive the rival
+  /// dashed outline and the at-risk-outline layer's `filter`, `fillColor`/
+  /// `fillOpacity`/`outlineColor` carry this file's existing ownership-color
+  /// (item 2) and health-decay-opacity (item 6) logic, computed in Dart
+  /// exactly as before — only *where* the result is applied changed (a
+  /// GeoJSON property instead of a `FillOptions`/`LineOptions` argument).
+  Map<String, dynamic> _territoryFeatureProperties(
+    Territory territory,
+    Map<String, TerritoryAtRisk> atRiskById,
+  ) {
+    final semantic = context.semanticColors;
+    final fillColor = territory.isMine
+        ? semantic.territoryOwnedFill
+        : semantic.territoryRivalFill;
+    final outlineColor = territory.isMine
+        ? semantic.territoryOwned
+        : semantic.territoryRival;
+
+    final baseOpacity = territory.isMine ? 0.40 : 0.32;
+    // Real server-computed decay value now (`territories_in_bbox()`'s
+    // `health` column) — falls back to the client-side at-risk-window
+    // approximation only for rows cached before that column existed (see
+    // `_healthOf`'s doc comment), so a stale local cache never hard-crashes
+    // on missing data.
+    final health = territory.isMine
+        ? (territory.health?.toDouble() ?? _healthOf(territory.id, atRiskById))
+        : 100.0;
+    final healthFactor = (0.4 + 0.6 * ((health - 25).clamp(0, 75) / 75))
+        .clamp(0.4, 1.0);
+    final targetOpacity = territory.isMine
+        ? baseOpacity * healthFactor
+        : baseOpacity;
+
+    return {
+      'owner': territory.isMine ? 'me' : 'rival',
+      'atRisk': territory.isMine && atRiskById.containsKey(territory.id),
+      'areaSqm': territory.areaSqm,
+      'fillColor': _colorToHex(fillColor),
+      'fillOpacity': targetOpacity,
+      'outlineColor': _colorToHex(outlineColor),
+    };
+  }
+
   Future<void> _redrawFills() async {
     final controller = _controller;
     if (controller == null || !mounted) return;
     final semantic = context.semanticColors;
-
-    final allFills = _fillsByTerritoryId.values.expand((f) => f).toList();
-    if (allFills.isNotEmpty) {
-      await controller.removeFills(allFills);
-    }
-    _fillsByTerritoryId.clear();
-
-    final allOutlineLines = [
-      ..._outlineLinesByTerritoryId.values.expand((l) => l),
-      ..._atRiskPulseLinesByTerritoryId.values.expand((l) => l),
-    ];
-    if (allOutlineLines.isNotEmpty) {
-      await controller.removeLines(allOutlineLines);
-    }
-    _outlineLinesByTerritoryId.clear();
-    _atRiskPulseLinesByTerritoryId.clear();
-
     final atRiskById = {for (final t in _atRisk) t.id: t};
 
     // A territory that's mine now but wasn't a moment ago just got
@@ -427,149 +710,185 @@ class _TerritoryPageState extends State<TerritoryPage> {
     final newlyCaptured = currentMineIds.difference(_knownMineIds);
     _knownMineIds = currentMineIds;
 
-    for (final territory in _lastTerritories) {
-      if (!territory.isMine && !_showRivalTerritory) continue;
-      final polygons = TerritoryMapStyle.territoryPolygonsToLatLng(territory);
-      final fills = <Fill>[];
-      final lines = <Line>[];
+    final visible = _lastTerritories.where(
+      (t) => t.isMine || _showRivalTerritory,
+    );
+    final features = [
+      for (final territory in visible)
+        TerritoryMapStyle.territoryToGeoJsonFeature(
+          territory,
+          _territoryFeatureProperties(territory, atRiskById),
+        ),
+    ];
+    final collection = {'type': 'FeatureCollection', 'features': features};
 
-      // Single source of truth for ownership colors (item 2) — both this
-      // fill/outline logic and `_TerritoryLegend` below now read the same
-      // `context.semanticColors` roles instead of two independently
-      // hardcoded hex literals.
-      final fillColor = territory.isMine
-          ? semantic.territoryOwnedFill
-          : semantic.territoryRivalFill;
-      final outlineColor = territory.isMine
-          ? semantic.territoryOwned
-          : semantic.territoryRival;
-
-      // Health decay texture (item 6): fade owned-fill opacity down as
-      // health drops, so defending territory feels visually urgent on the
-      // map itself. Full opacity at health 100, ~40% of the base opacity
-      // by health 25 and below. Rival territory has no health signal
-      // available to this client, so it stays at a flat base opacity.
-      final baseOpacity = territory.isMine ? 0.40 : 0.32;
-      final health = territory.isMine
-          ? _healthOf(territory.id, atRiskById)
-          : 100.0;
-      final healthFactor = (0.4 + 0.6 * ((health - 25).clamp(0, 75) / 75))
-          .clamp(0.4, 1.0);
-      final targetOpacity = territory.isMine
-          ? baseOpacity * healthFactor
-          : baseOpacity;
-
-      final isAnimatingCapture =
-          territory.isMine && newlyCaptured.contains(territory.id);
-
-      for (final rings in polygons) {
-        final fill = await controller.addFill(
-          FillOptions(
-            geometry: rings,
-            fillColor: _colorToHex(fillColor),
-            fillOpacity: isAnimatingCapture ? 0 : targetOpacity,
-            fillOutlineColor: _colorToHex(outlineColor),
-          ),
-        );
-        fills.add(fill);
-
-        if (rings.isEmpty) continue;
-        final outerRing = rings.first;
-
-        if (!territory.isMine) {
-          // Color-only differentiation fix (item 3): rival territory gets
-          // a dashed outline built from broken line segments (see
-          // `TerritoryMapStyle.ringToDashSegments`'s doc comment on why —
-          // this `maplibre_gl` version has no line-dash paint property),
-          // distinct from owned territory's solid `fillOutlineColor`.
-          for (final segment in TerritoryMapStyle.ringToDashSegments(
-            outerRing,
-          )) {
-            if (segment.length < 2) continue;
-            final line = await controller.addLine(
-              LineOptions(
-                geometry: segment,
-                lineColor: _colorToHex(outlineColor),
-                lineWidth: 2,
-              ),
-            );
-            lines.add(line);
-          }
-        } else if (atRiskById.containsKey(territory.id)) {
-          // Pulsing at-risk border (item 5) — a separate solid `Line` on
-          // top of the fill, whose width/opacity are ticked by
-          // `_tickPulse` via `updateLine` (see `_updatePulseTimer`).
-          final line = await controller.addLine(
-            LineOptions(
-              geometry: outerRing,
-              lineColor: _colorToHex(semantic.territoryAtRisk),
-              lineWidth: 3,
-            ),
-          );
-          _atRiskPulseLinesByTerritoryId
-              .putIfAbsent(territory.id, () => [])
-              .add(line);
-        }
-      }
-      _fillsByTerritoryId[territory.id] = fills;
-      if (lines.isNotEmpty) _outlineLinesByTerritoryId[territory.id] = lines;
-
-      if (isAnimatingCapture) {
-        unawaited(_animateCaptureGrowIn(fills, targetOpacity));
-      }
+    if (!_territoryLayersReady) {
+      await controller.addGeoJsonSource(_territorySourceId, collection);
+      await controller.addFillLayer(
+        _territorySourceId,
+        _territoryFillLayerId,
+        const FillLayerProperties(
+          fillColor: ['get', 'fillColor'],
+          fillOpacity: ['get', 'fillOpacity'],
+          fillOutlineColor: ['get', 'outlineColor'],
+        ),
+      );
+      // Rival territory's dashed outline (item 3) is a real data-driven
+      // `line-dasharray` expression now — `[1, 0]` (dash length 1, gap 0)
+      // reads as solid for everyone else. Replaces
+      // `TerritoryMapStyle.ringToDashSegments`'s broken-line-segment fake,
+      // which existed only because the old annotation-manager `LineOptions`
+      // had no dash-pattern paint property at all.
+      await controller.addLineLayer(
+        _territorySourceId,
+        _territoryOutlineLayerId,
+        const LineLayerProperties(
+          lineColor: ['get', 'outlineColor'],
+          lineWidth: 2,
+          lineDasharray: [
+            'case',
+            ['==', ['get', 'owner'], 'rival'],
+            ['literal', [2, 1.5]],
+            ['literal', [1, 0]],
+          ],
+        ),
+      );
+      // Territory "skyline" (skyline redesign item 1) — a 3D fill-extrusion
+      // reading the *same* `_territorySourceId` source (the geometry's
+      // already there; no new source needed). `belowLayerId:
+      // _territoryOutlineLayerId` places it directly under the outline
+      // layer added just above — outlines (and, below that call, the
+      // at-risk pulse border) still draw crisply on top of the extruded
+      // blocks instead of getting buried under a 3D face. `fillColor`
+      // reuses the exact `['get', 'fillColor']` expression the flat fill
+      // layer uses so owned/rival coloring stays consistent between the
+      // flat 2D view and the tilted 3D one. Height is only ever visible
+      // once the user tilts the camera via the "3D view" toggle
+      // (`_toggle3DView`) — at tilt 0 an extrusion renders identically to
+      // its flat footprint, so this is a no-op visually until then.
+      await controller.addFillExtrusionLayer(
+        _territorySourceId,
+        _territoryExtrusionLayerId,
+        const FillExtrusionLayerProperties(
+          fillExtrusionColor: ['get', 'fillColor'],
+          fillExtrusionOpacity: 0.8,
+          fillExtrusionBase: 0.0,
+          // Awaken's captured areas run roughly tens-to-low-hundreds of sqm
+          // for a typical loop up through several thousand sqm for a large
+          // run (plan's territory pipeline works in real m² via `::geography`
+          // casts — see CLAUDE.md). Breakpoints picked so a small capture
+          // still reads as a visible block (not flush with the ground) while
+          // a large one caps out at a readable "skyline" height rather than
+          // growing unboundedly.
+          fillExtrusionHeight: [
+            'interpolate',
+            ['linear'],
+            ['get', 'areaSqm'],
+            0, 0,
+            250, 40,
+            2500, 100,
+            20000, 160,
+          ],
+        ),
+        belowLayerId: _territoryOutlineLayerId,
+      );
+      // Pulsing at-risk border (item 5) — a second outline layer reading
+      // the same source, filtered to only at-risk features via the style
+      // `filter` (not a paint expression), so `_tickPulse` can animate its
+      // width/opacity for every at-risk territory with one
+      // `setLayerProperties` call instead of iterating `Line` handles.
+      await controller.addLineLayer(
+        _territorySourceId,
+        _territoryAtRiskOutlineLayerId,
+        LineLayerProperties(
+          lineColor: _colorToHex(semantic.territoryAtRisk),
+          lineWidth: 3,
+          lineOpacity: 1.0,
+        ),
+        filter: ['==', ['get', 'atRisk'], true],
+      );
+      _territoryLayersReady = true;
+    } else {
+      await controller.setGeoJsonSource(_territorySourceId, collection);
     }
 
-    _updatePulseTimer();
+    final hasAtRisk = visible.any(
+      (t) => t.isMine && atRiskById.containsKey(t.id),
+    );
+    _updatePulseTimer(hasAtRisk);
+
+    final hasRival = visible.any((t) => !t.isMine);
+    _updateAntPathTimer(hasRival);
+
+    if (newlyCaptured.isNotEmpty) {
+      unawaited(_animateCaptureGrowIn(newlyCaptured));
+    }
   }
 
   /// Capture is an event, not a state swap (item 7): a newly-captured
   /// territory's fill ramps from transparent to its target opacity over
   /// `MotionTokens.defaultSpatial` (~500ms) instead of popping straight to
-  /// full color. `maplibre_gl`'s annotation API has no built-in
-  /// paint-property animation/interpolation — `updateFill` sets a value
-  /// immediately — so this drives it with a stepped ramp of `updateFill`
-  /// calls instead, which is the option available within that API.
-  Future<void> _animateCaptureGrowIn(
-    List<Fill> fills,
-    double targetOpacity,
-  ) async {
-    if (fills.isEmpty) return;
+  /// full color. Driven by a real paint-property animation now — repeated
+  /// `setLayerProperties` calls on the fill layer's `fillOpacity`, using a
+  /// `case` expression that multiplies just the newly-captured features'
+  /// (matched by `id`) opacity by the current step fraction and leaves every
+  /// other feature reading its own `fillOpacity` property untouched. Once
+  /// the ramp finishes, the layer's `fillOpacity` is reset to the plain
+  /// `["get", "fillOpacity"]` expression so a later `setGeoJsonSource`
+  /// update (e.g. health decay) isn't masked by a stale `case` still
+  /// matching now-settled ids.
+  Future<void> _animateCaptureGrowIn(Set<String> capturedIds) async {
+    if (capturedIds.isEmpty) return;
     final controllerAtStart = _controller;
     if (controllerAtStart == null) return;
+    const restingExpression = FillLayerProperties(
+      fillOpacity: ['get', 'fillOpacity'],
+    );
     if (mounted && MediaQuery.disableAnimationsOf(context)) {
-      for (final fill in fills) {
-        await controllerAtStart.updateFill(
-          fill,
-          FillOptions(fillOpacity: targetOpacity),
-        );
-      }
+      await controllerAtStart.setLayerProperties(
+        _territoryFillLayerId,
+        restingExpression,
+      );
       return;
     }
     const steps = 6;
     final stepMs = (MotionTokens.defaultSpatial.inMilliseconds / steps).round();
+    final idsList = capturedIds.toList();
     for (var i = 1; i <= steps; i++) {
       await Future<void>.delayed(Duration(milliseconds: stepMs));
       // A style-tier swap tears down and recreates the native map view
-      // mid-animation — its Fill handles belong to a destroyed view, so
-      // bail rather than call `updateFill` against a stale controller.
-      if (_controller != controllerAtStart) return;
-      final opacity = targetOpacity * (i / steps);
-      for (final fill in fills) {
-        await controllerAtStart.updateFill(
-          fill,
-          FillOptions(fillOpacity: opacity),
-        );
-      }
+      // mid-animation, and its layers belong to a destroyed view — bail
+      // rather than call `setLayerProperties` against a stale controller.
+      if (_controller != controllerAtStart || !_territoryLayersReady) return;
+      final fraction = i / steps;
+      await controllerAtStart.setLayerProperties(
+        _territoryFillLayerId,
+        FillLayerProperties(
+          fillOpacity: [
+            'case',
+            ['in', ['get', 'id'], ['literal', idsList]],
+            ['*', ['get', 'fillOpacity'], fraction],
+            ['get', 'fillOpacity'],
+          ],
+        ),
+      );
+    }
+    if (_controller == controllerAtStart && _territoryLayersReady) {
+      await controllerAtStart.setLayerProperties(
+        _territoryFillLayerId,
+        restingExpression,
+      );
     }
   }
 
-  /// Starts/stops the periodic `updateLine` ticker driving the pulsing
-  /// at-risk border (item 5). Guarded by `MediaQuery.disableAnimationsOf`
-  /// for reduce-motion — a static (non-pulsing, still-present) border still
-  /// gets drawn in `_redrawFills` either way, so reduce-motion users don't
-  /// lose the at-risk signal, only its animation.
-  void _updatePulseTimer() {
-    if (_atRiskPulseLinesByTerritoryId.isEmpty) {
+  /// Starts/stops the periodic `setLayerProperties` ticker driving the
+  /// pulsing at-risk border (item 5). Guarded by
+  /// `MediaQuery.disableAnimationsOf` for reduce-motion — a static
+  /// (non-pulsing, still-present) border still gets drawn by
+  /// `_territoryAtRiskOutlineLayerId`'s `filter` either way, so
+  /// reduce-motion users don't lose the at-risk signal, only its animation.
+  void _updatePulseTimer(bool hasAtRisk) {
+    if (!hasAtRisk) {
       _pulseTimer?.cancel();
       _pulseTimer = null;
       return;
@@ -584,59 +903,262 @@ class _TerritoryPageState extends State<TerritoryPage> {
 
   Future<void> _tickPulse() async {
     final controller = _controller;
-    if (controller == null || _atRiskPulseLinesByTerritoryId.isEmpty) return;
+    if (controller == null || !_territoryLayersReady) return;
     _pulseT += 0.12;
     final t = (math.sin(_pulseT * math.pi) + 1) / 2; // 0..1..0 loop
     final width = 2.0 + t * 3.0;
     final opacity = 0.5 + t * 0.5;
-    for (final lines in _atRiskPulseLinesByTerritoryId.values) {
-      for (final line in lines) {
-        await controller.updateLine(
-          line,
-          LineOptions(lineWidth: width, lineOpacity: opacity),
-        );
-      }
+    await controller.setLayerProperties(
+      _territoryAtRiskOutlineLayerId,
+      LineLayerProperties(lineWidth: width, lineOpacity: opacity),
+    );
+  }
+
+  /// Starts/stops the periodic `setLayerProperties` ticker driving the
+  /// rival "ant path" dashed outline (item 3) — same
+  /// gate/reduce-motion-guard structure as `_updatePulseTimer` above. A
+  /// static (non-animated, still dashed via the outline layer's original
+  /// `case` expression) rival outline is drawn regardless either way, so
+  /// reduce-motion users still get the dashed-vs-solid ownership cue, just
+  /// not the marching animation.
+  void _updateAntPathTimer(bool hasRival) {
+    if (!hasRival) {
+      _antPathTimer?.cancel();
+      _antPathTimer = null;
+      return;
     }
+    if (_antPathTimer != null) return;
+    if (mounted && MediaQuery.disableAnimationsOf(context)) return;
+    _antPathTimer = Timer.periodic(
+      const Duration(milliseconds: 80),
+      (_) => unawaited(_tickAntPath()),
+    );
+  }
+
+  Future<void> _tickAntPath() async {
+    final controller = _controller;
+    if (controller == null || !_territoryLayersReady) return;
+    _antPathStep = (_antPathStep + 1) % _antPathDashSequence.length;
+    final dash = _antPathDashSequence[_antPathStep];
+    await controller.setLayerProperties(
+      _territoryOutlineLayerId,
+      LineLayerProperties(
+        lineDasharray: [
+          'case',
+          ['==', ['get', 'owner'], 'rival'],
+          ['literal', dash],
+          ['literal', [1, 0]],
+        ],
+      ),
+    );
   }
 
   /// Squad territory heatmap (item 11) — an aggregated tinted overlay
   /// distinct from the individual owned/rival colors above, covering every
-  /// territory owned by the caller or by an online squad member. Drawn as
-  /// a second, low-opacity underlay so it doesn't obscure the per-member
-  /// coloring it's layered on top of.
+  /// territory owned by the caller or by an online squad member. Its own
+  /// `GeoJsonSource`/`FillLayer`, added below the main territory fill layer
+  /// (`belowLayerId`) so it reads as a low-opacity underlay rather than
+  /// obscuring the per-member coloring on top of it — same intent as the
+  /// old per-territory `Fill` annotations, just as one style layer whose
+  /// source is refreshed via `setGeoJsonSource` and whose on/off toggle is
+  /// `setLayerVisibility` instead of add/remove churn.
   Future<void> _redrawSquadHeatmap() async {
     final controller = _controller;
-    if (controller == null || !mounted) return;
-
-    final existing = _squadHeatmapFillsByTerritoryId.values
-        .expand((f) => f)
-        .toList();
-    if (existing.isNotEmpty) {
-      await controller.removeFills(existing);
-    }
-    _squadHeatmapFillsByTerritoryId.clear();
-
-    if (!_showSquadHeatmap || !mounted) return;
+    if (controller == null || !mounted || !_styleReady) return;
     final semantic = context.semanticColors;
     final tint = Color.lerp(semantic.territoryOwned, Colors.white, 0.15)!;
 
-    for (final territory in _lastTerritories) {
-      if (!territory.isMine && !_squadMemberIds.contains(territory.ownerId)) {
-        continue;
-      }
-      final polygons = TerritoryMapStyle.territoryPolygonsToLatLng(territory);
-      final fills = <Fill>[];
-      for (final rings in polygons) {
-        final fill = await controller.addFill(
-          FillOptions(
-            geometry: rings,
-            fillColor: _colorToHex(tint),
-            fillOpacity: 0.22,
-          ),
-        );
-        fills.add(fill);
-      }
-      _squadHeatmapFillsByTerritoryId[territory.id] = fills;
+    if (!_squadHeatmapLayerReady) {
+      await controller.addGeoJsonSource(_squadHeatmapSourceId, const {
+        'type': 'FeatureCollection',
+        'features': <Map<String, dynamic>>[],
+      });
+      await controller.addFillLayer(
+        _squadHeatmapSourceId,
+        _squadHeatmapFillLayerId,
+        FillLayerProperties(
+          fillColor: _colorToHex(tint),
+          fillOpacity: 0.22,
+        ),
+        belowLayerId: _territoryLayersReady ? _territoryFillLayerId : null,
+      );
+      _squadHeatmapLayerReady = true;
+    }
+
+    final features = [
+      for (final territory in _lastTerritories)
+        if (territory.isMine || _squadMemberIds.contains(territory.ownerId))
+          TerritoryMapStyle.territoryToGeoJsonFeature(territory, const {}),
+    ];
+    await controller.setGeoJsonSource(_squadHeatmapSourceId, {
+      'type': 'FeatureCollection',
+      'features': features,
+    });
+    await controller.setLayerVisibility(
+      _squadHeatmapFillLayerId,
+      _showSquadHeatmap,
+    );
+  }
+
+  /// Capture-density heatmap (item 4) — a `HeatmapLayerProperties` layer
+  /// fed from `GetRecentTerritoryCaptures` (the same use case the Squad
+  /// page's "conquest ticker" already uses — no duplicate RPC call added).
+  /// Lazily adds the source/layer on first call (mirrors
+  /// `_redrawSquadHeatmap`'s `_squadHeatmapLayerReady` guard), then just
+  /// refreshes the source data and visibility on every later call (sheet
+  /// toggle, periodic refetch).
+  Future<void> _redrawCaptureHeatmap() async {
+    final controller = _controller;
+    if (controller == null || !mounted || !_styleReady) return;
+
+    if (!_captureHeatmapLayerReady) {
+      await controller.addGeoJsonSource(_captureHeatmapSourceId, const {
+        'type': 'FeatureCollection',
+        'features': <Map<String, dynamic>>[],
+      });
+      await controller.addHeatmapLayer(
+        _captureHeatmapSourceId,
+        _captureHeatmapLayerId,
+        const HeatmapLayerProperties(
+          heatmapRadius: 28,
+          // Bigger captures contribute more weight, same
+          // small-capture-still-visible/large-capture-caps-out reasoning as
+          // the fill-extrusion height breakpoints above.
+          heatmapWeight: [
+            'interpolate',
+            ['linear'],
+            ['get', 'areaSqm'],
+            0, 0.2,
+            2500, 0.6,
+            20000, 1.0,
+          ],
+          heatmapIntensity: 1,
+          heatmapOpacity: 0.6,
+        ),
+        // Below the territory fill so captured-territory colors still read
+        // clearly on top of the heatmap glow rather than getting washed out.
+        belowLayerId: _territoryLayersReady ? _territoryFillLayerId : null,
+      );
+      _captureHeatmapLayerReady = true;
+    }
+
+    List<TerritoryCaptureFeedItem> captures;
+    try {
+      captures = await getIt<GetRecentTerritoryCaptures>()(rowLimit: 200);
+    } catch (_) {
+      // Best-effort — keep whatever was last drawn (or nothing, before the
+      // first successful fetch).
+      return;
+    }
+    if (!mounted || _controller == null) return;
+
+    final features = [
+      for (final capture in captures)
+        if (capture.lat != null && capture.lng != null)
+          {
+            'type': 'Feature',
+            'properties': {'areaSqm': capture.areaTakenSqm},
+            'geometry': {
+              'type': 'Point',
+              'coordinates': [capture.lng, capture.lat],
+            },
+          },
+    ];
+    await controller.setGeoJsonSource(_captureHeatmapSourceId, {
+      'type': 'FeatureCollection',
+      'features': features,
+    });
+    await controller.setLayerVisibility(
+      _captureHeatmapLayerId,
+      _showCaptureHeatmap,
+    );
+  }
+
+  /// Clustered squad-member location markers (item 5) — same clustered
+  /// point-source structure `_drawBountyMarkers` above uses for bounty
+  /// zones (`addSource` + `cluster: true` + unclustered/cluster-bubble/
+  /// cluster-count layers), fed from the already-live
+  /// `WatchSquadPresence` stream (`_loadSquadInfo`) rather than a new
+  /// fetch. Only members with a non-null `lat`/`lng` (best-effort,
+  /// self-asserted per `SquadPresenceMember`'s doc comment) are drawn.
+  Future<void> _redrawSquadMemberMarkers() async {
+    final controller = _controller;
+    if (controller == null || !mounted || !_styleReady) return;
+    final scheme = Theme.of(context).colorScheme;
+    final blueHex = _colorToHex(scheme.secondary);
+
+    final located = _squadPresenceMembers.where(
+      (m) => m.lat != null && m.lng != null,
+    );
+    final collection = {
+      'type': 'FeatureCollection',
+      'features': [
+        for (final member in located)
+          {
+            'type': 'Feature',
+            'properties': {
+              'id': member.userId,
+              'displayName': member.displayName,
+            },
+            'geometry': {
+              'type': 'Point',
+              'coordinates': [member.lng, member.lat],
+            },
+          },
+      ],
+    };
+
+    if (!_squadMemberMarkersLayerReady) {
+      await controller.addSource(
+        _squadMemberMarkersSourceId,
+        GeojsonSourceProperties(
+          data: collection,
+          cluster: true,
+          clusterRadius: 50,
+          clusterMaxZoom: 14,
+        ),
+      );
+      await controller.addCircleLayer(
+        _squadMemberMarkersSourceId,
+        _squadMemberUnclusteredLayerId,
+        CircleLayerProperties(
+          circleRadius: 8,
+          circleColor: blueHex,
+          circleStrokeWidth: 2,
+          circleStrokeColor: '#FFFFFF',
+        ),
+        filter: [
+          '!',
+          ['has', 'point_count'],
+        ],
+      );
+      await controller.addCircleLayer(
+        _squadMemberMarkersSourceId,
+        _squadMemberClusterCircleLayerId,
+        CircleLayerProperties(
+          circleRadius: 16,
+          circleColor: blueHex,
+          circleOpacity: 0.85,
+          circleStrokeWidth: 2,
+          circleStrokeColor: '#FFFFFF',
+        ),
+        filter: ['has', 'point_count'],
+      );
+      await controller.addSymbolLayer(
+        _squadMemberMarkersSourceId,
+        _squadMemberClusterCountLayerId,
+        const SymbolLayerProperties(
+          textField: ['get', 'point_count_abbreviated'],
+          textSize: 12,
+          textColor: '#FFFFFF',
+          textAllowOverlap: true,
+          textIgnorePlacement: true,
+        ),
+        filter: ['has', 'point_count'],
+      );
+      _squadMemberMarkersLayerReady = true;
+    } else {
+      await controller.setGeoJsonSource(_squadMemberMarkersSourceId, collection);
     }
   }
 
@@ -698,6 +1220,32 @@ class _TerritoryPageState extends State<TerritoryPage> {
     await _controller?.animateCamera(CameraUpdate.zoomOut());
   }
 
+  /// "3D view" toggle (skyline redesign item 1) — animates camera `tilt`
+  /// between 0 and 45deg via `CameraUpdate.newCameraPosition` (the only
+  /// `CameraUpdate` factory that carries a `tilt`; `newLatLngZoom` always
+  /// resets it to 0). Keeps the current center/zoom/bearing from
+  /// `controller.cameraPosition` — falls back to `_center`/`_focusZoom` if
+  /// the controller hasn't reported a camera position yet (shouldn't
+  /// normally happen once the map's created, but cheaper than a null check
+  /// at every call site).
+  Future<void> _toggle3DView() async {
+    final controller = _controller;
+    if (controller == null) return;
+    final next = !_is3D;
+    setState(() => _is3D = next);
+    final current = controller.cameraPosition;
+    await controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: current?.target ?? _center,
+          zoom: current?.zoom ?? _focusZoom,
+          bearing: current?.bearing ?? 0,
+          tilt: next ? 45 : 0,
+        ),
+      ),
+    );
+  }
+
   /// The zoom used to center on the user's own position — clamped to the
   /// active style tier's data ceiling (see `MapStyleLoader.dataMaxZoom`) so
   /// the bundled fallback tier doesn't overzoom into a single illegible
@@ -742,6 +1290,16 @@ class _TerritoryPageState extends State<TerritoryPage> {
                 myLocationEnabled: false,
                 logoEnabled: false,
                 attributionButtonPosition: AttributionButtonPosition.bottomLeft,
+                // Required for `controller.cameraPosition` to ever be
+                // non-stale — without this, the plugin's own doc comment
+                // says it stays permanently null (or, worse, permanently
+                // equal to `initialCameraPosition`), which was silently
+                // breaking `_toggle3DView`'s "preserve wherever the user
+                // currently is, just add tilt" logic: every toggle jumped
+                // the camera back to `initialCameraPosition`'s zoom-2 world
+                // view instead of tilting in place. Found via live device
+                // testing, not static analysis.
+                trackCameraPosition: true,
               ),
             ),
           ),
@@ -872,6 +1430,12 @@ class _TerritoryPageState extends State<TerritoryPage> {
                           letterSpacing: 0.5,
                         ),
                       ),
+                    ),
+                    const SizedBox(width: 6),
+                    _RoundIconButton(
+                      icon: _is3D ? Icons.view_in_ar : Icons.view_in_ar_outlined,
+                      tooltip: _is3D ? 'Switch to 2D view' : 'Switch to 3D view',
+                      onTap: _toggle3DView,
                     ),
                     const SizedBox(width: 6),
                     Stack(
@@ -1045,6 +1609,34 @@ class _TerritoryPageState extends State<TerritoryPage> {
                                       setState(() => _showSquadHeatmap = value);
                                       unawaited(_redrawSquadHeatmap());
                                     },
+                            ),
+                          ),
+                          // Capture-density heatmap (item 4) — recent
+                          // captures across all users, not just this
+                          // caller's squad, so (unlike the squad heatmap
+                          // above) it's never gated on squad membership.
+                          Material(
+                            type: MaterialType.transparency,
+                            child: SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text(
+                                'Capture activity heatmap',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              subtitle: Text(
+                                'Highlight where territory is changing hands',
+                                style: TextStyle(
+                                  color: secondaryLabelColor(sheetContext),
+                                ),
+                              ),
+                              value: _showCaptureHeatmap,
+                              onChanged: (value) {
+                                setSheetState(
+                                  () => _showCaptureHeatmap = value,
+                                );
+                                setState(() => _showCaptureHeatmap = value);
+                                unawaited(_redrawCaptureHeatmap());
+                              },
                             ),
                           ),
                         ],
@@ -1399,11 +1991,10 @@ class _RivalCard extends StatelessWidget {
           ),
           // Only shown when the rival took land from the caller — a win
           // already reads as resolved and doesn't need a follow-up CTA.
-          // `Rival` (domain/entities/rival.dart) carries no coordinate, and
-          // `ActiveRunPage` takes no start-location param, so this opens the
-          // normal active-run flow rather than a rival-centered map — a
-          // real gap, not a client oversight (see squad_page.dart audit
-          // note near `_RivalCard`'s import in this file).
+          // `current_rival()` now carries the rival's territory centroid
+          // (`Rival.territoryLat`/`territoryLng`, null if they currently own
+          // no territory), so this opens `ActiveRunPage` focused there
+          // instead of the default zoomed-out world view.
           if (!isWinner) ...[
             const SizedBox(width: 8),
             TextButton(
@@ -1413,7 +2004,13 @@ class _RivalCard extends StatelessWidget {
                 minimumSize: const Size(0, 36),
               ),
               onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const ActiveRunPage()),
+                MaterialPageRoute<void>(
+                  builder: (_) => ActiveRunPage(
+                    focusLocation: rival.territoryLat != null
+                        ? LatLng(rival.territoryLat!, rival.territoryLng!)
+                        : null,
+                  ),
+                ),
               ),
               child: const Text('Steal back'),
             ),

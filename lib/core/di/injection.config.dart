@@ -107,6 +107,7 @@ import '../../features/squad/domain/usecases/get_global_leaderboard.dart'
     as _i752;
 import '../../features/squad/domain/usecases/get_my_leaderboard_rank.dart'
     as _i113;
+import '../../features/squad/domain/usecases/get_my_squad_rank.dart' as _i771;
 import '../../features/squad/domain/usecases/get_nearby_leaderboard.dart'
     as _i966;
 import '../../features/squad/domain/usecases/get_recent_territory_captures.dart'
@@ -319,6 +320,9 @@ _i174.GetIt init(
   );
   gh.factory<_i113.GetMyLeaderboardRank>(
     () => _i113.GetMyLeaderboardRank(gh<_i1051.SquadRepository>()),
+  );
+  gh.factory<_i771.GetMySquadRank>(
+    () => _i771.GetMySquadRank(gh<_i1051.SquadRepository>()),
   );
   gh.factory<_i966.GetNearbyLeaderboard>(
     () => _i966.GetNearbyLeaderboard(gh<_i1051.SquadRepository>()),

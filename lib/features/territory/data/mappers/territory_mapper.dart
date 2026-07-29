@@ -15,6 +15,7 @@ abstract final class TerritoryMapper {
       areaSqm: row.areaSqm,
       polygons: polygonsFromMultiPolygonGeoJson(row.geoJson),
       isMine: currentUserId != null && currentUserId == row.ownerId,
+      health: row.health,
     );
   }
 
