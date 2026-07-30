@@ -79,12 +79,13 @@ CI (`.github/workflows/ci.yaml`) runs analyze/test/build on every push/PR, plus 
 `.github/workflows/build_ios.yml` builds the iOS target but is manually triggered, not run
 automatically on push/PR.
 
-**Known follow-up (2026-07-30):** `sqlite3_flutter_libs` (pinned `^0.5.0`) is deprecated —
-`0.6.0+eol` is the final, empty release. As of `sqlite3` 3.x (already resolved transitively at
-3.5.0), native SQLite bundling moved into `sqlite3` itself; official guidance is to drop
-`sqlite3_flutter_libs` entirely. Not done yet — this is exactly the kind of native-library
-packaging change that needs a real device/emulator to verify the local Drift DB still opens after
-removal, and none was available when this was investigated. Verify on-device before removing.
+**Resolved (2026-07-31):** `sqlite3_flutter_libs` was removed from `pubspec.yaml` — it was
+deprecated (`0.6.0+eol` was its final, empty release), and native SQLite bundling for Android/iOS
+moved into `sqlite3` itself as of its 3.x line (already resolved transitively at 3.5.0). Verified
+on a real Android emulator (API 37): fresh install, onboarding, alarm create/list/delete, and a
+full native alarm-ring trigger all worked with no crash and no `SQLiteException` in logcat. iOS
+wasn't re-verified on this pass — check the Drift DB still opens there before shipping an iOS
+build if this hasn't been done since.
 
 ### Windows-specific build workaround
 

@@ -30,7 +30,11 @@ dependencies:
 
   # Offline-first local database (source of truth)
   drift: ^2.34.3
-  sqlite3_flutter_libs: ^0.5.0
+  # sqlite3_flutter_libs removed 2026-07-31: it's EOL (0.6.0+eol was its
+  # final release) — native SQLite bundling for Android/iOS moved into
+  # `sqlite3` itself as of its 3.x line (already resolved transitively here
+  # at 3.5.0). Verified on-device (Android emulator) that the local Drift DB
+  # still opens after removal — see CLAUDE.md's sqlite3_flutter_libs note.
   path_provider: ^2.1.0
   path: ^1.9.0
 

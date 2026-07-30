@@ -20,6 +20,8 @@ abstract final class AppConstants {
 
   // Squad networking (`SquadRepositoryImpl`'s one-shot Supabase reads)
   static const Duration squadNetworkReadTimeout = Duration(seconds: 10);
+  static const Duration squadBroadcastThrottle = Duration(seconds: 3);
+  static const Duration squadLeaderboardPollInterval = Duration(seconds: 20);
 
   // Squad streak tiers (plan §6 Phase 6) — mirrored in the
   // `recompute_streak_tier()` Postgres trigger (migration

@@ -10,18 +10,23 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../../../core/theme/semantic_colors.dart';
 import '../../domain/entities/geo_bounds.dart';
-import '../../domain/entities/gps_quality.dart';
 import '../../domain/entities/run_track_state.dart';
 import '../../domain/entities/territory.dart';
 import '../../domain/entities/track_point.dart';
 import '../../domain/usecases/refresh_territories.dart';
 import '../../domain/usecases/watch_territories.dart';
 import '../bloc/run_tracking_cubit.dart';
+import '../widgets/gps_quality_chip.dart';
 import '../widgets/map_style_loader.dart';
 import '../widgets/map_style_overlays.dart';
 import '../widgets/osm_attribution.dart';
+import '../widgets/permission_denied_view.dart';
+import '../widgets/pulsing_dot.dart';
+import '../widgets/round_map_button.dart';
+import '../widgets/start_failed_view.dart';
 import '../widgets/territory_capture_sheet.dart';
 import '../widgets/territory_map_style.dart';
+import '../widgets/zoom_controls.dart';
 
 /// Active-run tracking. Redesigned per the territory feature review + design
 /// research (Strava's "Map + Stats" redesign — the live map and run stats
@@ -560,12 +565,12 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                 previous.startFailed != current.startFailed,
             builder: (context, gateState) {
               if (gateState.permissionDenied) {
-                return _PermissionDeniedView(
+                return PermissionDeniedView(
                   onClose: () => Navigator.of(context).pop(),
                 );
               }
               if (gateState.startFailed) {
-                return _StartFailedView(
+                return StartFailedView(
                   onRetry: () => context.read<RunTrackingCubit>().begin(),
                   onClose: () => Navigator.of(context).pop(),
                 );
@@ -583,7 +588,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                         children: [
                           Row(
                             children: [
-                              _PulsingDot(color: scheme.error),
+                              PulsingDot(color: scheme.error),
                               const SizedBox(width: 8),
                               Text(
                                 'Tracking run',
@@ -599,7 +604,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                             buildWhen: (previous, current) =>
                                 previous.gpsQuality != current.gpsQuality,
                             builder: (context, state) =>
-                                _GpsQualityChip(quality: state.gpsQuality),
+                                GpsQualityChip(quality: state.gpsQuality),
                           ),
                         ],
                       ),
@@ -667,7 +672,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                 Positioned(
                                   top: 10,
                                   right: 10,
-                                  child: _RoundMapButton(
+                                  child: RoundMapButton(
                                     icon: _autoFollow
                                         ? Icons.gps_fixed
                                         : Icons.gps_not_fixed,
@@ -680,7 +685,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                 Positioned(
                                   top: 64,
                                   right: 10,
-                                  child: _ZoomControls(
+                                  child: ZoomControls(
                                     scheme: scheme,
                                     onZoomIn: _zoomIn,
                                     onZoomOut: _zoomOut,
@@ -996,255 +1001,4 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
 String _colorToHex(Color color) {
   final argb = color.toARGB32().toRadixString(16).padLeft(8, '0');
   return '#${argb.substring(2)}';
-}
-
-class _RoundMapButton extends StatelessWidget {
-  const _RoundMapButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: scheme.surfaceContainerHigh.withValues(alpha: 0.92),
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          // Was 38x38 — below WCAG 2.5.5's 44x44 minimum, found in
-          // accessibility review. Icon stays visually the same size.
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Icon(icon, size: 18, color: scheme.onSurface),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Manual zoom in/out — pinch gestures already reach the full zoom range
-/// (`MapLibreMap`'s default `minMaxZoomPreference` is unbounded), so this is
-/// purely a tap-target/accessibility affordance for anyone who can't
-/// perform a pinch gesture.
-class _ZoomControls extends StatelessWidget {
-  const _ZoomControls({
-    required this.scheme,
-    required this.onZoomIn,
-    required this.onZoomOut,
-  });
-
-  final ColorScheme scheme;
-  final VoidCallback onZoomIn;
-  final VoidCallback onZoomOut;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _RoundMapButton(icon: Icons.add, tooltip: 'Zoom in', onTap: onZoomIn),
-          _RoundMapButton(
-            icon: Icons.remove,
-            tooltip: 'Zoom out',
-            onTap: onZoomOut,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GpsQualityChip extends StatelessWidget {
-  const _GpsQualityChip({required this.quality});
-
-  final GpsQuality quality;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final semantic = context.semanticColors;
-    // Audit finding (item 3): previously every quality band used the same
-    // `primaryContainer` background and the same `gps_fixed` icon — "weak"
-    // and "good" were indistinguishable to anyone relying on shape/icon
-    // rather than reading the label text. Now each band gets its own icon
-    // and its own `gpsGood`/`gpsWeak` tint.
-    final (label, icon, color) = switch (quality) {
-      GpsQuality.none => (
-        'Finding GPS…',
-        Icons.location_searching,
-        scheme.onSurfaceVariant,
-      ),
-      GpsQuality.good => ('GPS good', Icons.gps_fixed, semantic.gpsGood),
-      GpsQuality.degraded => ('GPS fair', Icons.gps_not_fixed, semantic.gpsWeak),
-      GpsQuality.poor => ('GPS weak', Icons.gps_off, semantic.gpsWeak),
-    };
-    return Container(
-      // A hard `height:` forces the child Row into that exact cross-axis
-      // size — at large system text scale the label needs more than 32dp
-      // and overflows (`RenderFlex`) instead of the chip growing.
-      // `constraints` with only a minimum lets it grow.
-      constraints: const BoxConstraints(minHeight: 32),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.45)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: color),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PermissionDeniedView extends StatelessWidget {
-  const _PermissionDeniedView({required this.onClose});
-
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.location_off, size: 48, color: scheme.onSurfaceVariant),
-            const SizedBox(height: 16),
-            Text(
-              'Location access is needed to track a run.',
-              style: TextStyle(color: scheme.onSurface),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: onClose, child: const Text('Close')),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StartFailedView extends StatelessWidget {
-  const _StartFailedView({required this.onRetry, required this.onClose});
-
-  final VoidCallback onRetry;
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: scheme.onSurfaceVariant),
-            const SizedBox(height: 16),
-            Text(
-              "Couldn't start tracking this run. Please try again.",
-              style: TextStyle(color: scheme.onSurface),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextButton(onPressed: onClose, child: const Text('Close')),
-                const SizedBox(width: 8),
-                FilledButton(onPressed: onRetry, child: const Text('Retry')),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PulsingDot extends StatefulWidget {
-  const _PulsingDot({required this.color});
-
-  final Color color;
-
-  @override
-  State<_PulsingDot> createState() => _PulsingDotState();
-}
-
-class _PulsingDotState extends State<_PulsingDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  var _startedAnimating = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1300),
-    );
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // "Reduce motion" — same crash/fix pattern as `_RingingBellState` in
-    // `alarm_ring_page.dart` and `_StatusBannerState` in
-    // `verification_page.dart`: `MediaQuery.disableAnimationsOf` can't be
-    // called from `initState`, and the `_startedAnimating` latch keeps a
-    // later dependency change from restarting an already-running loop.
-    if (!_startedAnimating && !MediaQuery.disableAnimationsOf(context)) {
-      _startedAnimating = true;
-      _controller.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: Tween(begin: 0.5, end: 1.0).animate(_controller),
-      child: Container(
-        width: 10,
-        height: 10,
-        decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
-      ),
-    );
-  }
 }

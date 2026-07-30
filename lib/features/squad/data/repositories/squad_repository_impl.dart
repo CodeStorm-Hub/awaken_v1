@@ -35,7 +35,6 @@ class SquadRepositoryImpl implements SquadRepository {
   bool _hasEmittedOnce = false;
 
   DateTime? _lastBroadcastAt;
-  static const _broadcastThrottle = Duration(seconds: 3);
 
   String? get _currentUserId => _supabase.auth.currentUser?.id;
 
@@ -212,7 +211,7 @@ class SquadRepositoryImpl implements SquadRepository {
         // still retries next tick regardless (see doc comment above).
         unawaited(Sentry.captureException(e, stackTrace: st));
       }
-      await Future<void>.delayed(const Duration(seconds: 20));
+      await Future<void>.delayed(AppConstants.squadLeaderboardPollInterval);
     }
   }
 
@@ -390,7 +389,10 @@ class SquadRepositoryImpl implements SquadRepository {
 
     final now = DateTime.now();
     final last = _lastBroadcastAt;
-    if (last != null && now.difference(last) < _broadcastThrottle) return;
+    if (last != null &&
+        now.difference(last) < AppConstants.squadBroadcastThrottle) {
+      return;
+    }
     _lastBroadcastAt = now;
 
     _remote.broadcastTelemetry(squad.id, {'user_id': userId, 'label': label});

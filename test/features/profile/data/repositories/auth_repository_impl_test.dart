@@ -175,6 +175,76 @@ void main() {
     );
   });
 
+  group('signInWithGoogle', () {
+    test(
+      'clears the outgoing identity, signs in, syncs display name, then '
+      're-hydrates — same cross-account-leakage guard as signInWithPassword',
+      () async {
+        when(() => remote.signInWithGoogle()).thenAnswer((_) async {});
+        when(
+          () => remote.syncDisplayNameFromMetadata(),
+        ).thenAnswer((_) async {});
+
+        await repository.signInWithGoogle();
+
+        verifyInOrder([
+          () => alarmRepository.cancelAllAlarms(),
+          () => squadRepository.resetForAccountTransition(),
+          () => db.clearAllLocalData(),
+          () => remote.signInWithGoogle(),
+          () => remote.syncDisplayNameFromMetadata(),
+          () => pullDownSync.run(),
+        ]);
+      },
+    );
+  });
+
+  group('linkWithEmail', () {
+    test('delegates straight to the remote datasource', () async {
+      when(
+        () => remote.linkWithEmail(
+          email: any(named: 'email'),
+          password: any(named: 'password'),
+          displayName: any(named: 'displayName'),
+        ),
+      ).thenAnswer((_) async {});
+
+      await repository.linkWithEmail(
+        email: 'a@b.com',
+        password: 'hunter2',
+        displayName: 'Alex',
+      );
+
+      verify(
+        () => remote.linkWithEmail(
+          email: 'a@b.com',
+          password: 'hunter2',
+          displayName: 'Alex',
+        ),
+      ).called(1);
+    });
+  });
+
+  group('linkWithGoogle', () {
+    test(
+      'links then syncs the display name from the newly-linked provider '
+      'metadata, in that order',
+      () async {
+        when(() => remote.linkWithGoogle()).thenAnswer((_) async {});
+        when(
+          () => remote.syncDisplayNameFromMetadata(),
+        ).thenAnswer((_) async {});
+
+        await repository.linkWithGoogle();
+
+        verifyInOrder([
+          () => remote.linkWithGoogle(),
+          () => remote.syncDisplayNameFromMetadata(),
+        ]);
+      },
+    );
+  });
+
   group('signOut', () {
     test(
       'signs out remotely, wipes local state, then re-establishes a '
