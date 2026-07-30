@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show MissingPluginException, PlatformException;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../../core/di/injection.dart';
@@ -1232,23 +1233,43 @@ class _TerritoryPageState extends State<TerritoryPage> {
 
   Future<void> _tickPulse() async {
     final controller = _controller;
-    if (controller == null || !_territoryLayersReady || _cameraMoving) return;
+    if (controller == null ||
+        !mounted ||
+        !_styleReady ||
+        !_territoryLayersReady ||
+        _cameraMoving) {
+      return;
+    }
     _pulseT += 0.12;
     final t = (math.sin(_pulseT * math.pi) + 1) / 2; // 0..1..0 loop
     final width = 2.0 + t * 3.0;
     final opacity = 0.5 + t * 0.5;
-    await controller.setLayerProperties(
-      _territoryAtRiskOutlineLayerId,
-      LineLayerProperties(lineWidth: width, lineOpacity: opacity),
-    );
-    // Same pulse drives the "front line" contested border too — one ticker,
-    // two independently-filtered layers (see `_updatePulseTimer`'s call
-    // site, gated on `hasAtRisk || hasContested`). A no-op paint update on a
-    // layer whose filter currently matches nothing is harmless.
-    await controller.setLayerProperties(
-      _territoryContestedOutlineLayerId,
-      LineLayerProperties(lineWidth: width, lineOpacity: opacity),
-    );
+    try {
+      await controller.setLayerProperties(
+        _territoryAtRiskOutlineLayerId,
+        LineLayerProperties(lineWidth: width, lineOpacity: opacity),
+      );
+      // Same pulse drives the "front line" contested border too — one
+      // ticker, two independently-filtered layers (see `_updatePulseTimer`'s
+      // call site, gated on `hasAtRisk || hasContested`). A no-op paint
+      // update on a layer whose filter currently matches nothing is
+      // harmless.
+      await controller.setLayerProperties(
+        _territoryContestedOutlineLayerId,
+        LineLayerProperties(lineWidth: width, lineOpacity: opacity),
+      );
+    } on PlatformException {
+      // The guard above is a synchronous snapshot — the map/style can still
+      // be torn down (new key, teardown-and-recreate per the maplibre_gl
+      // style-swap note) while this tick's platform-channel round trip is
+      // in flight. Found live: an in-flight tick raced a map recreation and
+      // threw `STYLE_NOT_READY` as an unhandled exception. Purely
+      // cosmetic/decorative ticker — skipping a frame of the pulse
+      // animation is harmless, no telemetry needed.
+    } on MissingPluginException {
+      // Same race as above, but for the case where the native platform view
+      // itself was already disposed by the time the call reached it.
+    }
   }
 
   /// Starts/stops the periodic `setLayerProperties` ticker driving the
@@ -1279,18 +1300,32 @@ class _TerritoryPageState extends State<TerritoryPage> {
 
   Future<void> _tickAntPath() async {
     final controller = _controller;
-    if (controller == null || !_territoryLayersReady || _cameraMoving) return;
+    if (controller == null ||
+        !mounted ||
+        !_styleReady ||
+        !_territoryLayersReady ||
+        _cameraMoving) {
+      return;
+    }
     _antPathStep = (_antPathStep + 1) % _antPathDashSequence.length;
     final dash = _antPathDashSequence[_antPathStep];
-    // Plain literal array, no `case`/`get` — this layer (filtered to
-    // `owner == 'rival'` at creation) only ever contains rival features, so
-    // there's no per-feature branching left to express. See the field-level
-    // comment on `_territoryOutlineRivalLayerId` for why a data expression
-    // here would silently fail on native Android/iOS.
-    await controller.setLayerProperties(
-      _territoryOutlineRivalLayerId,
-      LineLayerProperties(lineDasharray: ['literal', dash]),
-    );
+    try {
+      // Plain literal array, no `case`/`get` — this layer (filtered to
+      // `owner == 'rival'` at creation) only ever contains rival features,
+      // so there's no per-feature branching left to express. See the
+      // field-level comment on `_territoryOutlineRivalLayerId` for why a
+      // data expression here would silently fail on native Android/iOS.
+      await controller.setLayerProperties(
+        _territoryOutlineRivalLayerId,
+        LineLayerProperties(lineDasharray: ['literal', dash]),
+      );
+    } on PlatformException {
+      // See `_tickPulse`'s catch clause — same in-flight-tick-races-a-map-
+      // recreation race, confirmed live (`STYLE_NOT_READY`). Cosmetic
+      // ticker, safe to skip a frame.
+    } on MissingPluginException {
+      // Same race, native platform view already disposed.
+    }
   }
 
   /// Squad territory heatmap (item 11) — an aggregated tinted overlay
