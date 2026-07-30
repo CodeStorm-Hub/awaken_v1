@@ -18,19 +18,16 @@ class CompleteAlarmWorkoutParams extends Equatable {
   final bool verified;
   final int repsCompleted;
   final DateTime startedAt;
-
-  /// See `AlarmRepository.completeWorkout`'s doc comment — must be true for
-  /// `AlarmListPage`'s "tap to preview" flow, false for a real ring.
   final bool isPreview;
 
   @override
   List<Object?> get props => [
-    alarm,
-    verified,
-    repsCompleted,
-    startedAt,
-    isPreview,
-  ];
+        alarm,
+        verified,
+        repsCompleted,
+        startedAt,
+        isPreview,
+      ];
 }
 
 @injectable
