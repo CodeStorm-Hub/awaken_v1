@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:injectable/injectable.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/di/injection.dart';
@@ -108,7 +109,11 @@ class SquadRepositoryImpl implements SquadRepository {
           .maybeSingle()
           .timeout(const Duration(seconds: 10));
       _emitSquad(row == null ? null : _squadFromJson(row));
-    } catch (_) {
+    } catch (e, st) {
+      // Reported so a persistently-failing fetch is visible in prod, not
+      // silently invisible forever — see doc comment above for why this
+      // still fails open only on the very first fetch.
+      unawaited(Sentry.captureException(e, stackTrace: st));
       if (!_hasEmittedOnce) _emitSquad(null);
     }
   }
@@ -201,8 +206,10 @@ class SquadRepositoryImpl implements SquadRepository {
             .fetchLeaderboard(squadId)
             .timeout(const Duration(seconds: 10));
         yield _mapLeaderboardRows(rows, defaultName: 'Squad member');
-      } catch (_) {
-        // no-op — retry next tick
+      } catch (e, st) {
+        // Reported so a persistently-failing poll is visible in prod;
+        // still retries next tick regardless (see doc comment above).
+        unawaited(Sentry.captureException(e, stackTrace: st));
       }
       await Future<void>.delayed(const Duration(seconds: 20));
     }

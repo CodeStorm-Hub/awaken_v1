@@ -124,9 +124,10 @@ itself (e.g. `SupabaseClient`) are bound via `@module` classes — see
 
 Android product flavors `dev`/`prod` (`android/app/build.gradle.kts`) pair with Dart entrypoints
 `lib/main_dev.dart` / `lib/main_prod.dart`, both delegating to `lib/main_common.dart`'s shared
-`bootstrap({required String envFile})`. Only `.env.client` exists today (one Supabase project,
-`awaken-dev`); `main_prod.dart` currently points at the same file with a TODO for when a separate
-prod project exists.
+`bootstrap({required String envFile})`. Only `.env.client` exists today, pointing at `awaken-dev` —
+this is the **one and only** Supabase project, deliberately shared by dev and prod builds. Don't
+treat `main_prod.dart` pointing at `.env.client` as a gap to fix; there is no separate prod project
+planned.
 
 ### Environment files — two, deliberately not merged
 

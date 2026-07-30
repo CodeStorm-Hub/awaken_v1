@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show compute;
 import 'package:geolocator/geolocator.dart' show Geolocator;
 import 'package:injectable/injectable.dart';
 import 'package:kalman_dr/kalman_dr.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -53,6 +54,12 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
   DateTime? _startedAt;
   String? _runId;
   DateTime? _lastCheckpointAt;
+
+  // Guards Sentry reporting for the two best-effort checkpoint writes below
+  // to once per run each — a checkpoint fires every few seconds, so an
+  // offline run would otherwise flood Sentry with the same failure.
+  bool _localCheckpointFailureReported = false;
+  bool _remoteCheckpointFailureReported = false;
 
   /// Minimum gap between checkpoint writes — refined territory plan's
   /// resilience requirement: bound data loss to roughly this interval if
@@ -156,7 +163,8 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     try {
       await _foregroundService.start();
       await WakelockPlus.enable();
-    } catch (_) {
+    } catch (e, st) {
+      unawaited(Sentry.captureException(e, stackTrace: st));
       _emit(_state.copyWith(isTracking: false, startFailed: true));
       await _teardown();
       return;
@@ -286,8 +294,14 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
               updatedAt: now,
             ),
           );
-    } catch (_) {
-      // Best-effort — see doc comment above.
+    } catch (e, st) {
+      // Best-effort — see doc comment above. Reported once per run so a
+      // persistently-failing local write is visible without flooding
+      // Sentry (this fires every checkpoint interval).
+      if (!_localCheckpointFailureReported) {
+        _localCheckpointFailureReported = true;
+        unawaited(Sentry.captureException(e, stackTrace: st));
+      }
     }
     if (points.length < 2) return;
     try {
@@ -300,8 +314,13 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
         ],
         distanceMeters: _state.distanceMeters,
       );
-    } catch (_) {
-      // Best-effort — see doc comment above.
+    } catch (e, st) {
+      // Best-effort — see doc comment above. Reported once per run (an
+      // offline run would otherwise retry this every checkpoint interval).
+      if (!_remoteCheckpointFailureReported) {
+        _remoteCheckpointFailureReported = true;
+        unawaited(Sentry.captureException(e, stackTrace: st));
+      }
     }
   }
 
@@ -309,9 +328,11 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     await (_db.delete(_db.runCheckpoints)..where((t) => t.id.equals(1))).go();
     try {
       await _runProgress.clearProgress();
-    } catch (_) {
+    } catch (e, st) {
       // Best-effort — a leftover row is harmless (overwritten by the next
       // run's first checkpoint) and must never block finishing this one.
+      // Still reported — a persistently-failing clear points at a real bug.
+      unawaited(Sentry.captureException(e, stackTrace: st));
     }
   }
 
@@ -413,6 +434,8 @@ class RunTrackingRepositoryImpl implements RunTrackingRepository {
     _startedAt = null;
     _runId = null;
     _lastCheckpointAt = null;
+    _localCheckpointFailureReported = false;
+    _remoteCheckpointFailureReported = false;
     await _locationProvider?.dispose();
     _locationProvider = null;
     await _foregroundService.stop();
