@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:awaken/core/di/injection.dart';
+import 'package:awaken/core/theme/app_theme.dart';
 import 'package:awaken/features/alarm/domain/entities/alarm_schedule.dart';
 import 'package:awaken/features/alarm/presentation/bloc/alarm_cubit.dart';
 import 'package:awaken/features/alarm/presentation/bloc/alarm_state.dart';
@@ -64,7 +65,12 @@ void main() {
     await getIt.reset();
   });
 
+  // `HomePage` reads `context.semanticColors` (the streak-flame chip) —
+  // that's a `ThemeExtension` only `AppTheme.light`/`.dark` register, not
+  // `MaterialApp`'s own default `ThemeData()`. Without it, `semanticColors`'
+  // null-check throws the moment that chip builds.
   Widget wrap(Widget child) => MaterialApp(
+    theme: AppTheme.light(null),
     home: BlocProvider<AlarmCubit>.value(value: alarmCubit, child: child),
   );
 

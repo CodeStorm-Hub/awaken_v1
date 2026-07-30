@@ -19,6 +19,11 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
     required this.territoryOwnedFill,
     required this.territoryRival,
     required this.territoryRivalFill,
+    required this.territoryOwnedExtrusion,
+    required this.territoryRivalExtrusion,
+    required this.territorySquadmate,
+    required this.territorySquadmateExtrusion,
+    required this.territoryContested,
     required this.territoryNeutral,
     required this.territoryAtRisk,
     required this.bountyGold,
@@ -46,6 +51,31 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
 
   /// Fill color for rival territory polygons.
   final Color territoryRivalFill;
+
+  /// Punchier, more saturated companion to [territoryOwned] used only for
+  /// the map's 3D fill-extrusion "skyline" blocks (territory map 3D
+  /// redesign, §5.2) — the translucent UI-chrome teal doesn't need to match
+  /// the solid, lit 3D block color 1:1.
+  final Color territoryOwnedExtrusion;
+
+  /// Punchier companion to [territoryRival], same reasoning as
+  /// [territoryOwnedExtrusion].
+  final Color territoryRivalExtrusion;
+
+  /// Fill/legend color for a squad member's territory — a third ownership
+  /// tier ("Conquest Skyline" redesign) distinguishing allies from hostile
+  /// rivals instead of collapsing every non-owned territory into one rival
+  /// color. Structurally still "not mine" for outline/dasharray purposes
+  /// (see `TerritoryPage._redrawFills`'s `owner` vs `ownerTier` properties)
+  /// — this only changes fill/extrusion/flag coloring.
+  final Color territorySquadmate;
+  final Color territorySquadmateExtrusion;
+
+  /// "Front line" pulsing-border color for an owned territory bordering
+  /// rival land (proximity-based, distinct from [territoryAtRisk]'s
+  /// decay-based warning) — reads as "actively contested edge" versus "deep
+  /// rival territory," which previously looked identical.
+  final Color territoryContested;
 
   /// Unclaimed, runnable ground near the user — distinct from both owned
   /// and rival so the map reads as "capturable," not empty space.
@@ -85,6 +115,11 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
     territoryOwnedFill: Color(0xFF0E9488),
     territoryRival: Color(0xFFD92D3C),
     territoryRivalFill: Color(0xFFD92D3C),
+    territoryOwnedExtrusion: Color(0xFF00C2A8),
+    territoryRivalExtrusion: Color(0xFFFF2D42),
+    territorySquadmate: Color(0xFF3D7FD9),
+    territorySquadmateExtrusion: Color(0xFF2E6FE0),
+    territoryContested: Color(0xFFB0399E),
     territoryNeutral: Color(0xFF8A8F99),
     territoryAtRisk: Color(0xFFB26B00),
     bountyGold: Color(0xFFA67C00),
@@ -104,6 +139,11 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
     territoryOwnedFill: Color(0xFF3FD9C7),
     territoryRival: Color(0xFFFF6B7A),
     territoryRivalFill: Color(0xFFFF6B7A),
+    territoryOwnedExtrusion: Color(0xFF00FFD1),
+    territoryRivalExtrusion: Color(0xFFFF3B4E),
+    territorySquadmate: Color(0xFF6FA6FF),
+    territorySquadmateExtrusion: Color(0xFF5B96FF),
+    territoryContested: Color(0xFFE072D3),
     territoryNeutral: Color(0xFF6E7280),
     territoryAtRisk: Color(0xFFF0B33D),
     bountyGold: Color(0xFFF0C94A),
@@ -124,6 +164,11 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
     Color? territoryOwnedFill,
     Color? territoryRival,
     Color? territoryRivalFill,
+    Color? territoryOwnedExtrusion,
+    Color? territoryRivalExtrusion,
+    Color? territorySquadmate,
+    Color? territorySquadmateExtrusion,
+    Color? territoryContested,
     Color? territoryNeutral,
     Color? territoryAtRisk,
     Color? bountyGold,
@@ -142,6 +187,14 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
       territoryOwnedFill: territoryOwnedFill ?? this.territoryOwnedFill,
       territoryRival: territoryRival ?? this.territoryRival,
       territoryRivalFill: territoryRivalFill ?? this.territoryRivalFill,
+      territoryOwnedExtrusion:
+          territoryOwnedExtrusion ?? this.territoryOwnedExtrusion,
+      territoryRivalExtrusion:
+          territoryRivalExtrusion ?? this.territoryRivalExtrusion,
+      territorySquadmate: territorySquadmate ?? this.territorySquadmate,
+      territorySquadmateExtrusion:
+          territorySquadmateExtrusion ?? this.territorySquadmateExtrusion,
+      territoryContested: territoryContested ?? this.territoryContested,
       territoryNeutral: territoryNeutral ?? this.territoryNeutral,
       territoryAtRisk: territoryAtRisk ?? this.territoryAtRisk,
       bountyGold: bountyGold ?? this.bountyGold,
@@ -167,6 +220,31 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
       territoryRival: Color.lerp(territoryRival, other.territoryRival, t)!,
       territoryRivalFill:
           Color.lerp(territoryRivalFill, other.territoryRivalFill, t)!,
+      territoryOwnedExtrusion: Color.lerp(
+        territoryOwnedExtrusion,
+        other.territoryOwnedExtrusion,
+        t,
+      )!,
+      territoryRivalExtrusion: Color.lerp(
+        territoryRivalExtrusion,
+        other.territoryRivalExtrusion,
+        t,
+      )!,
+      territorySquadmate: Color.lerp(
+        territorySquadmate,
+        other.territorySquadmate,
+        t,
+      )!,
+      territorySquadmateExtrusion: Color.lerp(
+        territorySquadmateExtrusion,
+        other.territorySquadmateExtrusion,
+        t,
+      )!,
+      territoryContested: Color.lerp(
+        territoryContested,
+        other.territoryContested,
+        t,
+      )!,
       territoryNeutral:
           Color.lerp(territoryNeutral, other.territoryNeutral, t)!,
       territoryAtRisk: Color.lerp(territoryAtRisk, other.territoryAtRisk, t)!,

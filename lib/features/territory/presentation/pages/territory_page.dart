@@ -96,9 +96,63 @@ class _TerritoryPageState extends State<TerritoryPage> {
   static const _territoryOutlineOwnedLayerId = 'territories-outline-owned-layer';
   static const _territoryOutlineRivalLayerId = 'territories-outline-rival-layer';
   static const _territoryExtrusionLayerId = 'territories-extrusion-layer';
+  // Rim-light/glow (territory map 3D redesign §5.2) — MapLibre has no
+  // native glow/bloom paint property, so this fakes one the way comparable
+  // implementations do: a wider, blurred (`lineBlur`), translucent
+  // companion line per ownership type, inserted directly *below* its crisp
+  // `_territoryOutline*LayerId` counterpart (added right after, in
+  // `_redrawFills`) so the crisp line reads on top of a soft halo instead of
+  // the halo swallowing it.
+  static const _territoryGlowOwnedLayerId = 'territories-glow-owned-layer';
+  static const _territoryGlowRivalLayerId = 'territories-glow-rival-layer';
+  // Hollow perimeter "wall" — a separate GeoJSON source of frame/annulus
+  // MultiPolygons (`TerritoryMapStyle.territoryToWallGeoJsonFeature`), so the
+  // 3D fill-extrusion layer can render a wall along just the border instead
+  // of a solid block over the whole captured area (which, on live-device
+  // review, both looked like a huge plain slab and completely hid the
+  // streets/buildings underneath — the opposite of what §5.1's city
+  // buildings were for).
+  static const _territoryWallSourceId = 'territories-wall-source';
   static const _territoryAtRiskOutlineLayerId =
       'territories-atrisk-outline-layer';
+  // "Front line" (proximity-based, distinct from the decay-based at-risk
+  // border above) — a third outline layer, filtered to owned territories
+  // within `_contestedRadiusM` of any rival territory's centroid (see
+  // `_redrawFills`'s `contested` computation). Reads as "actively contested
+  // edge" versus "deep rival territory," which previously looked identical.
+  static const _territoryContestedOutlineLayerId =
+      'territories-contested-outline-layer';
+  static const _contestedRadiusM = 250.0;
   bool _territoryLayersReady = false;
+
+  // Territory "flags" — a point `SymbolLayer` (Conquest Skyline redesign)
+  // planting a small tinted flag glyph at each visible territory's
+  // approximate centroid, on top of the fill/extrusion/outline layers.
+  // Ownership reads instantly at any zoom this way, even before the 3D
+  // extrusion is perceptible. Own GeoJSON source (points, not the polygon
+  // geometry the other territory layers share) since `SymbolLayer` needs
+  // point features.
+  static const _flagsSourceId = 'territory-flags-source';
+  static const _flagsSymbolLayerId = 'territory-flags-layer';
+  bool _flagsLayerReady = false;
+
+  /// Guards the one-time `controller.addImage` call registering
+  /// [TerritoryMapStyle.flagIconName] — a style/native-view property, so
+  /// (like `_territoryLayersReady` etc.) it must be re-registered after a
+  /// fallback-tier style swap tears down and recreates the native view.
+  bool _flagIconRegistered = false;
+
+  /// Guards the one-time `controller.addImage` call registering the "3D
+  /// puck" current-position avatar (`TerritoryMapStyle.
+  /// generateAvatarPuckIconBytes`/`avatarPuckIconNamePrefix`) — same
+  /// per-native-view lifecycle as `_flagIconRegistered`.
+  bool _avatarIconRegistered = false;
+
+  /// Current camera zoom, tracked via `controller.cameraPosition` on every
+  /// `onCameraIdle` (see `_refreshForCurrentView`) — drives the "SKYLINE
+  /// MODE" HUD chip, which should only appear once the city-buildings layer
+  /// (`minzoom: 14`) is actually rendering something.
+  double? _currentZoom;
 
   /// True once `onStyleLoadedCallback` has fired for the current native map
   /// view. `_controller` goes non-null at `onMapCreated`, *before* the style
@@ -111,12 +165,12 @@ class _TerritoryPageState extends State<TerritoryPage> {
   /// arrived before the style finished loading.
   bool _styleReady = false;
 
-  /// "3D view" toggle (skyline redesign item) — animates camera `tilt`
-  /// between 0 and 45deg so the fill-extrusion "skyline" layer
-  /// (`_territoryExtrusionLayerId`) is actually visible; at tilt 0 an
-  /// extrusion renders identically to its flat footprint, so without this
-  /// the whole layer would be invisible by default.
-  bool _is3D = false;
+  /// "3D view" toggle. Territory map 3D redesign §5.3: 3D is now the
+  /// *default* visual language (starts `true`) rather than a hidden opt-in —
+  /// the button is repurposed as a "look straight down" escape hatch for
+  /// navigation, not the primary way to discover the skyline. Still just
+  /// animates camera `tilt` between 0 and 45deg.
+  bool _is3D = true;
   Timer? _pulseTimer;
   double _pulseT = 0;
 
@@ -170,11 +224,6 @@ class _TerritoryPageState extends State<TerritoryPage> {
   final _bountyFillsByZoneId = <String, List<Fill>>{};
   Rival? _currentRival;
   List<TerritoryAtRisk> _atRisk = const [];
-
-  // Unclaimed/"capturable" ground near the user (item 4) — a subtle
-  // neutral-tinted ring around the last known fix, Ingress-style, so the
-  // map reads as "you can capture this" rather than empty space.
-  Fill? _neutralZoneFill;
 
   // Squad territory heatmap (item 11) — client-side aggregation of
   // already-fetched `Territory` rows (via `ownerId`) against the caller's
@@ -334,11 +383,8 @@ class _TerritoryPageState extends State<TerritoryPage> {
       });
       final controller = _controller;
       if (controller != null) {
-        await controller.animateCamera(
-          CameraUpdate.newLatLngZoom(_center, _focusZoom),
-        );
+        await controller.animateCamera(_cameraUpdateForFocus());
         await _syncCurrentPositionMarker();
-        await _syncNeutralZone();
         // Explicit, rather than relying on `animateCamera` reliably
         // triggering `onCameraIdle` on its own (plugin behavior this
         // shouldn't have to depend on). Real gap found live: `initState`
@@ -355,26 +401,28 @@ class _TerritoryPageState extends State<TerritoryPage> {
     }
   }
 
-  Circle? _positionMarker;
+  /// "3D puck" avatar (replaces the old flat `Circle` dot) — a `Symbol`
+  /// annotation using `TerritoryMapStyle.avatarPuckIconNamePrefix`, a
+  /// runtime-rendered icon baked with the theme's `primary` color (see
+  /// `_avatarIconRegistered`).
+  Symbol? _positionMarker;
 
   Future<void> _syncCurrentPositionMarker() async {
     final controller = _controller;
-    if (controller == null || !_hasFix) return;
-    final scheme = Theme.of(context).colorScheme;
+    if (controller == null || !_hasFix || !_avatarIconRegistered) return;
     if (_positionMarker == null) {
-      _positionMarker = await controller.addCircle(
-        CircleOptions(
+      _positionMarker = await controller.addSymbol(
+        SymbolOptions(
           geometry: _center,
-          circleRadius: 7,
-          circleColor: _colorToHex(scheme.primary),
-          circleStrokeColor: _colorToHex(scheme.surface),
-          circleStrokeWidth: 2,
+          iconImage: TerritoryMapStyle.avatarPuckIconNamePrefix,
+          iconSize: 0.34,
+          iconAnchor: 'center',
         ),
       );
     } else {
-      await controller.updateCircle(
+      await controller.updateSymbol(
         _positionMarker!,
-        CircleOptions(geometry: _center),
+        SymbolOptions(geometry: _center),
       );
     }
   }
@@ -392,6 +440,9 @@ class _TerritoryPageState extends State<TerritoryPage> {
     _bountyMarkersLayerReady = false;
     _captureHeatmapLayerReady = false;
     _squadMemberMarkersLayerReady = false;
+    _flagsLayerReady = false;
+    _flagIconRegistered = false;
+    _avatarIconRegistered = false;
     _styleReady = false;
     _pulseTimer?.cancel();
     _pulseTimer = null;
@@ -403,7 +454,6 @@ class _TerritoryPageState extends State<TerritoryPage> {
     // one — the blue position dot never reappeared after a style-tier
     // fallback, even though fills/bounty zones correctly redrew.
     _positionMarker = null;
-    _neutralZoneFill = null;
     _controller = controller;
     _styleLoader.start();
   }
@@ -424,19 +474,50 @@ class _TerritoryPageState extends State<TerritoryPage> {
       // the style JSON). Best-effort and idempotent — safe to await inline,
       // and must re-run on every style (re)load, including a fallback-tier
       // swap, since that's a brand new native view with the recolor undone.
-      unawaited(
-        TerritoryBasemapRecolor.apply(
-          controller,
-          isDark: mounted && Theme.of(context).brightness == Brightness.dark,
-        ),
-      );
+      final isDark = mounted && Theme.of(context).brightness == Brightness.dark;
+      final primaryColor = Theme.of(context).colorScheme.primary;
+      unawaited(TerritoryBasemapRecolor.apply(controller, isDark: isDark));
+      // Real 3D city buildings (§5.1) — skipped on the bundled offline
+      // fallback tier, which is a minimal low-zoom (z0-6) extract with no
+      // `building` source-layer at all (see `TerritoryMapStyle`'s doc
+      // comment).
+      if (!_styleLoader.isDegradedFallback) {
+        unawaited(
+          TerritoryBasemapRecolor.applyCityBuildings(
+            controller,
+            isDark: isDark,
+          ),
+        );
+      }
+      if (!_flagIconRegistered) {
+        try {
+          final bytes = await TerritoryMapStyle.generateFlagIconBytes();
+          await controller.addImage(TerritoryMapStyle.flagIconName, bytes, true);
+          _flagIconRegistered = true;
+        } catch (_) {
+          // Best-effort — a missing flag icon just means territories render
+          // without the marker (fill/extrusion/outline are unaffected).
+        }
+      }
+      if (!_avatarIconRegistered) {
+        try {
+          final bytes = await TerritoryMapStyle.generateAvatarPuckIconBytes(
+            color: primaryColor,
+          );
+          await controller.addImage(
+            TerritoryMapStyle.avatarPuckIconNamePrefix,
+            bytes,
+          );
+          _avatarIconRegistered = true;
+        } catch (_) {
+          // Best-effort — a missing avatar icon just means the position
+          // marker doesn't (re)appear until the next successful style load.
+        }
+      }
     }
     if (_hasFix) {
-      await _controller?.animateCamera(
-        CameraUpdate.newLatLngZoom(_center, _focusZoom),
-      );
+      await _controller?.animateCamera(_cameraUpdateForFocus());
       await _syncCurrentPositionMarker();
-      await _syncNeutralZone();
     }
     await _refreshForCurrentView();
     // A fallback-tier style swap tears down and recreates the native map
@@ -447,34 +528,6 @@ class _TerritoryPageState extends State<TerritoryPage> {
     _territoriesSub = getIt<WatchTerritories>()().listen(_onTerritoriesChanged);
     unawaited(_drawBountyZones());
     unawaited(_redrawCaptureHeatmap());
-  }
-
-  /// Unclaimed, runnable ground near the user (item 4) — a subtle
-  /// `territoryNeutral`-tinted ring around the last known fix, so the map
-  /// reads as "this is capturable" rather than empty space (Ingress-style
-  /// neutral/faction painting). Drawn once per fix rather than tracked
-  /// continuously with the position marker, since it's meant to read as
-  /// "the area around here," not a precise live radius.
-  Future<void> _syncNeutralZone() async {
-    final controller = _controller;
-    if (controller == null || !_hasFix || !mounted) return;
-    final semantic = context.semanticColors;
-    final ring = _circlePolygon(_center.latitude, _center.longitude, 300);
-    if (_neutralZoneFill == null) {
-      _neutralZoneFill = await controller.addFill(
-        FillOptions(
-          geometry: [ring],
-          fillColor: _colorToHex(semantic.territoryNeutral),
-          fillOpacity: 0.08,
-          fillOutlineColor: _colorToHex(semantic.territoryNeutral),
-        ),
-      );
-    } else {
-      await controller.updateFill(
-        _neutralZoneFill!,
-        FillOptions(geometry: [ring]),
-      );
-    }
   }
 
   /// Bounty zones are few and global (not per-viewport like territories),
@@ -657,6 +710,21 @@ class _TerritoryPageState extends State<TerritoryPage> {
     unawaited(_redrawSquadHeatmap());
   }
 
+  /// Great-circle distance in meters — used by `_redrawFills`'s "front
+  /// line" contested check (centroid-to-centroid, not true polygon
+  /// adjacency; see that call site's doc comment).
+  static double _haversineMeters(LatLng a, LatLng b) {
+    const earthRadiusM = 6371000.0;
+    final dLat = (b.latitude - a.latitude) * (math.pi / 180);
+    final dLng = (b.longitude - a.longitude) * (math.pi / 180);
+    final lat1 = a.latitude * (math.pi / 180);
+    final lat2 = b.latitude * (math.pi / 180);
+    final h =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) * math.cos(lat2) * math.sin(dLng / 2) * math.sin(dLng / 2);
+    return 2 * earthRadiusM * math.asin(math.sqrt(h));
+  }
+
   /// Fallback health (0-100) for an owned territory, derived from
   /// `TerritoryAtRisk.lastDefendedAt`/`expiresAt` — used only when
   /// `Territory.health` is null (a row cached before `territories_in_bbox()`
@@ -687,15 +755,31 @@ class _TerritoryPageState extends State<TerritoryPage> {
   /// GeoJSON property instead of a `FillOptions`/`LineOptions` argument).
   Map<String, dynamic> _territoryFeatureProperties(
     Territory territory,
-    Map<String, TerritoryAtRisk> atRiskById,
-  ) {
+    Map<String, TerritoryAtRisk> atRiskById, {
+    required bool contested,
+  }) {
     final semantic = context.semanticColors;
+    // Three-tier ownership ("Conquest Skyline" redesign) — a squadmate's
+    // territory is still structurally "not mine" for outline/dasharray
+    // purposes (`owner` below stays binary, unchanged), but gets its own
+    // fill/extrusion/flag color instead of collapsing into the same hostile
+    // red every non-owned territory used to render as.
+    final isSquadmate = !territory.isMine && _squadMemberIds.contains(territory.ownerId);
     final fillColor = territory.isMine
         ? semantic.territoryOwnedFill
+        : isSquadmate
+        ? semantic.territorySquadmate
         : semantic.territoryRivalFill;
     final outlineColor = territory.isMine
         ? semantic.territoryOwned
         : semantic.territoryRival;
+    // Punchier, more saturated pair used only by the 3D fill-extrusion
+    // "skyline" layer (§5.2) — see `territoryOwnedExtrusion`'s doc comment.
+    final extrusionColor = territory.isMine
+        ? semantic.territoryOwnedExtrusion
+        : isSquadmate
+        ? semantic.territorySquadmateExtrusion
+        : semantic.territoryRivalExtrusion;
 
     final baseOpacity = territory.isMine ? 0.40 : 0.32;
     // Real server-computed decay value now (`territories_in_bbox()`'s
@@ -714,11 +798,14 @@ class _TerritoryPageState extends State<TerritoryPage> {
 
     return {
       'owner': territory.isMine ? 'me' : 'rival',
+      'ownerTier': territory.isMine ? 'me' : (isSquadmate ? 'squadmate' : 'rival'),
       'atRisk': territory.isMine && atRiskById.containsKey(territory.id),
+      'contested': contested,
       'areaSqm': territory.areaSqm,
       'fillColor': _colorToHex(fillColor),
       'fillOpacity': targetOpacity,
       'outlineColor': _colorToHex(outlineColor),
+      'extrusionColor': _colorToHex(extrusionColor),
     };
   }
 
@@ -741,11 +828,35 @@ class _TerritoryPageState extends State<TerritoryPage> {
     final visible = _lastTerritories.where(
       (t) => t.isMine || _showRivalTerritory,
     );
+
+    // "Front line" contested check (Conquest Skyline redesign) — an owned
+    // territory whose centroid sits within `_contestedRadiusM` of *any*
+    // rival territory's centroid. A cheap centroid-distance proxy, not a
+    // real polygon-adjacency/boolean-geometry check (no such library is in
+    // this project's dependencies) — good enough to flag "this owned block
+    // is near hostile land" without a full computational-geometry pass.
+    final rivalCentroids = [
+      for (final t in _lastTerritories)
+        if (!t.isMine) TerritoryMapStyle.territoryCentroid(t),
+    ];
+    bool isContested(Territory territory) {
+      if (!territory.isMine || rivalCentroids.isEmpty) return false;
+      final centroid = TerritoryMapStyle.territoryCentroid(territory);
+      return rivalCentroids.any(
+        (rivalCentroid) =>
+            _haversineMeters(centroid, rivalCentroid) <= _contestedRadiusM,
+      );
+    }
+
     final features = [
       for (final territory in visible)
         TerritoryMapStyle.territoryToGeoJsonFeature(
           territory,
-          _territoryFeatureProperties(territory, atRiskById),
+          _territoryFeatureProperties(
+            territory,
+            atRiskById,
+            contested: isContested(territory),
+          ),
         ),
     ];
     final collection = {'type': 'FeatureCollection', 'features': features};
@@ -760,6 +871,78 @@ class _TerritoryPageState extends State<TerritoryPage> {
           fillOpacity: ['get', 'fillOpacity'],
           fillOutlineColor: ['get', 'outlineColor'],
         ),
+      );
+      // Territory perimeter "wall" (territory map 3D redesign, round 3 — a
+      // solid block over the whole captured area was found, on live-device
+      // review, to both look like a huge plain slab *and* to completely
+      // occlude the streets/buildings underneath it, defeating the point of
+      // rendering them at all per §5.1). This reads its own
+      // `_territoryWallSourceId` source — hollow frame/annulus
+      // MultiPolygons built by `TerritoryMapStyle.territoryToWallGeoJsonFeature`
+      // (outer boundary minus an inward-offset copy of itself), populated in
+      // this same method below — rather than the full-fill polygons
+      // `_territorySourceId` carries, so the interior stays visible while
+      // the border still reads as a raised rampart.
+      //
+      // `fillExtrusionColor` reads the punchier `extrusionColor` property
+      // (see `_territoryFeatureProperties`) rather than the translucent
+      // `fillColor` the flat fill/legend use — a solid wall doesn't need to
+      // match the UI-chrome teal/red 1:1 (§5.2). Opacity is high (0.92) —
+      // safe now that it's just a thin ring, not the whole footprint — with
+      // `fillExtrusionVerticalGradient: true` for a lit-volume look. Height
+      // is kept low (a modest rampart, not a rampart-turned-tower) since a
+      // wall's real job here is tracing the border, not standing tall.
+      await controller.addGeoJsonSource(_territoryWallSourceId, const {
+        'type': 'FeatureCollection',
+        'features': <Map<String, dynamic>>[],
+      });
+      await controller.addFillExtrusionLayer(
+        _territoryWallSourceId,
+        _territoryExtrusionLayerId,
+        const FillExtrusionLayerProperties(
+          fillExtrusionColor: ['get', 'extrusionColor'],
+          fillExtrusionOpacity: 0.92,
+          fillExtrusionVerticalGradient: true,
+          fillExtrusionBase: 0.0,
+          fillExtrusionHeight: [
+            'interpolate',
+            ['linear'],
+            ['get', 'areaSqm'],
+            0, 0,
+            1, 2,
+            250, 5,
+            1000, 8,
+            2500, 11,
+            20000, 16,
+          ],
+        ),
+      );
+      // Rim-light/glow (§5.2) — see `_territoryGlowOwnedLayerId`'s
+      // field-level doc comment for the fake-glow mechanism. Added right
+      // after the extrusion (so it sits above the skyline blocks) and right
+      // before its crisp outline counterpart below (so the crisp line draws
+      // on top of the soft halo, not the other way around).
+      await controller.addLineLayer(
+        _territorySourceId,
+        _territoryGlowOwnedLayerId,
+        const LineLayerProperties(
+          lineColor: ['get', 'outlineColor'],
+          lineWidth: 9,
+          lineBlur: 6,
+          lineOpacity: 0.55,
+        ),
+        filter: ['==', ['get', 'owner'], 'me'],
+      );
+      await controller.addLineLayer(
+        _territorySourceId,
+        _territoryGlowRivalLayerId,
+        const LineLayerProperties(
+          lineColor: ['get', 'outlineColor'],
+          lineWidth: 9,
+          lineBlur: 6,
+          lineOpacity: 0.45,
+        ),
+        filter: ['==', ['get', 'owner'], 'rival'],
       );
       // Owned territory's outline — always solid, no `lineDasharray` at all
       // (the property's absence renders as a solid line; no literal
@@ -791,45 +974,6 @@ class _TerritoryPageState extends State<TerritoryPage> {
         ),
         filter: ['==', ['get', 'owner'], 'rival'],
       );
-      // Territory "skyline" (skyline redesign item 1) — a 3D fill-extrusion
-      // reading the *same* `_territorySourceId` source (the geometry's
-      // already there; no new source needed). `belowLayerId:
-      // _territoryOutlineOwnedLayerId` places it directly under the outline
-      // layers added just above — outlines (and, below that call, the
-      // at-risk pulse border) still draw crisply on top of the extruded
-      // blocks instead of getting buried under a 3D face. `fillColor`
-      // reuses the exact `['get', 'fillColor']` expression the flat fill
-      // layer uses so owned/rival coloring stays consistent between the
-      // flat 2D view and the tilted 3D one. Height is only ever visible
-      // once the user tilts the camera via the "3D view" toggle
-      // (`_toggle3DView`) — at tilt 0 an extrusion renders identically to
-      // its flat footprint, so this is a no-op visually until then.
-      await controller.addFillExtrusionLayer(
-        _territorySourceId,
-        _territoryExtrusionLayerId,
-        const FillExtrusionLayerProperties(
-          fillExtrusionColor: ['get', 'fillColor'],
-          fillExtrusionOpacity: 0.8,
-          fillExtrusionBase: 0.0,
-          // Awaken's captured areas run roughly tens-to-low-hundreds of sqm
-          // for a typical loop up through several thousand sqm for a large
-          // run (plan's territory pipeline works in real m² via `::geography`
-          // casts — see CLAUDE.md). Breakpoints picked so a small capture
-          // still reads as a visible block (not flush with the ground) while
-          // a large one caps out at a readable "skyline" height rather than
-          // growing unboundedly.
-          fillExtrusionHeight: [
-            'interpolate',
-            ['linear'],
-            ['get', 'areaSqm'],
-            0, 0,
-            250, 40,
-            2500, 100,
-            20000, 160,
-          ],
-        ),
-        belowLayerId: _territoryOutlineOwnedLayerId,
-      );
       // Pulsing at-risk border (item 5) — a second outline layer reading
       // the same source, filtered to only at-risk features via the style
       // `filter` (not a paint expression), so `_tickPulse` can animate its
@@ -845,21 +989,118 @@ class _TerritoryPageState extends State<TerritoryPage> {
         ),
         filter: ['==', ['get', 'atRisk'], true],
       );
+      // "Front line" pulsing border — same `_tickPulse` ticker as the
+      // at-risk outline above (see `_tickPulse`'s updated doc comment),
+      // just a distinct color/filter so a decay-based warning and a
+      // proximity-based "you're bordering a rival" cue read differently.
+      await controller.addLineLayer(
+        _territorySourceId,
+        _territoryContestedOutlineLayerId,
+        LineLayerProperties(
+          lineColor: _colorToHex(semantic.territoryContested),
+          lineWidth: 3,
+          lineOpacity: 1.0,
+        ),
+        filter: ['==', ['get', 'contested'], true],
+      );
       _territoryLayersReady = true;
     } else {
       await controller.setGeoJsonSource(_territorySourceId, collection);
     }
 
+    final wallFeatures = [
+      for (final territory in visible)
+        TerritoryMapStyle.territoryToWallGeoJsonFeature(
+          territory,
+          _territoryFeatureProperties(
+            territory,
+            atRiskById,
+            contested: isContested(territory),
+          ),
+        ),
+    ];
+    await controller.setGeoJsonSource(_territoryWallSourceId, {
+      'type': 'FeatureCollection',
+      'features': wallFeatures,
+    });
+
     final hasAtRisk = visible.any(
       (t) => t.isMine && atRiskById.containsKey(t.id),
     );
-    _updatePulseTimer(hasAtRisk);
+    final hasContested = visible.any(isContested);
+    _updatePulseTimer(hasAtRisk || hasContested);
 
     final hasRival = visible.any((t) => !t.isMine);
     _updateAntPathTimer(hasRival);
 
+    unawaited(_redrawFlags(visible));
+
     if (newlyCaptured.isNotEmpty) {
       unawaited(_animateCaptureGrowIn(newlyCaptured));
+    }
+  }
+
+  /// Plants a small tinted flag glyph at each visible territory's
+  /// approximate centroid (Conquest Skyline redesign) — see the
+  /// `_flagsSourceId`/`_flagsSymbolLayerId` field doc comment. [visible] is
+  /// the same filtered iterable `_redrawFills` just built its polygon
+  /// features from, so ownership/rival-visibility stays in lockstep between
+  /// the two layers without re-deriving it here.
+  Future<void> _redrawFlags(Iterable<Territory> visible) async {
+    final controller = _controller;
+    if (controller == null || !mounted || !_flagIconRegistered) return;
+    final semantic = context.semanticColors;
+
+    final features = [
+      for (final territory in visible)
+        () {
+          final isSquadmate =
+              !territory.isMine && _squadMemberIds.contains(territory.ownerId);
+          final flagColor = territory.isMine
+              ? semantic.territoryOwnedExtrusion
+              : isSquadmate
+              ? semantic.territorySquadmateExtrusion
+              : semantic.territoryRivalExtrusion;
+          final centroid = TerritoryMapStyle.territoryCentroid(territory);
+          return {
+            'type': 'Feature',
+            'properties': {'id': territory.id, 'flagColor': _colorToHex(flagColor)},
+            'geometry': {
+              'type': 'Point',
+              'coordinates': [centroid.longitude, centroid.latitude],
+            },
+          };
+        }(),
+    ];
+    final collection = {'type': 'FeatureCollection', 'features': features};
+
+    if (!_flagsLayerReady) {
+      await controller.addGeoJsonSource(_flagsSourceId, collection);
+      await controller.addSymbolLayer(
+        _flagsSourceId,
+        _flagsSymbolLayerId,
+        const SymbolLayerProperties(
+          iconImage: TerritoryMapStyle.flagIconName,
+          iconColor: ['get', 'flagColor'],
+          // Bigger at closer zoom so the flag stays legible once the user
+          // has tilted/zoomed in enough to see individual buildings/blocks,
+          // smaller (but never gone) at the zoomed-out overview level.
+          iconSize: [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            12, 0.22,
+            16, 0.45,
+            19, 0.7,
+          ],
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
+          iconAnchor: 'bottom',
+        ),
+      );
+      _flagsLayerReady = true;
+    } else {
+      await controller.setGeoJsonSource(_flagsSourceId, collection);
     }
   }
 
@@ -948,6 +1189,14 @@ class _TerritoryPageState extends State<TerritoryPage> {
     final opacity = 0.5 + t * 0.5;
     await controller.setLayerProperties(
       _territoryAtRiskOutlineLayerId,
+      LineLayerProperties(lineWidth: width, lineOpacity: opacity),
+    );
+    // Same pulse drives the "front line" contested border too — one ticker,
+    // two independently-filtered layers (see `_updatePulseTimer`'s call
+    // site, gated on `hasAtRisk || hasContested`). A no-op paint update on a
+    // layer whose filter currently matches nothing is harmless.
+    await controller.setLayerProperties(
+      _territoryContestedOutlineLayerId,
       LineLayerProperties(lineWidth: width, lineOpacity: opacity),
     );
   }
@@ -1235,6 +1484,14 @@ class _TerritoryPageState extends State<TerritoryPage> {
       return; // superseded while awaiting the region
     }
 
+    // Altitude-gated "SKYLINE MODE" HUD chip (§6) — piggybacks on this
+    // existing `onCameraIdle`-debounced call rather than a second listener,
+    // since both need "settle after the camera stops moving."
+    final zoom = controller.cameraPosition?.zoom;
+    if (zoom != null && mounted && zoom != _currentZoom) {
+      setState(() => _currentZoom = zoom);
+    }
+
     await getIt<RefreshTerritories>()(
       GeoBounds(
         minLat: bounds.southwest.latitude,
@@ -1248,8 +1505,218 @@ class _TerritoryPageState extends State<TerritoryPage> {
   Future<void> _recenter() async {
     final controller = _controller;
     if (controller == null) return;
-    await controller.animateCamera(
-      CameraUpdate.newLatLngZoom(_center, _focusZoom),
+    await controller.animateCamera(_cameraUpdateForFocus());
+  }
+
+  /// `CameraUpdate.newLatLngZoom` always resets `tilt` to 0 — it's the only
+  /// factory that doesn't carry one. Since 3D is now the default view (§5.3),
+  /// every "center/recenter on `_center`" call site needs to preserve the
+  /// current `_is3D` tilt instead of silently flattening the camera back to
+  /// top-down.
+  CameraUpdate _cameraUpdateForFocus() => CameraUpdate.newCameraPosition(
+    CameraPosition(target: _center, zoom: _focusZoom, tilt: _is3D ? 45 : 0),
+  );
+
+  /// Tap-to-inspect (Conquest Skyline redesign) — the map was previously
+  /// purely decorative once territories rendered: nothing responded to a
+  /// tap. `queryRenderedFeatures` (not `onFeatureTapped`/feature-state,
+  /// which the plugin's own example app documents as web-only) works
+  /// cross-platform on Android/iOS, so this queries the territory
+  /// fill/extrusion layers at the tapped screen point and, if it hit one,
+  /// looks the territory back up by the `id` property `_territoryFeatureProperties`
+  /// already stamps onto every feature.
+  Future<void> _onMapTapped(math.Point<double> point, LatLng coordinates) async {
+    final controller = _controller;
+    if (controller == null || !_territoryLayersReady) return;
+    List<dynamic> features;
+    try {
+      features = await controller.queryRenderedFeatures(point, [
+        _territoryFillLayerId,
+        _territoryExtrusionLayerId,
+      ], null);
+    } catch (_) {
+      return; // best-effort — a failed query just means the tap is a no-op
+    }
+    if (features.isEmpty) return;
+    final rawProperties = (features.first as Map)['properties'];
+    final id = rawProperties is Map ? rawProperties['id']?.toString() : null;
+    if (id == null) return;
+
+    Territory? tapped;
+    for (final territory in _lastTerritories) {
+      if (territory.id == id) {
+        tapped = territory;
+        break;
+      }
+    }
+    if (tapped == null || !mounted) return;
+    unawaited(_showTerritoryInspectSheet(tapped));
+  }
+
+  Future<void> _showTerritoryInspectSheet(Territory territory) async {
+    final scheme = Theme.of(context).colorScheme;
+    final semantic = context.semanticColors;
+    final isSquadmate =
+        !territory.isMine && _squadMemberIds.contains(territory.ownerId);
+
+    String? squadmateName;
+    if (isSquadmate) {
+      for (final member in _squadPresenceMembers) {
+        if (member.userId == territory.ownerId) {
+          squadmateName = member.displayName;
+          break;
+        }
+      }
+    }
+    final ownerLabel = territory.isMine
+        ? 'You'
+        : (squadmateName ?? (isSquadmate ? 'Squadmate' : 'Rival'));
+    final ownerColor = territory.isMine
+        ? semantic.territoryOwned
+        : isSquadmate
+        ? semantic.territorySquadmate
+        : semantic.territoryRival;
+    final areaLabel = '${(territory.areaSqm / 1000000).toStringAsFixed(3)} km²';
+    final atRiskById = {for (final t in _atRisk) t.id: t};
+    final health = territory.isMine
+        ? (territory.health?.toDouble() ?? _healthOf(territory.id, atRiskById))
+        : null;
+    final centroid = TerritoryMapStyle.territoryCentroid(territory);
+    final canStealBack = !territory.isMine && !isSquadmate;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+            child: Container(
+              decoration: BoxDecoration(
+                color: scheme.brightness == Brightness.dark
+                    ? const Color(0xFF1C1C1E).withValues(alpha: 0.88)
+                    : Colors.white.withValues(alpha: 0.90),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 36,
+                          height: 5,
+                          margin: const EdgeInsets.only(bottom: 18),
+                          decoration: BoxDecoration(
+                            color: scheme.onSurfaceVariant.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: ownerColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            ownerLabel,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: scheme.onSurface,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        areaLabel,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      if (health != null) ...[
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.shield_outlined,
+                              size: 16,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${health.round()}% defended',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: LinearProgressIndicator(
+                            value: (health / 100).clamp(0, 1),
+                            minHeight: 6,
+                            backgroundColor: scheme.surfaceContainerHighest,
+                            color: health < 30
+                                ? semantic.territoryAtRisk
+                                : semantic.territoryOwned,
+                          ),
+                        ),
+                      ],
+                      if (canStealBack) ...[
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: semantic.territoryRival,
+                              minimumSize: const Size(0, 48),
+                            ),
+                            onPressed: () {
+                              Navigator.of(sheetContext).pop();
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => ActiveRunPage(
+                                    focusLocation: LatLng(
+                                      centroid.latitude,
+                                      centroid.longitude,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.directions_run),
+                            label: const Text('Steal back'),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1275,7 +1742,10 @@ class _TerritoryPageState extends State<TerritoryPage> {
     final next = !_is3D;
     setState(() => _is3D = next);
     final current = controller.cameraPosition;
-    await controller.animateCamera(
+    // `easeCamera` (not `animateCamera`, which has no interpolation param)
+    // with `easeOut` — a snappier "the camera arrives with intent" feel for
+    // this specific toggle versus the plugin's default animation curve.
+    await controller.easeCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
           target: current?.target ?? _center,
@@ -1284,6 +1754,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
           tilt: next ? 45 : 0,
         ),
       ),
+      interpolation: CameraAnimationInterpolation.easeOut,
     );
   }
 
@@ -1321,13 +1792,48 @@ class _TerritoryPageState extends State<TerritoryPage> {
               child: MapLibreMap(
                 key: _styleLoader.styleKey,
                 styleString: _styleLoader.styleString,
+                // Tilted from the very first frame (§5.3: 3D is the default
+                // visual language, not a hidden toggle) — `_locateSelf`/
+                // `_onStyleLoaded` re-apply this same tilt once a real GPS
+                // fix/style load lands, via `_cameraUpdateForFocus`.
                 initialCameraPosition: const CameraPosition(
                   target: LatLng(20, 0),
                   zoom: 2,
+                  tilt: 45,
                 ),
                 onMapCreated: _onMapCreated,
                 onStyleLoadedCallback: _onStyleLoaded,
                 onCameraIdle: _scheduleRefreshForCurrentView,
+                onMapClick: _onMapTapped,
+                // Confirmed live (real-device/emulator tap testing, not
+                // static analysis — same standard this repo's other map
+                // gotchas were found by): the plugin's *default*
+                // `annotationConsumeTapEvents` includes `fill`, so a tap
+                // landing on the neutral-zone ring or a bounty-zone circle
+                // (both plain `Fill` *annotations*, added via `addFill` —
+                // distinct from the territory polygons, which are style
+                // layers, not annotations) was silently swallowed before
+                // `onMapClick` ever fired, making tap-to-inspect (§1) a
+                // dead zone anywhere those overlays sat. This app never
+                // registers `onFillTapped`/`onCircleTapped`/`onLineTapped`,
+                // so there's no annotation-tap behavior worth keeping —
+                // `[AnnotationType.symbol]` (a type this page never adds as
+                // an annotation) is the smallest list satisfying the
+                // plugin's "at least 1 type" assert while letting every
+                // fill/circle/line tap fall through to `onMapClick`.
+                annotationConsumeTapEvents: const [AnnotationType.symbol],
+                // A second, independent gotcha found the same way: this
+                // defaults to `false`, meaning a tap landing directly on a
+                // rendered *style-layer* feature (the territory fill/
+                // extrusion polygon itself, not an annotation) fires
+                // `onFeatureTapped` only and explicitly does **not** call
+                // `onMapClick` — the exact opposite of what tap-to-inspect
+                // (§1) needs, since `_onMapTapped` is built on `onMapClick`
+                // + `queryRenderedFeatures` rather than `onFeatureTapped`
+                // (whose native-side `id` payload doesn't reliably map back
+                // to this GeoJSON source's `properties.id` the way a fresh
+                // `queryRenderedFeatures` call at the tap point does).
+                featureTapsTriggersMapClick: true,
                 myLocationEnabled: false,
                 logoEnabled: false,
                 attributionButtonPosition: AttributionButtonPosition.bottomLeft,
@@ -1403,6 +1909,10 @@ class _TerritoryPageState extends State<TerritoryPage> {
                 Row(
                   children: [
                     _TerritoryLegend(showRivalTerritory: _showRivalTerritory),
+                    if (_is3D && (_currentZoom ?? 0) >= 14) ...[
+                      const SizedBox(width: 8),
+                      const _SkylineModeChip(),
+                    ],
                   ],
                 ),
                 const _SyncStatusBanner(),
@@ -1882,6 +2392,44 @@ class _TerritoryLegend extends StatelessWidget {
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
               color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Altitude-gated HUD chip (Conquest Skyline redesign §6) — appears once
+/// the camera is both tilted (`_is3D`) and zoomed past the city-buildings
+/// layer's `minzoom: 14` (see `TerritoryMapStyle.applyCityBuildings`), so
+/// crossing into "you can see the skyline now" reads as a deliberate
+/// game-state change rather than just a camera angle.
+class _SkylineModeChip extends StatelessWidget {
+  const _SkylineModeChip();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: scheme.tertiary.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: scheme.tertiary.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.location_city, size: 12, color: scheme.tertiary),
+          const SizedBox(width: 4),
+          Text(
+            'SKYLINE MODE',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.6,
+              color: scheme.tertiary,
             ),
           ),
         ],

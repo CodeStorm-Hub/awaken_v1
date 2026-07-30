@@ -9,9 +9,13 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../../../core/theme/semantic_colors.dart';
+import '../../domain/entities/geo_bounds.dart';
 import '../../domain/entities/gps_quality.dart';
 import '../../domain/entities/run_track_state.dart';
+import '../../domain/entities/territory.dart';
 import '../../domain/entities/track_point.dart';
+import '../../domain/usecases/refresh_territories.dart';
+import '../../domain/usecases/watch_territories.dart';
 import '../bloc/run_tracking_cubit.dart';
 import '../widgets/map_style_loader.dart';
 import '../widgets/map_style_overlays.dart';
@@ -70,11 +74,28 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
   bool _styleLoaded = false;
   Line? _routeLine;
   Circle? _startMarker;
-  Circle? _currentMarker;
+  /// "3D puck" avatar (replaces the old flat `Circle` blue dot) — see
+  /// `TerritoryMapStyle.generateAvatarPuckIconBytes`'s doc comment.
+  Symbol? _currentMarker;
+  bool _avatarIconRegistered = false;
   int _syncedPointCount = 0;
   bool _autoFollow = true;
   bool _busy = false;
   ColorScheme? _scheme;
+
+  // Minimal territory context (territory map 3D redesign §5.4) — a plain
+  // fill overlay of whatever owned/rival territory rows are already cached
+  // nearby, so the game-world framing doesn't disappear the moment a run
+  // starts. Deliberately not the full `TerritoryPage` treatment (no
+  // extrusion/glow/animated outlines, no legend, no toggle) — this page's
+  // map is built exactly once and never inside a rebuild scope (see class
+  // doc comment), and a full redraw pipeline here would be a much bigger
+  // change than "some context" calls for.
+  static const _territoryContextSourceId = 'active-run-territory-context-source';
+  static const _territoryContextFillLayerId = 'active-run-territory-context-fill-layer';
+  bool _territoryContextLayerReady = false;
+  StreamSubscription<List<Territory>>? _territoriesSub;
+  LatLng? _lastRefreshedNear;
 
   late final _styleLoader = MapStyleLoader(
     onChange: () => setState(() {}),
@@ -94,6 +115,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
 
   @override
   void dispose() {
+    unawaited(_territoriesSub?.cancel());
     _styleLoader.dispose();
     super.dispose();
   }
@@ -112,8 +134,10 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     _routeLine = null;
     _startMarker = null;
     _currentMarker = null;
+    _avatarIconRegistered = false;
     _syncedPointCount = 0;
     _styleLoaded = false;
+    _territoryContextLayerReady = false;
     _controller = controller;
     _styleLoader.start();
   }
@@ -133,12 +157,33 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
       // per style load via `setLayerProperties`, not a pre-patched style
       // JSON). Kept in sync here too since this page renders its own
       // `MapLibreMap` on the same OpenFreeMap style tiers.
-      unawaited(
-        TerritoryBasemapRecolor.apply(
-          controller,
-          isDark: mounted && Theme.of(context).brightness == Brightness.dark,
-        ),
-      );
+      final isDark = mounted && Theme.of(context).brightness == Brightness.dark;
+      unawaited(TerritoryBasemapRecolor.apply(controller, isDark: isDark));
+      // Real 3D city buildings (territory map 3D redesign §5.4 — extends
+      // §5.1's `TerritoryPage` treatment to the live-run map) — same
+      // fallback-tier gate as `TerritoryPage._onStyleLoaded`.
+      if (!_styleLoader.isDegradedFallback) {
+        unawaited(
+          TerritoryBasemapRecolor.applyCityBuildings(
+            controller,
+            isDark: isDark,
+          ),
+        );
+      }
+      if (!_avatarIconRegistered) {
+        try {
+          final bytes = await TerritoryMapStyle.generateAvatarPuckIconBytes(
+            color: Theme.of(context).colorScheme.primary,
+          );
+          await controller.addImage(
+            TerritoryMapStyle.avatarPuckIconNamePrefix,
+            bytes,
+          );
+          _avatarIconRegistered = true;
+        } catch (_) {
+          // Best-effort — see `TerritoryPage`'s identical registration.
+        }
+      }
       // Re-affirm the focus location once the style is actually ready,
       // mirroring `TerritoryPage._onStyleLoaded`'s explicit follow-up after
       // `initialCameraPosition` — belt-and-braces in case a real GPS fix
@@ -148,11 +193,106 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
       // progress after a style-tier fallback swap.
       if (widget.focusLocation != null && _currentMarker == null) {
         await controller.animateCamera(
-          CameraUpdate.newLatLngZoom(widget.focusLocation!, _focusZoom),
+          _cameraUpdateFor(widget.focusLocation!),
         );
+      }
+      // A fallback-tier style swap tears down and recreates the native map
+      // view (see MapStyleLoader), so this can run more than once per page
+      // lifetime — cancel any previous subscription first, same pattern as
+      // `TerritoryPage._onStyleLoaded`.
+      await _territoriesSub?.cancel();
+      _territoriesSub = getIt<WatchTerritories>()().listen(
+        _redrawTerritoryContext,
+      );
+      if (widget.focusLocation != null) {
+        unawaited(_refreshNearbyTerritories(widget.focusLocation!));
       }
     }
     await _handleStateChange(cubit.state);
+  }
+
+  /// Minimal territory context (§5.4) — a plain translucent fill of
+  /// whatever owned/rival territory rows `WatchTerritories` already has
+  /// cached, no legend/toggle/animation. Lazily adds the source/layer on
+  /// first call, then just refreshes the source data on every later call.
+  Future<void> _redrawTerritoryContext(List<Territory> territories) async {
+    final controller = _controller;
+    if (controller == null || !mounted || !_styleLoaded) return;
+    final semantic = context.semanticColors;
+    final collection = {
+      'type': 'FeatureCollection',
+      'features': [
+        for (final territory in territories)
+          TerritoryMapStyle.territoryToGeoJsonFeature(territory, {
+            'fillColor': _colorToHex(
+              territory.isMine
+                  ? semantic.territoryOwnedFill
+                  : semantic.territoryRivalFill,
+            ),
+          }),
+      ],
+    };
+    if (!_territoryContextLayerReady) {
+      await controller.addGeoJsonSource(_territoryContextSourceId, collection);
+      // Below the route line/markers (all annotations, not style layers) so
+      // territory context never obscures the tracked path.
+      await controller.addFillLayer(
+        _territoryContextSourceId,
+        _territoryContextFillLayerId,
+        const FillLayerProperties(
+          fillColor: ['get', 'fillColor'],
+          fillOpacity: 0.22,
+        ),
+      );
+      _territoryContextLayerReady = true;
+    } else {
+      await controller.setGeoJsonSource(_territoryContextSourceId, collection);
+    }
+  }
+
+  /// Debounced by distance rather than time — a run can cover kilometers, so
+  /// this re-refreshes whenever the tracked point has moved far enough that
+  /// the last fetched bounding box (padded ~800m) may no longer cover it,
+  /// not on a fixed timer.
+  static const _territoryContextRadiusM = 800.0;
+
+  Future<void> _refreshNearbyTerritories(LatLng center) async {
+    if (_lastRefreshedNear != null) {
+      final movedM = _haversineMeters(_lastRefreshedNear!, center);
+      if (movedM < _territoryContextRadiusM / 2) return;
+    }
+    _lastRefreshedNear = center;
+    const earthRadiusM = 6371000.0;
+    final latRad = center.latitude * (math.pi / 180);
+    final dLat =
+        (_territoryContextRadiusM / earthRadiusM) * (180 / math.pi);
+    final dLng = (_territoryContextRadiusM / (earthRadiusM * math.cos(latRad))) *
+        (180 / math.pi);
+    try {
+      await getIt<RefreshTerritories>()(
+        GeoBounds(
+          minLat: center.latitude - dLat,
+          minLng: center.longitude - dLng,
+          maxLat: center.latitude + dLat,
+          maxLng: center.longitude + dLng,
+        ),
+      );
+    } catch (_) {
+      // Best-effort — the run's own tracking/capture flow doesn't depend on
+      // this context layer loading successfully.
+    }
+  }
+
+  static double _haversineMeters(LatLng a, LatLng b) {
+    const earthRadiusM = 6371000.0;
+    final dLat = (b.latitude - a.latitude) * (math.pi / 180);
+    final dLng = (b.longitude - a.longitude) * (math.pi / 180);
+    final lat1 = a.latitude * (math.pi / 180);
+    final lat2 = b.latitude * (math.pi / 180);
+    final h =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) * math.cos(lat2) * math.sin(dLng / 2) * math.sin(dLng / 2);
+    return 2 * earthRadiusM * math.asin(math.sqrt(h));
   }
 
   /// Guarded imperative sync — a plain elapsed-time tick leaves `points`
@@ -189,19 +329,20 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     );
 
     if (_currentMarker == null) {
-      _currentMarker = await controller.addCircle(
-        CircleOptions(
-          geometry: current,
-          circleRadius: 8,
-          circleColor: _colorToHex(scheme.primary),
-          circleStrokeColor: _colorToHex(scheme.surface),
-          circleStrokeWidth: 3,
-        ),
-      );
+      if (_avatarIconRegistered) {
+        _currentMarker = await controller.addSymbol(
+          SymbolOptions(
+            geometry: current,
+            iconImage: TerritoryMapStyle.avatarPuckIconNamePrefix,
+            iconSize: 0.34,
+            iconAnchor: 'center',
+          ),
+        );
+      }
     } else {
-      await controller.updateCircle(
+      await controller.updateSymbol(
         _currentMarker!,
-        CircleOptions(geometry: current),
+        SymbolOptions(geometry: current),
       );
     }
 
@@ -223,10 +364,9 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     }
 
     if (_autoFollow) {
-      await controller.animateCamera(
-        CameraUpdate.newLatLngZoom(current, _focusZoom),
-      );
+      await controller.animateCamera(_cameraUpdateFor(current));
     }
+    unawaited(_refreshNearbyTerritories(current));
   }
 
   Future<void> _recenter() async {
@@ -234,9 +374,23 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     setState(() => _autoFollow = true);
     if (controller == null || _currentMarker == null) return;
     await controller.animateCamera(
-      CameraUpdate.newLatLngZoom(_currentMarker!.options.geometry!, _focusZoom),
+      _cameraUpdateFor(_currentMarker!.options.geometry!),
     );
   }
+
+  /// Territory map 3D redesign §5.4: the live-run map defaults to a tilted
+  /// camera too, same as `TerritoryPage`, so the run takes place "inside"
+  /// the 3D world rather than reverting to flat top-down. Unlike
+  /// `TerritoryPage`, this page has no 3D/2D toggle — a live run's
+  /// follow-camera recentering happens every GPS fix, so a fixed tilt (not a
+  /// per-call preserved one) is enough here.
+  static const _tilt = 45.0;
+
+  /// `CameraUpdate.newLatLngZoom` always resets `tilt` to 0 — see
+  /// `TerritoryPage._cameraUpdateForFocus`'s identical note.
+  CameraUpdate _cameraUpdateFor(LatLng target) => CameraUpdate.newCameraPosition(
+    CameraPosition(target: target, zoom: _focusZoom, tilt: _tilt),
+  );
 
   /// The follow/recenter zoom, clamped to the active style tier's data
   /// ceiling (see `MapStyleLoader.dataMaxZoom`) — otherwise the bundled
@@ -294,6 +448,34 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
       final areaSqm = baseAreaSqm + (result.bonusAreaSqm ?? 0);
       final areaLabel = '${(areaSqm / 1000000).toStringAsFixed(3)} km²';
       unawaited(HapticFeedback.mediumImpact());
+      // Capture moment (territory map 3D redesign §5.6) — a camera fly-to
+      // over the newly-claimed block, so the "VICTORY!" sheet below is
+      // paired with an actual visual payoff on the map instead of being a
+      // detached modal. Closer zoom + steeper tilt than the run's normal
+      // follow camera; best-effort (a run's capture must never fail because
+      // a camera animation did) and only when a position is actually known.
+      final captureLocation = _currentMarker?.options.geometry;
+      if (captureLocation != null) {
+        try {
+          // `easeCamera` + `easeOut` (not `animateCamera`, which has no
+          // interpolation param) — a snappier arrival for this one-off
+          // "victory" fly-to versus the run's normal follow-camera easing.
+          await _controller?.easeCamera(
+            CameraUpdate.newCameraPosition(
+              CameraPosition(target: captureLocation, zoom: 18.5, tilt: 60),
+            ),
+            interpolation: CameraAnimationInterpolation.easeOut,
+          );
+        } catch (_) {}
+      }
+      // Refresh territories immediately after capture instead of waiting for
+      // the debounced distance check — the run's own capture just changed
+      // the very block the fly-to above is centered on.
+      if (captureLocation != null) {
+        _lastRefreshedNear = null;
+        unawaited(_refreshNearbyTerritories(captureLocation));
+      }
+      if (!mounted) return;
       await showModalBottomSheet<void>(
         context: context,
         isDismissible: false,
@@ -462,10 +644,12 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                         ? CameraPosition(
                                             target: widget.focusLocation!,
                                             zoom: _focusZoom,
+                                            tilt: _tilt,
                                           )
                                         : const CameraPosition(
                                             target: LatLng(20, 0),
                                             zoom: 2,
+                                            tilt: _tilt,
                                           ),
                                     onMapCreated: _onMapCreated,
                                     onStyleLoadedCallback: _onStyleLoaded,

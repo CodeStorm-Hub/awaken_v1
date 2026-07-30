@@ -1,3 +1,8 @@
+import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart' as maplibre;
 
 import '../../domain/entities/territory.dart';
@@ -61,6 +66,318 @@ abstract final class TerritoryMapStyle {
       'properties': {'id': territory.id, ...properties},
       'geometry': {'type': 'MultiPolygon', 'coordinates': coordinates},
     };
+  }
+
+  /// Builds a hollow "wall" GeoJSON `Feature` for one [territory] — a thin
+  /// frame tracing just the *border* of each polygon component (outer ring
+  /// minus an inward-offset copy of itself, expressed as a hole), rather
+  /// than the solid fill `territoryToGeoJsonFeature` builds. Used only by
+  /// the 3D fill-extrusion "wall" layer: a solid extruded block over the
+  /// *entire* captured area was found (live device review) to both look
+  /// like a huge plain slab and to completely occlude the streets/buildings
+  /// underneath, defeating the point of rendering them in §5.1. A wall
+  /// along just the perimeter reads as "this ground is claimed" without
+  /// hiding what's inside it.
+  ///
+  /// Simplification: only each component's *outer* ring gets a wall — any
+  /// interior holes already in `Territory.polygons` (an `ST_Difference`
+  /// rival cutout landing fully inside this territory, per that field's own
+  /// doc comment) are not separately walled off. That's a rare shape rather
+  /// than the common case, and a wall around the outer boundary only is a
+  /// reasonable simplification for a decorative marker rather than the
+  /// authoritative capture geometry (which the flat fill/outline layers
+  /// still render correctly from the untouched polygon data).
+  static Map<String, dynamic> territoryToWallGeoJsonFeature(
+    Territory territory,
+    Map<String, dynamic> properties, {
+    double wallThicknessMeters = 6,
+  }) {
+    final polygons = <List<List<List<double>>>>[];
+    for (final rings in territory.polygons) {
+      if (rings.isEmpty) continue;
+      final outer = rings.first;
+      if (outer.length < 3) continue;
+      final inset = _insetRing(outer, wallThicknessMeters);
+      if (inset == null) continue;
+      final outerClosed = [
+        for (final p in outer) [p.longitude, p.latitude],
+        [outer.first.longitude, outer.first.latitude],
+      ];
+      final insetClosed = [
+        for (final p in inset) [p.longitude, p.latitude],
+        [inset.first.longitude, inset.first.latitude],
+      ];
+      polygons.add([outerClosed, insetClosed]);
+    }
+    return {
+      'type': 'Feature',
+      'properties': {'id': territory.id, ...properties},
+      'geometry': {'type': 'MultiPolygon', 'coordinates': polygons},
+    };
+  }
+
+  /// Inward-offsets a polygon ring by [thicknessMeters] using the standard
+  /// per-vertex averaged-edge-normal ("miter") method — projects to a local
+  /// flat equirectangular approximation centered on the ring (accurate
+  /// enough at the scale of a running-loop capture, same approximation
+  /// `_circlePolygon`-style helpers elsewhere in this feature already make),
+  /// offsets there, then projects back. Not a robust general polygon-offset
+  /// implementation (no self-intersection repair for sharp concave
+  /// corners), but sufficient for a decorative wall on the roughly convex,
+  /// gently-concave loop shapes real captures produce. Returns `null` if the
+  /// ring is degenerate. Auto-shrinks the requested thickness for small
+  /// captures (proportional to the ring's own equivalent radius) so a tiny
+  /// capture's wall doesn't turn the ring inside-out.
+  static List<ll.LatLng>? _insetRing(
+    List<ll.LatLng> ring,
+    double thicknessMeters,
+  ) {
+    final pts = List<ll.LatLng>.from(ring);
+    if (pts.length > 1 &&
+        pts.first.latitude == pts.last.latitude &&
+        pts.first.longitude == pts.last.longitude) {
+      pts.removeLast();
+    }
+    final n = pts.length;
+    if (n < 3) return null;
+
+    final centerLat = pts.map((p) => p.latitude).reduce((a, b) => a + b) / n;
+    const metersPerDegLat = 111320.0;
+    final metersPerDegLng = metersPerDegLat * math.cos(centerLat * math.pi / 180);
+    if (metersPerDegLng.abs() < 1e-9) return null;
+
+    final xy = pts
+        .map(
+          (p) => ui.Offset(
+            p.longitude * metersPerDegLng,
+            p.latitude * metersPerDegLat,
+          ),
+        )
+        .toList();
+
+    // Auto-scale the wall thickness against the ring's own size so a small
+    // capture (equivalent radius well under the requested thickness) still
+    // gets a valid, non-self-intersecting inset.
+    var minX = xy.first.dx, maxX = xy.first.dx;
+    var minY = xy.first.dy, maxY = xy.first.dy;
+    for (final p in xy) {
+      minX = math.min(minX, p.dx);
+      maxX = math.max(maxX, p.dx);
+      minY = math.min(minY, p.dy);
+      maxY = math.max(maxY, p.dy);
+    }
+    final halfExtent = math.min(maxX - minX, maxY - minY) / 2;
+    final effectiveThickness = math.min(thicknessMeters, halfExtent * 0.35);
+    if (effectiveThickness <= 0.5) return null;
+
+    double signedArea = 0;
+    for (var i = 0; i < n; i++) {
+      final a = xy[i];
+      final b = xy[(i + 1) % n];
+      signedArea += (a.dx * b.dy - b.dx * a.dy);
+    }
+    final isCCW = signedArea > 0;
+
+    ui.Offset unitNormalOf(ui.Offset edge) {
+      final len = edge.distance;
+      if (len < 1e-9) return ui.Offset.zero;
+      return ui.Offset(-edge.dy / len, edge.dx / len);
+    }
+
+    final result = <ll.LatLng>[];
+    for (var i = 0; i < n; i++) {
+      final prev = xy[(i - 1 + n) % n];
+      final curr = xy[i];
+      final next = xy[(i + 1) % n];
+      var n1 = unitNormalOf(curr - prev);
+      var n2 = unitNormalOf(next - curr);
+      if (!isCCW) {
+        n1 = -n1;
+        n2 = -n2;
+      }
+      var avg = n1 + n2;
+      final avgLen = avg.distance;
+      avg = avgLen < 1e-6 ? n1 : avg / avgLen;
+      final cosHalf = (n1.dx * avg.dx + n1.dy * avg.dy).clamp(0.2, 1.0);
+      final miter = (effectiveThickness / cosHalf).clamp(
+        0.0,
+        effectiveThickness * 2.5,
+      );
+      final offsetPt = curr + avg * miter;
+      result.add(
+        ll.LatLng(
+          offsetPt.dy / metersPerDegLat,
+          offsetPt.dx / metersPerDegLng,
+        ),
+      );
+    }
+    return result;
+  }
+
+  /// A cheap centroid approximation — the plain average of the *outer* ring
+  /// (index 0) of the *first* polygon component. Not a true area-weighted
+  /// polygon centroid (would misplace it for a concave/L-shaped capture, or
+  /// one `ST_Difference` has split unevenly across components), but good
+  /// enough to plant a flag marker (§"Conquest Skyline" redesign) roughly
+  /// inside the territory's largest piece without pulling in a full
+  /// computational-geometry dependency for a decorative marker position.
+  static maplibre.LatLng territoryCentroid(Territory territory) {
+    for (final rings in territory.polygons) {
+      if (rings.isEmpty || rings.first.isEmpty) continue;
+      final outer = rings.first;
+      var lat = 0.0, lng = 0.0;
+      for (final point in outer) {
+        lat += point.latitude;
+        lng += point.longitude;
+      }
+      return maplibre.LatLng(lat / outer.length, lng / outer.length);
+    }
+    return const maplibre.LatLng(0, 0);
+  }
+
+  /// Style-layer image name registered via [generateFlagIconBytes] +
+  /// `controller.addImage(flagIconName, bytes, sdf: true)`. `sdf: true`
+  /// lets the icon be tinted per-feature via a `SymbolLayerProperties.
+  /// iconColor` data expression (e.g. `['get', 'extrusionColor']`) instead
+  /// of baking one fixed color into the PNG — one texture serves every
+  /// ownership tier (mine/squadmate/rival).
+  static const flagIconName = 'awaken-territory-flag';
+
+  /// Renders a small pennant-on-a-pole flag glyph via `dart:ui` (a plain
+  /// white shape on a transparent background) rather than bundling a binary
+  /// asset — this is the *only* piece of map styling in this feature that
+  /// needs an actual image (every other visual is a paint-property
+  /// expression on vector geometry), and a runtime-rendered glyph avoids
+  /// adding a new asset file + `pubspec.yaml` entry for one small icon.
+  static Future<Uint8List> generateFlagIconBytes({int size = 64}) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(
+      recorder,
+      ui.Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble()),
+    );
+    final paint = ui.Paint()..color = const ui.Color(0xFFFFFFFF);
+    final s = size.toDouble();
+    // Pole.
+    canvas.drawRRect(
+      ui.RRect.fromRectAndRadius(
+        ui.Rect.fromLTWH(s * 0.44, s * 0.06, s * 0.09, s * 0.88),
+        ui.Radius.circular(s * 0.03),
+      ),
+      paint,
+    );
+    // Pennant.
+    final pennant = ui.Path()
+      ..moveTo(s * 0.50, s * 0.10)
+      ..lineTo(s * 0.94, s * 0.30)
+      ..lineTo(s * 0.50, s * 0.50)
+      ..close();
+    canvas.drawPath(pennant, paint);
+    // Base.
+    canvas.drawOval(
+      ui.Rect.fromCenter(
+        center: ui.Offset(s * 0.485, s * 0.94),
+        width: s * 0.26,
+        height: s * 0.09,
+      ),
+      paint,
+    );
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(size, size);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    return byteData!.buffer.asUint8List();
+  }
+
+  /// Style-layer image name for the "current position" marker (§ replaces
+  /// the old flat `Circle` annotation both `TerritoryPage`/`ActiveRunPage`
+  /// used). Not `sdf: true` like [flagIconName] — this bakes in its own
+  /// shading/highlight/shadow, so it's registered once per [color] via
+  /// [generateAvatarPuckIconBytes] rather than tinted per-feature.
+  static const avatarPuckIconNamePrefix = 'awaken-avatar-puck';
+
+  /// Renders a small "3D puck" location marker via `dart:ui` — a soft
+  /// ground shadow, a white contrast halo, a shaded sphere in [color] with a
+  /// specular highlight, and a darker crescent along the bottom edge to fake
+  /// a lit 3D volume. MapLibre has no true 3D-model/billboard support (same
+  /// constraint the plan's §5.5 atmosphere spike already found for sky/
+  /// terrain), so this is the same trick [generateFlagIconBytes] uses: a
+  /// flat baked PNG that *reads* as dimensional rather than an actual mesh.
+  static Future<Uint8List> generateAvatarPuckIconBytes({
+    required ui.Color color,
+    int size = 144,
+  }) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(
+      recorder,
+      ui.Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble()),
+    );
+    final s = size.toDouble();
+    final center = ui.Offset(s / 2, s * 0.44);
+    final radius = s * 0.30;
+
+    // Soft ground shadow — sells "resting on the map," not floating.
+    final shadowPaint = ui.Paint()
+      ..color = const ui.Color(0x662B2B2B)
+      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 7);
+    canvas.drawOval(
+      ui.Rect.fromCenter(
+        center: ui.Offset(s / 2, s * 0.87),
+        width: s * 0.48,
+        height: s * 0.14,
+      ),
+      shadowPaint,
+    );
+
+    // White contrast halo — keeps the puck legible over any basemap color.
+    // Noticeably thicker than the first pass (0.055 -> 0.11): at typical
+    // on-map render size the earlier ring was too thin to register as a
+    // deliberate rim, reading as a plain flat dot (found via on-device
+    // zoom-in review).
+    canvas.drawCircle(
+      center,
+      radius + s * 0.11,
+      ui.Paint()..color = const ui.Color(0xFFFFFFFF),
+    );
+    // Faint outer edge on the halo itself, for definition against a light
+    // basemap where a pure-white ring can otherwise blend into the ground.
+    canvas.drawCircle(
+      center,
+      radius + s * 0.11,
+      ui.Paint()
+        ..color = const ui.Color(0x33000000)
+        ..style = ui.PaintingStyle.stroke
+        ..strokeWidth = s * 0.012,
+    );
+
+    // Puck body.
+    canvas.drawCircle(center, radius, ui.Paint()..color = color);
+
+    // Bottom-edge shading crescent, for a lit-sphere look. Stronger than the
+    // first pass (0x30 -> 0x55 alpha) for the same too-subtle-at-scale
+    // reason as the halo above.
+    canvas.drawArc(
+      ui.Rect.fromCircle(center: center, radius: radius * 0.72),
+      0.15 * math.pi,
+      0.85 * math.pi,
+      false,
+      ui.Paint()
+        ..color = const ui.Color(0x55000000)
+        ..style = ui.PaintingStyle.stroke
+        ..strokeWidth = radius * 0.6
+        ..strokeCap = ui.StrokeCap.round,
+    );
+
+    // Specular highlight, upper-left — brighter (0x70 -> 0xA5) so the
+    // "lit sphere" read survives being scaled down to marker size.
+    canvas.drawCircle(
+      ui.Offset(center.dx - radius * 0.32, center.dy - radius * 0.34),
+      radius * 0.4,
+      ui.Paint()..color = const ui.Color(0xA5FFFFFF),
+    );
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(size, size);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    return byteData!.buffer.asUint8List();
   }
 }
 
@@ -334,6 +651,89 @@ abstract final class TerritoryBasemapRecolor {
         // Best-effort per-layer — one unexpected layer type/id mismatch
         // shouldn't abort the rest of the recolor pass.
       }
+    }
+  }
+
+  // OpenFreeMap's vector tile source id, confirmed (2026-07-30) by fetching
+  // both `styles/liberty` and `styles/dark` directly — both declare exactly
+  // one vector source, `openmaptiles`, with a `building` source-layer
+  // carrying `render_height`/`render_min_height` per feature (standard
+  // OpenMapTiles fields).
+  static const _buildingSourceId = 'openmaptiles';
+  static const _buildingSourceLayer = 'building';
+
+  /// `liberty`'s own id for its already-shipped fill-extrusion building
+  /// layer (zoom >= 14, `hsl(35,8%,85%)`, opacity 0.8) — recolored in place
+  /// rather than duplicated. `dark` ships no such layer at all (confirmed by
+  /// the same fetch — only a flat 2D `building` fill), so that tier gets a
+  /// new layer instead (see [_cityBuildingsLayerId]).
+  static const _libertyBuilding3dLayerId = 'building-3d';
+  static const _cityBuildingsLayerId = 'awaken-city-buildings';
+
+  static const _buildingColorLight = '#8D97B3';
+  static const _buildingColorDark = '#1E2436';
+
+  /// Territory map 3D redesign §5.1: real city buildings, so captured
+  /// territory sits inside a genuinely 3D world instead of floating over a
+  /// flat map. Call once per style load, after [apply] — best-effort, same
+  /// as [apply]: skipped entirely on a style/tier that doesn't carry the
+  /// `building` source-layer (confirmed absent on the bundled offline
+  /// fallback tier — callers should gate this out via
+  /// `MapStyleLoader.isDegradedFallback` before calling, since that tier is
+  /// a minimal low-zoom extract with no building data at all, not just a
+  /// missing layer).
+  static Future<void> applyCityBuildings(
+    maplibre.MapLibreMapController controller, {
+    required bool isDark,
+  }) async {
+    List existingIds;
+    try {
+      existingIds = await controller.getLayerIds();
+    } catch (_) {
+      return;
+    }
+    final present = existingIds.whereType<String>().toSet();
+    final color = isDark ? _buildingColorDark : _buildingColorLight;
+
+    if (present.contains(_libertyBuilding3dLayerId)) {
+      try {
+        await controller.setLayerProperties(
+          _libertyBuilding3dLayerId,
+          maplibre.FillExtrusionLayerProperties(
+            fillExtrusionColor: color,
+            fillExtrusionOpacity: 0.85,
+          ),
+        );
+      } catch (_) {
+        // Best-effort — an unrecolored (but still present, still 3D)
+        // skyline is a fine degrade.
+      }
+      return;
+    }
+
+    if (present.contains(_cityBuildingsLayerId)) return;
+    try {
+      await controller.addFillExtrusionLayer(
+        _buildingSourceId,
+        _cityBuildingsLayerId,
+        maplibre.FillExtrusionLayerProperties(
+          fillExtrusionColor: color,
+          fillExtrusionOpacity: 0.85,
+          // Standard OpenMapTiles building-height pattern (same fields
+          // `liberty`'s own `building-3d` layer reads) — a per-feature `get`
+          // expression, not an interpolation, since the source data already
+          // carries real building heights in meters.
+          fillExtrusionBase: const ['get', 'render_min_height'],
+          fillExtrusionHeight: const ['get', 'render_height'],
+        ),
+        sourceLayer: _buildingSourceLayer,
+        minzoom: 14,
+      );
+    } catch (_) {
+      // Best-effort — a tier whose vector source doesn't actually carry a
+      // `building` source-layer (confirmed not the case for `liberty`/`dark`,
+      // but a defensive catch for any future/unknown tier) just renders
+      // without a city skyline.
     }
   }
 }
