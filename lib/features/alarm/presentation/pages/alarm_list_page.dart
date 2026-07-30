@@ -47,7 +47,15 @@ class _AlarmListPageState extends State<AlarmListPage> {
     return Scaffold(
       backgroundColor: scheme.surface,
       body: SafeArea(
+        // Only `state.alarms` is ever read below — `AlarmCubit` is a single
+        // app-wide instance (also driving `app.dart`'s ring overlay), so
+        // without this `buildWhen` a `ringingAlarm`/`verificationInProgress`/
+        // `currentTaxMultiplier` change elsewhere (e.g. an alarm firing
+        // while this tab is open) rebuilt this whole page — including its
+        // `AppleGlassContainer`/`BackdropFilter` header — for state this
+        // page doesn't even render.
         child: BlocBuilder<AlarmCubit, AlarmState>(
+          buildWhen: (previous, current) => previous.alarms != current.alarms,
           builder: (context, state) {
             final alarms = state.alarms;
             final n = alarms.length;

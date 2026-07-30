@@ -353,9 +353,17 @@ class _TerritoryPageState extends State<TerritoryPage> {
   void _loadSquadInfo() {
     _squadSub = getIt<WatchMySquad>()().listen((squad) {
       unawaited(_presenceSub?.cancel());
+      final squadChanged = _mySquad?.id != squad?.id;
       _mySquad = squad;
+      // Only the legend text ("Join a squad to highlight its combined
+      // turf") reads `_mySquad` from the widget tree, and only when squad
+      // membership itself changes — not on every presence tick below. A
+      // targeted `setState` here (instead of one on every presence
+      // emission) keeps that text in sync without paying for a full-page
+      // rebuild (incl. two `BackdropFilter` blurs) every ~3s.
+      if (squadChanged && mounted) setState(() {});
       if (squad == null) {
-        if (mounted) setState(() => _squadMemberIds = {});
+        _squadMemberIds = {};
         _squadPresenceMembers = const [];
         unawaited(_redrawSquadHeatmap());
         unawaited(_redrawSquadMemberMarkers());
@@ -363,9 +371,17 @@ class _TerritoryPageState extends State<TerritoryPage> {
       }
       _presenceSub = getIt<WatchSquadPresence>()(squad.id).listen((members) {
         if (!mounted) return;
-        setState(() {
-          _squadMemberIds = members.map((m) => m.userId).toSet();
-        });
+        // `_squadMemberIds`/`_squadPresenceMembers` are only ever read from
+        // imperative map-redraw helpers (`_redrawFills`, `_redrawFlags`,
+        // `_redrawSquadHeatmap`, `_redrawSquadMemberMarkers`), never from
+        // this widget's `build()` — so a plain field assignment (no
+        // `setState`) is correct here, not a shortcut. `WatchSquadPresence`
+        // fires as often as every ~3s per active squadmate
+        // (`SquadRepositoryImpl._broadcastThrottle`); wrapping this in
+        // `setState` previously forced a full-page rebuild — including two
+        // `AppleGlassContainer`/`BackdropFilter` blur repaints — on every
+        // tick, which was the dominant cause of jank on this screen.
+        _squadMemberIds = members.map((m) => m.userId).toSet();
         _squadPresenceMembers = members;
         unawaited(_redrawSquadHeatmap());
         unawaited(_redrawSquadMemberMarkers());
@@ -825,9 +841,13 @@ class _TerritoryPageState extends State<TerritoryPage> {
     final newlyCaptured = currentMineIds.difference(_knownMineIds);
     _knownMineIds = currentMineIds;
 
-    final visible = _lastTerritories.where(
-      (t) => t.isMine || _showRivalTerritory,
-    );
+    // Materialized once (not left as a lazy `Iterable`) — this list gets
+    // walked several more times below (wall features, at-risk/contested/
+    // rival flags, `_redrawFlags`); re-evaluating the `.where` predicate on
+    // every pass was pure waste.
+    final visible = _lastTerritories
+        .where((t) => t.isMine || _showRivalTerritory)
+        .toList(growable: false);
 
     // "Front line" contested check (Conquest Skyline redesign) — an owned
     // territory whose centroid sits within `_contestedRadiusM` of *any*
@@ -848,15 +868,27 @@ class _TerritoryPageState extends State<TerritoryPage> {
       );
     }
 
+    // Computed once per territory and reused for the fill features, wall
+    // features, and the pulse-timer contested check below — this used to be
+    // an O(owned × rival) haversine scan run three separate times per
+    // redraw (once each for `features`, `wallFeatures`, and `hasContested`).
+    final contestedById = {
+      for (final t in visible) t.id: isContested(t),
+    };
+    final propsById = {
+      for (final t in visible)
+        t.id: _territoryFeatureProperties(
+          t,
+          atRiskById,
+          contested: contestedById[t.id]!,
+        ),
+    };
+
     final features = [
       for (final territory in visible)
         TerritoryMapStyle.territoryToGeoJsonFeature(
           territory,
-          _territoryFeatureProperties(
-            territory,
-            atRiskById,
-            contested: isContested(territory),
-          ),
+          propsById[territory.id]!,
         ),
     ];
     final collection = {'type': 'FeatureCollection', 'features': features};
@@ -1012,11 +1044,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
       for (final territory in visible)
         TerritoryMapStyle.territoryToWallGeoJsonFeature(
           territory,
-          _territoryFeatureProperties(
-            territory,
-            atRiskById,
-            contested: isContested(territory),
-          ),
+          propsById[territory.id]!,
         ),
     ];
     await controller.setGeoJsonSource(_territoryWallSourceId, {
@@ -1027,7 +1055,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
     final hasAtRisk = visible.any(
       (t) => t.isMine && atRiskById.containsKey(t.id),
     );
-    final hasContested = visible.any(isContested);
+    final hasContested = contestedById.values.any((c) => c);
     _updatePulseTimer(hasAtRisk || hasContested);
 
     final hasRival = visible.any((t) => !t.isMine);
@@ -1183,8 +1211,12 @@ class _TerritoryPageState extends State<TerritoryPage> {
     }
     if (_pulseTimer != null) return;
     if (mounted && MediaQuery.disableAnimationsOf(context)) return;
+    // 120ms -> 160ms: halves this ticker's platform-channel call rate
+    // (two `setLayerProperties` calls/tick) with no visible change to a
+    // slow sine-wave pulse — cheap mitigation for sustained method-channel
+    // traffic when this overlaps with the ant-path ticker below.
     _pulseTimer = Timer.periodic(
-      const Duration(milliseconds: 120),
+      const Duration(milliseconds: 160),
       (_) => unawaited(_tickPulse()),
     );
   }
@@ -1227,8 +1259,11 @@ class _TerritoryPageState extends State<TerritoryPage> {
     }
     if (_antPathTimer != null) return;
     if (mounted && MediaQuery.disableAnimationsOf(context)) return;
+    // 80ms -> 100ms: same rationale as `_updatePulseTimer` above — still
+    // reads as a smooth marching-ants animation, less sustained
+    // method-channel traffic.
     _antPathTimer = Timer.periodic(
-      const Duration(milliseconds: 80),
+      const Duration(milliseconds: 100),
       (_) => unawaited(_tickAntPath()),
     );
   }

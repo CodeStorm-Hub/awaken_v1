@@ -51,7 +51,15 @@ class _SquadView extends StatelessWidget {
     return Scaffold(
       backgroundColor: scheme.surface,
       body: SafeArea(
+        // Split from the body's own `BlocBuilder` below: `SquadState.presence`
+        // updates as often as every ~3s per live squadmate
+        // (`SquadCubit`'s throttled presence stream), but the header only
+        // reads `state.squad`. Without this `buildWhen`, every presence tick
+        // repainted this `AppleGlassContainer`'s `BackdropFilter` blur along
+        // with the rest of the page — one of the most expensive widgets in
+        // Flutter — for a header that hadn't actually changed.
         child: BlocBuilder<SquadCubit, SquadState>(
+          buildWhen: (previous, current) => previous.squad != current.squad,
           builder: (context, state) {
             return Column(
               children: [
@@ -139,7 +147,15 @@ class _SquadView extends StatelessWidget {
                     ),
                   ),
                 ),
-                Expanded(child: _SquadBody(state: state)),
+                // Re-subscribed independently of the header above so
+                // presence/leaderboard/status updates only rebuild the body
+                // (no `BackdropFilter` inside it), not the header's blur.
+                Expanded(
+                  child: BlocBuilder<SquadCubit, SquadState>(
+                    builder: (context, bodyState) =>
+                        _SquadBody(state: bodyState),
+                  ),
+                ),
               ],
             );
           },

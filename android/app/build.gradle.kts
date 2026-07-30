@@ -50,6 +50,19 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // Was unset — release APKs shipped fully unminified/un-shrunk.
+            // Doesn't fix runtime map jank (that's Dart-side), but cuts APK
+            // size and install/cold-start overhead for no behavior change.
+            // Re-test a real `flutter build apk --release --flavor prod`
+            // install after touching plugin versions — R8 stripping is the
+            // one thing that can only be caught by an actual release build,
+            // not `flutter analyze`/debug runs.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
