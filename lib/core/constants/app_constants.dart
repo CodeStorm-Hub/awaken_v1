@@ -18,6 +18,9 @@ abstract final class AppConstants {
   static const Duration syncInitialBackoff = Duration(minutes: 2);
   static const Duration syncMaxBackoff = Duration(minutes: 30);
 
+  // Squad networking (`SquadRepositoryImpl`'s one-shot Supabase reads)
+  static const Duration squadNetworkReadTimeout = Duration(seconds: 10);
+
   // Squad streak tiers (plan §6 Phase 6) — mirrored in the
   // `recompute_streak_tier()` Postgres trigger (migration
   // `add_squad_social_phase6`); keep both in sync if these change.

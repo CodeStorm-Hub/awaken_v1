@@ -4,6 +4,7 @@ import 'package:injectable/injectable.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../core/constants/app_constants.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../../territory/domain/usecases/get_current_position.dart';
@@ -96,7 +97,7 @@ class SquadRepositoryImpl implements SquadRepository {
           .select('squad_id')
           .eq('id', userId)
           .maybeSingle()
-          .timeout(const Duration(seconds: 10));
+          .timeout(AppConstants.squadNetworkReadTimeout);
       final squadId = profile?['squad_id'] as String?;
       if (squadId == null) {
         _emitSquad(null);
@@ -107,7 +108,7 @@ class SquadRepositoryImpl implements SquadRepository {
           .select()
           .eq('id', squadId)
           .maybeSingle()
-          .timeout(const Duration(seconds: 10));
+          .timeout(AppConstants.squadNetworkReadTimeout);
       _emitSquad(row == null ? null : _squadFromJson(row));
     } catch (e, st) {
       // Reported so a persistently-failing fetch is visible in prod, not
@@ -204,7 +205,7 @@ class SquadRepositoryImpl implements SquadRepository {
       try {
         final rows = await _remote
             .fetchLeaderboard(squadId)
-            .timeout(const Duration(seconds: 10));
+            .timeout(AppConstants.squadNetworkReadTimeout);
         yield _mapLeaderboardRows(rows, defaultName: 'Squad member');
       } catch (e, st) {
         // Reported so a persistently-failing poll is visible in prod;

@@ -79,6 +79,13 @@ CI (`.github/workflows/ci.yaml`) runs analyze/test/build on every push/PR, plus 
 `.github/workflows/build_ios.yml` builds the iOS target but is manually triggered, not run
 automatically on push/PR.
 
+**Known follow-up (2026-07-30):** `sqlite3_flutter_libs` (pinned `^0.5.0`) is deprecated —
+`0.6.0+eol` is the final, empty release. As of `sqlite3` 3.x (already resolved transitively at
+3.5.0), native SQLite bundling moved into `sqlite3` itself; official guidance is to drop
+`sqlite3_flutter_libs` entirely. Not done yet — this is exactly the kind of native-library
+packaging change that needs a real device/emulator to verify the local Drift DB still opens after
+removal, and none was available when this was investigated. Verify on-device before removing.
+
 ### Windows-specific build workaround
 
 `android/gradle.properties` sets `kotlin.incremental=false`. Kotlin's build-tools-api incremental
@@ -86,6 +93,14 @@ compiler intermittently fails to close its on-disk caches under `build\<module>\
 machine (file-lock/AV interference), breaking `compileDebugKotlin` for several plugins. Don't
 remove this without confirming the underlying Gradle/Kotlin bug is fixed — safe to re-enable on
 Linux CI runners if it matters there.
+
+Same class of issue can also corrupt `android/.gradle/<version>/executionHistory/executionHistory.bin`
+directly (seen as `Could not read entry '...' from cache executionHistory.bin` failing
+`compileReleaseJavaWithJavac` on an otherwise-correct build) — delete that
+`executionHistory` directory and rebuild rather than debugging it as a real code/config problem.
+
+AGP `9.0.1` / Kotlin `2.3.20` (`android/settings.gradle.kts`) — confirmed working 2026-07-30 via a
+real `flutter build apk --release --flavor prod`; not an accidental pre-release pin.
 
 ## Architecture
 

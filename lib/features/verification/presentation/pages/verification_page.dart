@@ -15,9 +15,9 @@ import '../../domain/entities/verification_state.dart';
 import '../bloc/verification_cubit.dart';
 import '../widgets/skeleton_painter.dart';
 
-/// Camera + pose verification screen (plan §6 Phase 2). Standalone for now
-/// — wiring this in as the alarm-dismiss gate (instead of `AlarmRingPage`'s
-/// direct dismiss button) is Phase 4 (see the TODO in `alarm_ring_page.dart`).
+/// Camera + pose verification screen (plan §6 Phase 2). Wired in as the
+/// alarm-dismiss gate — `AlarmRingPage` pushes this instead of exposing any
+/// direct dismiss path (Phase 4, shipped; see `AlarmRingPage`'s class doc).
 class VerificationPage extends StatelessWidget {
   const VerificationPage({
     required this.exercise,
