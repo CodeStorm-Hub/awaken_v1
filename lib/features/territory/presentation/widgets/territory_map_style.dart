@@ -235,6 +235,30 @@ abstract final class TerritoryMapStyle {
     return const maplibre.LatLng(0, 0);
   }
 
+  /// Same cheap per-outer-ring average [territoryCentroid] uses, but one per
+  /// polygon *component* rather than just the first. Territories routinely
+  /// have multiple disjoint components now that `submit_run()` merges a
+  /// newly-closed loop into an existing territory whenever it's within 75m
+  /// (not just touching/overlapping) — each disjoint block is a real piece
+  /// of the empire the player can see on the ground, so each gets its own
+  /// flag (`_redrawFlags`) rather than only the first component.
+  static List<maplibre.LatLng> territoryComponentCentroids(
+    Territory territory,
+  ) {
+    final centroids = <maplibre.LatLng>[];
+    for (final rings in territory.polygons) {
+      if (rings.isEmpty || rings.first.isEmpty) continue;
+      final outer = rings.first;
+      var lat = 0.0, lng = 0.0;
+      for (final point in outer) {
+        lat += point.latitude;
+        lng += point.longitude;
+      }
+      centroids.add(maplibre.LatLng(lat / outer.length, lng / outer.length));
+    }
+    return centroids;
+  }
+
   /// Style-layer image name registered via [generateFlagIconBytes] +
   /// `controller.addImage(flagIconName, bytes, sdf: true)`. `sdf: true`
   /// lets the icon be tinted per-feature via a `SymbolLayerProperties.

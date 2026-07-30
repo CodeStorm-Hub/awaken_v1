@@ -1046,6 +1046,13 @@ class _TerritoryPageState extends State<TerritoryPage> {
   /// the same filtered iterable `_redrawFills` just built its polygon
   /// features from, so ownership/rival-visibility stays in lockstep between
   /// the two layers without re-deriving it here.
+  ///
+  /// One flag per polygon *component*, not per territory row — since
+  /// `submit_run()` now merges a newly-closed loop into an existing
+  /// territory whenever it's within 75m (not just touching), a single
+  /// territory routinely spans multiple disjoint blocks, and each one is a
+  /// real, visible piece of ground that deserves its own flag rather than
+  /// only the first component getting one.
   Future<void> _redrawFlags(Iterable<Territory> visible) async {
     final controller = _controller;
     if (controller == null || !mounted || !_flagIconRegistered) return;
@@ -1053,24 +1060,26 @@ class _TerritoryPageState extends State<TerritoryPage> {
 
     final features = [
       for (final territory in visible)
-        () {
-          final isSquadmate =
-              !territory.isMine && _squadMemberIds.contains(territory.ownerId);
-          final flagColor = territory.isMine
-              ? semantic.territoryOwnedExtrusion
-              : isSquadmate
-              ? semantic.territorySquadmateExtrusion
-              : semantic.territoryRivalExtrusion;
-          final centroid = TerritoryMapStyle.territoryCentroid(territory);
-          return {
-            'type': 'Feature',
-            'properties': {'id': territory.id, 'flagColor': _colorToHex(flagColor)},
-            'geometry': {
-              'type': 'Point',
-              'coordinates': [centroid.longitude, centroid.latitude],
-            },
-          };
-        }(),
+        for (final centroid in TerritoryMapStyle.territoryComponentCentroids(
+          territory,
+        ))
+          () {
+            final isSquadmate =
+                !territory.isMine && _squadMemberIds.contains(territory.ownerId);
+            final flagColor = territory.isMine
+                ? semantic.territoryOwnedExtrusion
+                : isSquadmate
+                ? semantic.territorySquadmateExtrusion
+                : semantic.territoryRivalExtrusion;
+            return {
+              'type': 'Feature',
+              'properties': {'id': territory.id, 'flagColor': _colorToHex(flagColor)},
+              'geometry': {
+                'type': 'Point',
+                'coordinates': [centroid.longitude, centroid.latitude],
+              },
+            };
+          }(),
     ];
     final collection = {'type': 'FeatureCollection', 'features': features};
 
