@@ -59,7 +59,7 @@ class HomePage extends StatelessWidget {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const _GreetingText(),
+                              const RepaintBoundary(child: _GreetingText()),
                               Text(
                                 'Awaken',
                                 style:
@@ -245,13 +245,15 @@ class HomePage extends StatelessWidget {
                               header: true,
                               child: const _SectionLabel('RECENT ACTIVITY'),
                             ),
-                            _RecentActivitySection(
-                              activity: home.recentActivity,
-                              hasError: home.recentActivityError,
-                              loading: home.recentActivityLoading,
-                              onRetry: () => context
-                                  .read<HomeCubit>()
-                                  .retryRecentActivity(),
+                            RepaintBoundary(
+                              child: _RecentActivitySection(
+                                activity: home.recentActivity,
+                                hasError: home.recentActivityError,
+                                loading: home.recentActivityLoading,
+                                onRetry: () => context
+                                    .read<HomeCubit>()
+                                    .retryRecentActivity(),
+                              ),
                             ),
                           ],
                         ),
@@ -837,31 +839,35 @@ class _Pulsing extends StatefulWidget {
   State<_Pulsing> createState() => _PulsingState();
 }
 
-class _PulsingState extends State<_Pulsing> {
-  bool _dim = false;
-  Timer? _timer;
+class _PulsingState extends State<_Pulsing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(milliseconds: 700), (_) {
-      if (mounted) setState(() => _dim = !_dim);
-    });
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _animation = Tween<double>(begin: 1.0, end: 0.4).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    _controller.repeat(reverse: true);
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     if (MediaQuery.disableAnimationsOf(context)) return widget.child;
-    return AnimatedOpacity(
-      opacity: _dim ? 0.4 : 1.0,
-      duration: const Duration(milliseconds: 700),
-      curve: Curves.easeInOut,
+    return FadeTransition(
+      opacity: _animation,
       child: widget.child,
     );
   }

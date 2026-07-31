@@ -164,94 +164,51 @@ class _AlarmListPageState extends State<AlarmListPage> {
                     Expanded(
                       child: n == 0
                           ? EmptyState(scheme: scheme, theme: theme)
-                          : Padding(
+                          : ListView.separated(
                               padding: const EdgeInsets.fromLTRB(
                                 16,
                                 0,
                                 16,
                                 120,
                               ),
-                              child: LayoutBuilder(
-                                builder: (context, constraints) {
-                                  return SingleChildScrollView(
-                                    child: ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        minHeight: constraints.maxHeight,
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          for (
-                                            var index = 0;
-                                            index < n;
-                                            index++
-                                          ) ...[
-                                            if (index > 0)
-                                              const SizedBox(height: 3),
-                                            Builder(
-                                              builder: (context) {
-                                                final alarm = alarms[index];
-                                                return RiseIn(
-                                                  // Keyed by alarm id, not
-                                                  // position — without this,
-                                                  // deleting/reordering an
-                                                  // alarm shifted every
-                                                  // element below it down one
-                                                  // index, and `RiseIn`'s
-                                                  // `State` (keyed
-                                                  // positionally by default)
-                                                  // stayed attached to that
-                                                  // index rather than
-                                                  // following its alarm,
-                                                  // replaying the entry
-                                                  // animation on the wrong
-                                                  // card and briefly showing
-                                                  // stale content during the
-                                                  // transition.
-                                                  key: ValueKey(alarm.id),
-                                                  delay: Duration(
-                                                    milliseconds: index * 60,
-                                                  ),
-                                                  child: AlarmCard(
-                                                    alarm: alarm,
-                                                    on: alarm.isActive,
-                                                    radius: groupedItemRadius(
-                                                      index: index,
-                                                      count: n,
-                                                    ),
-                                                    onToggle: () =>
-                                                        _toggleActive(
-                                                          context,
-                                                          alarm,
-                                                        ),
-                                                    onDelete: () =>
-                                                        _confirmDelete(
-                                                          context,
-                                                          alarm,
-                                                        ),
-                                                    onTap: () =>
-                                                        Navigator.of(
-                                                          context,
-                                                        ).push(
-                                                          MaterialPageRoute(
-                                                            builder: (_) =>
-                                                                AlarmRingPage(
-                                                                  alarm: alarm,
-                                                                  isPreview:
-                                                                      true,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                          ],
-                                        ],
+                              itemCount: n,
+                              separatorBuilder: (context, index) =>
+                                  const SizedBox(height: 3),
+                              itemBuilder: (context, index) {
+                                final alarm = alarms[index];
+                                return RiseIn(
+                                  key: ValueKey(alarm.id),
+                                  delay: Duration(
+                                    milliseconds: index * 60,
+                                  ),
+                                  child: AlarmCard(
+                                    alarm: alarm,
+                                    on: alarm.isActive,
+                                    radius: groupedItemRadius(
+                                      index: index,
+                                      count: n,
+                                    ),
+                                    onToggle: () => _toggleActive(
+                                      context,
+                                      alarm,
+                                    ),
+                                    onDelete: () => _confirmDelete(
+                                      context,
+                                      alarm,
+                                    ),
+                                    onTap: () => Navigator.of(
+                                      context,
+                                    ).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => AlarmRingPage(
+                                          alarm: alarm,
+                                          isPreview: true,
+                                        ),
                                       ),
                                     ),
-                                  );
-                                },
-                              ),
+                                  ),
+                                );
+                              },
                             ),
                     ),
                   ],

@@ -76,10 +76,11 @@ class ConquestTickerState extends State<ConquestTicker> {
     final scheme = Theme.of(context).colorScheme;
     final item = _items[_index.clamp(0, _items.length - 1)];
 
-    return AnimatedSwitcher(
-      duration: MotionTokens.defaultSpatial,
-      switchInCurve: MotionTokens.effectsCurve,
-      switchOutCurve: MotionTokens.effectsCurve,
+    return RepaintBoundary(
+      child: AnimatedSwitcher(
+        duration: MotionTokens.defaultSpatial,
+        switchInCurve: MotionTokens.effectsCurve,
+        switchOutCurve: MotionTokens.effectsCurve,
       child: Container(
         key: ValueKey(item.captureId),
         width: double.infinity,
@@ -110,6 +111,7 @@ class ConquestTickerState extends State<ConquestTicker> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }

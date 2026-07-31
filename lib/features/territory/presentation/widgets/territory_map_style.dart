@@ -403,6 +403,23 @@ abstract final class TerritoryMapStyle {
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     return byteData!.buffer.asUint8List();
   }
+
+  /// Great-circle distance in meters — used by `buildTerritoryGeoJsonPayload`
+  /// and `TerritoryPage` for front-line proximity checks.
+  static double haversineMeters(maplibre.LatLng a, maplibre.LatLng b) {
+    const earthRadiusM = 6371000.0;
+    final dLat = (b.latitude - a.latitude) * (math.pi / 180);
+    final dLng = (b.longitude - a.longitude) * (math.pi / 180);
+    final lat1 = a.latitude * (math.pi / 180);
+    final lat2 = b.latitude * (math.pi / 180);
+    final h =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    return 2 * earthRadiusM * math.asin(math.sqrt(h));
+  }
 }
 
 /// Pokémon-GO-inspired basemap recolor, applied on top of whichever
@@ -760,4 +777,157 @@ abstract final class TerritoryBasemapRecolor {
       // without a city skyline.
     }
   }
+}
+
+/// Parameters for [buildTerritoryGeoJsonPayload] offloaded via `compute()`.
+class TerritoryGeoJsonParams {
+  final List<Territory> visible;
+  final Set<String> atRiskIds;
+  final Map<String, double> healthOfMap;
+  final Set<String> squadMemberIds;
+  final String ownedFillHex;
+  final String squadmateFillHex;
+  final String rivalFillHex;
+  final String ownedOutlineHex;
+  final String rivalOutlineHex;
+  final String ownedExtrusionHex;
+  final String squadmateExtrusionHex;
+  final String rivalExtrusionHex;
+  final double contestedRadiusM;
+
+  const TerritoryGeoJsonParams({
+    required this.visible,
+    required this.atRiskIds,
+    required this.healthOfMap,
+    required this.squadMemberIds,
+    required this.ownedFillHex,
+    required this.squadmateFillHex,
+    required this.rivalFillHex,
+    required this.ownedOutlineHex,
+    required this.rivalOutlineHex,
+    required this.ownedExtrusionHex,
+    required this.squadmateExtrusionHex,
+    required this.rivalExtrusionHex,
+    this.contestedRadiusM = 250.0,
+  });
+}
+
+/// Result payload from [buildTerritoryGeoJsonPayload].
+class TerritoryGeoJsonResult {
+  final Map<String, dynamic> mainCollection;
+  final Map<String, dynamic> wallCollection;
+  final Map<String, dynamic> flagsCollection;
+  final bool hasAtRisk;
+  final bool hasContested;
+  final bool hasRival;
+
+  const TerritoryGeoJsonResult({
+    required this.mainCollection,
+    required this.wallCollection,
+    required this.flagsCollection,
+    required this.hasAtRisk,
+    required this.hasContested,
+    required this.hasRival,
+  });
+}
+
+/// Top-level worker function for constructing GeoJSON feature collections off the UI thread via `compute()`.
+TerritoryGeoJsonResult buildTerritoryGeoJsonPayload(TerritoryGeoJsonParams params) {
+  final visible = params.visible;
+  final rivalCentroids = [
+    for (final t in visible)
+      if (!t.isMine) TerritoryMapStyle.territoryCentroid(t),
+  ];
+
+  bool isContested(Territory territory) {
+    if (!territory.isMine || rivalCentroids.isEmpty) return false;
+    final centroid = TerritoryMapStyle.territoryCentroid(territory);
+    for (final rivalCentroid in rivalCentroids) {
+      if (TerritoryMapStyle.haversineMeters(centroid, rivalCentroid) <= params.contestedRadiusM) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  final contestedById = {for (final t in visible) t.id: isContested(t)};
+
+  Map<String, dynamic> territoryFeatureProps(Territory territory, bool contested) {
+    final isSquadmate = !territory.isMine && params.squadMemberIds.contains(territory.ownerId);
+    final fillColor = territory.isMine
+        ? params.ownedFillHex
+        : (isSquadmate ? params.squadmateFillHex : params.rivalFillHex);
+    final outlineColor = territory.isMine
+        ? params.ownedOutlineHex
+        : params.rivalOutlineHex;
+    final extrusionColor = territory.isMine
+        ? params.ownedExtrusionHex
+        : (isSquadmate ? params.squadmateExtrusionHex : params.rivalExtrusionHex);
+
+    final baseOpacity = territory.isMine ? 0.40 : 0.32;
+    final health = territory.isMine
+        ? (territory.health?.toDouble() ?? params.healthOfMap[territory.id] ?? 100.0)
+        : 100.0;
+    final healthFactor = (0.4 + 0.6 * ((health - 25).clamp(0, 75) / 75)).clamp(0.4, 1.0);
+    final targetOpacity = territory.isMine ? baseOpacity * healthFactor : baseOpacity;
+
+    return {
+      'owner': territory.isMine ? 'me' : 'rival',
+      'ownerTier': territory.isMine ? 'me' : (isSquadmate ? 'squadmate' : 'rival'),
+      'atRisk': territory.isMine && params.atRiskIds.contains(territory.id),
+      'contested': contested,
+      'areaSqm': territory.areaSqm,
+      'fillColor': fillColor,
+      'fillOpacity': targetOpacity,
+      'outlineColor': outlineColor,
+      'extrusionColor': extrusionColor,
+    };
+  }
+
+  final propsById = {
+    for (final t in visible) t.id: territoryFeatureProps(t, contestedById[t.id]!),
+  };
+
+  final features = [
+    for (final territory in visible)
+      TerritoryMapStyle.territoryToGeoJsonFeature(territory, propsById[territory.id]!),
+  ];
+
+  final wallFeatures = [
+    for (final territory in visible)
+      TerritoryMapStyle.territoryToWallGeoJsonFeature(territory, propsById[territory.id]!),
+  ];
+
+  final flagFeatures = [
+    for (final territory in visible)
+      for (final centroid in TerritoryMapStyle.territoryComponentCentroids(territory))
+        {
+          'type': 'Feature',
+          'properties': {
+            'id': territory.id,
+            'flagColor': territory.isMine
+                ? params.ownedExtrusionHex
+                : (params.squadMemberIds.contains(territory.ownerId)
+                    ? params.squadmateExtrusionHex
+                    : params.rivalExtrusionHex),
+          },
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [centroid.longitude, centroid.latitude],
+          },
+        },
+  ];
+
+  final hasAtRisk = visible.any((t) => t.isMine && params.atRiskIds.contains(t.id));
+  final hasContested = contestedById.values.any((c) => c);
+  final hasRival = visible.any((t) => !t.isMine);
+
+  return TerritoryGeoJsonResult(
+    mainCollection: {'type': 'FeatureCollection', 'features': features},
+    wallCollection: {'type': 'FeatureCollection', 'features': wallFeatures},
+    flagsCollection: {'type': 'FeatureCollection', 'features': flagFeatures},
+    hasAtRisk: hasAtRisk,
+    hasContested: hasContested,
+    hasRival: hasRival,
+  );
 }

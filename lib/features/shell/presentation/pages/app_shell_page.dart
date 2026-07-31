@@ -104,7 +104,11 @@ class _AppShellPageState extends State<AppShellPage> {
           const Positioned(
             top: 0,
             right: 0,
-            child: SafeArea(child: _ShellSyncBadge()),
+            child: SafeArea(
+              child: RepaintBoundary(
+                child: _ShellSyncBadge(),
+              ),
+            ),
           ),
         ],
       ),

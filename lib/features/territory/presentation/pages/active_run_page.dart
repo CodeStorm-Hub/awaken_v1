@@ -409,11 +409,23 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
   double get _focusZoom => math.min(17, _styleLoader.dataMaxZoom ?? 17);
 
   Future<void> _zoomIn() async {
-    await _controller?.animateCamera(CameraUpdate.zoomIn());
+    final controller = _controller;
+    if (controller == null) return;
+    await controller.easeCamera(
+      CameraUpdate.zoomIn(),
+      duration: const Duration(milliseconds: 300),
+      interpolation: CameraAnimationInterpolation.easeOut,
+    );
   }
 
   Future<void> _zoomOut() async {
-    await _controller?.animateCamera(CameraUpdate.zoomOut());
+    final controller = _controller;
+    if (controller == null) return;
+    await controller.easeCamera(
+      CameraUpdate.zoomOut(),
+      duration: const Duration(milliseconds: 300),
+      interpolation: CameraAnimationInterpolation.easeOut,
+    );
   }
 
   Future<void> _capture(RunTrackingCubit cubit) async {
@@ -582,23 +594,38 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            children: [
-                              PulsingDot(color: scheme.error),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Tracking run',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: scheme.onSurface,
-                                ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: scheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: scheme.outlineVariant.withValues(alpha: 0.25),
                               ),
-                            ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                PulsingDot(color: scheme.error),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Tracking run',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                    color: scheme.onSurface,
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                           BlocBuilder<RunTrackingCubit, RunTrackState>(
                             buildWhen: (previous, current) =>
@@ -616,19 +643,19 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(24),
                             border: Border.all(
-                              color: scheme.primary.withValues(alpha: 0.4),
-                              width: 1.5,
+                              color: scheme.outlineVariant.withValues(alpha: 0.3),
+                              width: 1,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: scheme.primary.withValues(alpha: 0.2),
+                                color: Colors.black.withValues(alpha: 0.2),
                                 blurRadius: 16,
-                                spreadRadius: 1,
+                                offset: const Offset(0, 4),
                               ),
                             ],
                           ),
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(22),
+                            borderRadius: BorderRadius.circular(23),
                             child: Stack(
                               children: [
                                 // A static label, not one driven by
@@ -641,27 +668,31 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                 // which already track state live.
                                 Semantics(
                                   label: 'Live run route map',
-                                  child: MapLibreMap(
-                                    key: _styleLoader.styleKey,
-                                    styleString: _styleLoader.styleString,
-                                    initialCameraPosition:
-                                        widget.focusLocation != null
-                                        ? CameraPosition(
-                                            target: widget.focusLocation!,
-                                            zoom: _focusZoom,
-                                            tilt: _tilt,
-                                          )
-                                        : const CameraPosition(
-                                            target: LatLng(20, 0),
-                                            zoom: 2,
-                                            tilt: _tilt,
-                                          ),
-                                    onMapCreated: _onMapCreated,
-                                    onStyleLoadedCallback: _onStyleLoaded,
-                                    myLocationEnabled: false,
-                                    logoEnabled: false,
-                                    attributionButtonPosition:
-                                        AttributionButtonPosition.bottomLeft,
+                                  child: RepaintBoundary(
+                                    child: MapLibreMap(
+                                      key: _styleLoader.styleKey,
+                                      styleString: _styleLoader.styleString,
+                                      initialCameraPosition:
+                                          widget.focusLocation != null
+                                          ? CameraPosition(
+                                              target: widget.focusLocation!,
+                                              zoom: _focusZoom,
+                                              tilt: _tilt,
+                                            )
+                                          : const CameraPosition(
+                                              target: LatLng(20, 0),
+                                              zoom: 2,
+                                              tilt: _tilt,
+                                            ),
+                                      onMapCreated: _onMapCreated,
+                                      onStyleLoadedCallback: _onStyleLoaded,
+                                      onMapLongClick: (_, _) => unawaited(HapticFeedback.mediumImpact()),
+                                      compassEnabled: false,
+                                      myLocationEnabled: false,
+                                      logoEnabled: false,
+                                      attributionButtonPosition:
+                                          AttributionButtonPosition.bottomLeft,
+                                    ),
                                   ),
                                 ),
                                 const Positioned(
@@ -738,56 +769,66 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                     16,
-                                    12,
+                                    8,
                                     16,
                                     0,
                                   ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: StatTile(
-                                          bg: scheme.surfaceContainerHigh,
-                                          fg: scheme.onSurface,
-                                          value: _fmtTime(elapsedSec),
-                                          label: 'Time',
-                                          icon: Icons.timer_outlined,
-                                          radius: const BorderRadius.horizontal(
-                                            left: Radius.circular(20),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: scheme.surfaceContainerHigh,
+                                      borderRadius: BorderRadius.circular(18),
+                                      border: Border.all(
+                                        color: scheme.outlineVariant.withValues(alpha: 0.2),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: StatTile(
+                                            bg: Colors.transparent,
+                                            fg: scheme.onSurface,
+                                            value: _fmtTime(elapsedSec),
+                                            label: 'Time',
+                                            icon: Icons.timer_outlined,
+                                            radius: BorderRadius.circular(14),
+                                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: StatTile(
-                                          bg: scheme.surfaceContainerHigh,
-                                          fg: scheme.primary,
-                                          value: distanceKm.toStringAsFixed(2),
-                                          label: 'Distance (km)',
-                                          icon: Icons.place_outlined,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: StatTile(
-                                          bg: scheme.surfaceContainerHigh,
-                                          fg: scheme.onSurface,
-                                          value: paceSecPerKm > 0
-                                              ? _fmtTime(paceSecPerKm)
-                                              : '--:--',
-                                          label: 'Pace /km',
-                                          icon: Icons.speed,
-                                          radius: const BorderRadius.horizontal(
-                                            right: Radius.circular(20),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: StatTile(
+                                            bg: scheme.primaryContainer.withValues(alpha: 0.35),
+                                            fg: scheme.primary,
+                                            value: distanceKm.toStringAsFixed(2),
+                                            label: 'Distance (km)',
+                                            icon: Icons.directions_run,
+                                            radius: BorderRadius.circular(14),
+                                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: StatTile(
+                                            bg: Colors.transparent,
+                                            fg: scheme.onSurface,
+                                            value: paceSecPerKm > 0
+                                                ? _fmtTime(paceSecPerKm)
+                                                : '--:--',
+                                            label: 'Pace /km',
+                                            icon: Icons.speed_outlined,
+                                            radius: BorderRadius.circular(14),
+                                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                     16,
-                                    12,
+                                    8,
                                     16,
                                     0,
                                   ),
@@ -801,14 +842,25 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                     builder: (context, animatedProgress, _) {
                                       return Container(
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 18,
-                                          vertical: 14,
+                                          horizontal: 14,
+                                          vertical: 10,
                                         ),
                                         decoration: BoxDecoration(
                                           color: scheme.surfaceContainerLow,
-                                          borderRadius: BorderRadius.circular(
-                                            18,
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: loopClosed
+                                                ? scheme.primary.withValues(alpha: 0.5)
+                                                : scheme.outlineVariant.withValues(alpha: 0.25),
+                                            width: loopClosed ? 1.5 : 1,
                                           ),
+                                          boxShadow: [
+                                            if (loopClosed)
+                                              BoxShadow(
+                                                color: scheme.primary.withValues(alpha: 0.15),
+                                                blurRadius: 10,
+                                              ),
+                                          ],
                                         ),
                                         child: Column(
                                           crossAxisAlignment:
@@ -818,46 +870,46 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                               children: [
                                                 Icon(
                                                   loopClosed
-                                                      ? Icons.check_circle
-                                                      : Icons.route,
-                                                  size: 22,
+                                                      ? Icons.check_circle_rounded
+                                                      : Icons.route_rounded,
+                                                  size: 18,
                                                   color: loopClosed
                                                       ? scheme.primary
                                                       : scheme.onSurfaceVariant,
                                                 ),
-                                                const SizedBox(width: 10),
+                                                const SizedBox(width: 8),
                                                 Expanded(
                                                   child: Text(
                                                     loopClosed
                                                         ? 'Loop closed — ready to capture!'
-                                                        // Distinct copy once the
-                                                        // minimum-distance bar
-                                                        // below is already full —
-                                                        // otherwise a straight
-                                                        // out-and-back run pins
-                                                        // the bar at 100% (it
-                                                        // only tracks distance,
-                                                        // not proximity to
-                                                        // start) with no
-                                                        // explanation of why the
-                                                        // loop still isn't
-                                                        // closing.
                                                         : loopProgress >= 1
-                                                        ? 'Minimum distance covered — head back toward your start point.'
-                                                        : 'Keep going — return near your start point to close the loop.',
+                                                        ? 'Head back toward start point.'
+                                                        : 'Return near start to close loop.',
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
                                                     style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w500,
+                                                      fontWeight: FontWeight.w600,
+                                                      fontSize: 12,
                                                       color: scheme.onSurface,
                                                     ),
                                                   ),
                                                 ),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  '${state.distanceMeters.clamp(0, 400).toStringAsFixed(0)}/400 m',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: loopClosed ? scheme.primary : scheme.onSurfaceVariant,
+                                                    fontFeatures: const [FontFeature.tabularFigures()],
+                                                  ),
+                                                ),
                                               ],
                                             ),
-                                            const SizedBox(height: 10),
+                                            const SizedBox(height: 8),
                                             LinearProgressIndicator(
                                               value: animatedProgress,
-                                              minHeight: 6,
+                                              minHeight: 5,
                                               borderRadius:
                                                   BorderRadius.circular(999),
                                               backgroundColor: scheme
@@ -865,18 +917,6 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                               color: loopClosed
                                                   ? scheme.primary
                                                   : scheme.tertiary,
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              loopClosed
-                                                  ? 'Min. distance covered'
-                                                  : 'Min. distance: '
-                                                        '${state.distanceMeters.clamp(0, 400).toStringAsFixed(0)}'
-                                                        '/400 m',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: scheme.onSurfaceVariant,
-                                              ),
                                             ),
                                           ],
                                         ),
@@ -887,51 +927,45 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                     16,
+                                    10,
                                     16,
-                                    16,
-                                    20,
+                                    12,
                                   ),
-                                  child: Column(
+                                  child: Row(
                                     children: [
-                                      // Audit finding (item 10): the button
-                                      // gave no accessible explanation of
-                                      // *why* it was disabled pre-closure —
-                                      // a screen-reader user heard only
-                                      // "Close loop & capture, disabled."
-                                      // The hint below sources the same
-                                      // remaining-distance figures the
-                                      // sighted progress bar above already
-                                      // shows.
-                                      Semantics(
-                                        hint: loopClosed
-                                            ? null
-                                            : loopProgress < 1
-                                            ? '${(400 - state.distanceMeters).clamp(0, 400).toStringAsFixed(0)} '
-                                                  'more meters of minimum distance needed before this can '
-                                                  'be enabled.'
-                                            : '${state.distanceToStartMeters.toStringAsFixed(0)} '
-                                                  'meters from your starting point — get within 30 meters '
-                                                  'to close the loop and enable this.',
-                                        child: TweenAnimationBuilder<double>(
-                                          tween: Tween(
-                                            begin: 0.96,
-                                            end: loopClosed ? 1 : 0.96,
-                                          ),
-                                          duration: const Duration(
-                                            milliseconds: 350,
-                                          ),
-                                          curve: Curves.easeOutBack,
-                                          builder: (context, scale, child) =>
-                                              Transform.scale(
-                                                scale: scale,
-                                                child: child,
-                                              ),
-                                          child: SizedBox(
-                                            width: double.infinity,
+                                      Expanded(
+                                        child: Semantics(
+                                          hint: loopClosed
+                                              ? null
+                                              : loopProgress < 1
+                                              ? '${(400 - state.distanceMeters).clamp(0, 400).toStringAsFixed(0)} '
+                                                    'more meters of minimum distance needed before this can '
+                                                    'be enabled.'
+                                              : '${state.distanceToStartMeters.toStringAsFixed(0)} '
+                                                    'meters from your starting point — get within 30 meters '
+                                                    'to close the loop and enable this.',
+                                          child: TweenAnimationBuilder<double>(
+                                            tween: Tween(
+                                              begin: 0.96,
+                                              end: loopClosed ? 1 : 0.96,
+                                            ),
+                                            duration: const Duration(
+                                              milliseconds: 350,
+                                            ),
+                                            curve: Curves.easeOutBack,
+                                            builder: (context, scale, child) =>
+                                                Transform.scale(
+                                                  scale: scale,
+                                                  child: child,
+                                                ),
                                             child: FilledButton(
                                               style: FilledButton.styleFrom(
-                                                minimumSize:
-                                                    const Size.fromHeight(60),
+                                                backgroundColor: loopClosed ? scheme.primary : scheme.surfaceContainerHigh,
+                                                foregroundColor: loopClosed ? scheme.onPrimary : scheme.onSurfaceVariant,
+                                                elevation: loopClosed ? 3 : 0,
+                                                shadowColor: scheme.primary.withValues(alpha: 0.3),
+                                                minimumSize: const Size.fromHeight(48),
+                                                padding: const EdgeInsets.symmetric(horizontal: 12),
                                                 shape: RoundedRectangleBorder(
                                                   borderRadius:
                                                       BorderRadius.circular(
@@ -944,25 +978,32 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                                   : null,
                                               child: _busy
                                                   ? const SizedBox(
-                                                      width: 22,
-                                                      height: 22,
+                                                      width: 18,
+                                                      height: 18,
                                                       child:
                                                           CircularProgressIndicator(
-                                                            strokeWidth: 2.5,
+                                                            strokeWidth: 2,
                                                           ),
                                                     )
                                                   : Row(
                                                       mainAxisAlignment:
                                                           MainAxisAlignment
                                                               .center,
-                                                      children: const [
+                                                      children: [
                                                         Icon(
-                                                          Icons.flag,
-                                                          size: 22,
+                                                          loopClosed ? Icons.flag_rounded : Icons.lock_outlined,
+                                                          size: 18,
                                                         ),
-                                                        SizedBox(width: 8),
-                                                        Text(
-                                                          'Close loop & capture',
+                                                        const SizedBox(width: 6),
+                                                        const FittedBox(
+                                                          fit: BoxFit.scaleDown,
+                                                          child: Text(
+                                                            'Close loop & capture',
+                                                            style: TextStyle(
+                                                              fontWeight: FontWeight.w700,
+                                                              fontSize: 13,
+                                                            ),
+                                                          ),
                                                         ),
                                                       ],
                                                     ),
@@ -970,12 +1011,29 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
                                           ),
                                         ),
                                       ),
-                                      TextButton(
+                                      const SizedBox(width: 8),
+                                      OutlinedButton.icon(
+                                        style: OutlinedButton.styleFrom(
+                                          minimumSize: const Size(0, 48),
+                                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                                          foregroundColor: scheme.error,
+                                          side: BorderSide(
+                                            color: scheme.error.withValues(alpha: 0.3),
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(999),
+                                          ),
+                                        ),
                                         onPressed: _busy
                                             ? null
                                             : () => _abandon(context, cubit),
-                                        child: const Text(
-                                          'Stop without capturing',
+                                        icon: const Icon(Icons.stop_rounded, size: 18),
+                                        label: const Text(
+                                          'Stop',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                          ),
                                         ),
                                       ),
                                     ],

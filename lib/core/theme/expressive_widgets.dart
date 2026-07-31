@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'motion_tokens.dart';
@@ -42,10 +41,9 @@ String avatarInitial({
   return (label != null && label.isNotEmpty) ? label[0].toUpperCase() : 'A';
 }
 
-/// An authentic Apple Glassmorphic container widget supporting both Light
-/// and Dark iOS appearances. Uses `BackdropFilter` (`ImageFilter.blur`),
-/// dynamic translucent surface tints, multi-layered ambient drop shadows,
-/// and subtle 0.5px glass highlight borders.
+/// A high-performance modern surface container widget supporting both Light
+/// and Dark iOS appearances. Replaces legacy GPU-heavy BackdropFilter glass blur
+/// with fast, modern solid surface cards, crisp borders, and subtle drop shadows.
 class AppleGlassContainer extends StatelessWidget {
   const AppleGlassContainer({
     required this.child,
@@ -63,6 +61,8 @@ class AppleGlassContainer extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final EdgeInsetsGeometry? margin;
   final BorderRadius? borderRadius;
+
+  /// Retained for backwards compatibility. Blur filters are bypassed for optimal GPU performance.
   final double blurAmount;
   final Color? borderColor;
   final double borderWidth;
@@ -74,88 +74,45 @@ class AppleGlassContainer extends StatelessWidget {
     final isDark = scheme.brightness == Brightness.dark;
     final effectiveRadius = borderRadius ?? ShapeTokens.mediumLarge;
 
-    // Apple HIG Translucent Glossy Glass Tints
-    final glassColor = isDark
-        ? const Color(0xFF1E1E24).withValues(alpha: 0.65)
-        : Colors.white.withValues(alpha: 0.78);
+    // Fast, modern solid surface container styling (zero BackdropFilter GPU pass)
+    final surfaceColor = isDark
+        ? const Color(0xFF1E1E24)
+        : Colors.white;
 
-    final glassBorder =
+    final surfaceBorder =
         borderColor ??
         (isDark
-            ? Colors.white.withValues(alpha: 0.25)
-            : Colors.white.withValues(alpha: 0.65));
+            ? Colors.white.withValues(alpha: 0.12)
+            : Colors.black.withValues(alpha: 0.08));
 
-    final glassGradient = isDark
-        ? LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withValues(alpha: 0.16),
-              Colors.white.withValues(alpha: 0.03),
-              Colors.black.withValues(alpha: 0.22),
-            ],
-            stops: const [0.0, 0.45, 1.0],
-          )
-        : LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withValues(alpha: 0.88),
-              Colors.white.withValues(alpha: 0.72),
-            ],
-          );
-
-    final glassShadow = isDark
+    final surfaceShadow = isDark
         ? [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 20,
-              spreadRadius: 0,
-              offset: const Offset(0, 8),
-            ),
-            BoxShadow(
-              color: Colors.white.withValues(alpha: 0.05),
-              blurRadius: 1,
-              spreadRadius: 0,
-              offset: const Offset(0, -1),
-            ),
-          ]
-        : [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
+              color: Colors.black.withValues(alpha: 0.35),
               blurRadius: 16,
               spreadRadius: 0,
               offset: const Offset(0, 4),
             ),
+          ]
+        : [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
-              blurRadius: 4,
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
               spreadRadius: 0,
-              offset: const Offset(0, 1),
+              offset: const Offset(0, 3),
             ),
           ];
 
     Widget content = Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: glassColor,
-        gradient: glassGradient,
+        color: surfaceColor,
         borderRadius: effectiveRadius,
-        border: Border.all(color: glassBorder, width: borderWidth),
-        boxShadow: glassShadow,
+        border: Border.all(color: surfaceBorder, width: borderWidth),
+        boxShadow: surfaceShadow,
       ),
       child: child,
     );
-
-    if (blurAmount > 0) {
-      content = ClipRRect(
-        borderRadius: effectiveRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blurAmount, sigmaY: blurAmount),
-          child: content,
-        ),
-      );
-    }
 
     if (margin != null) {
       content = Padding(padding: margin!, child: content);
@@ -518,6 +475,7 @@ class StatTile extends StatelessWidget {
     this.icon,
     this.radius = ShapeTokens.small,
     this.hasError = false,
+    this.padding = const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
     super.key,
   });
 
@@ -527,6 +485,7 @@ class StatTile extends StatelessWidget {
   final String label;
   final IconData? icon;
   final BorderRadius radius;
+  final EdgeInsetsGeometry padding;
 
   /// Set when the stream backing [value] emitted an error — without this,
   /// every stat tile on Home/Profile fell back to `?? 0`, which renders
@@ -554,7 +513,7 @@ class StatTile extends StatelessWidget {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+        padding: padding,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
