@@ -54,10 +54,10 @@ import 'active_run_page.dart';
 class TerritoryPage extends StatefulWidget {
   const TerritoryPage({required this.isActive, super.key});
 
-  /// True while this is the selected shell tab. The native `MapLibreMap`
-  /// view is only ever built while this is true — see `_isMapActive`'s doc
-  /// comment on why, and `_handleActiveChanged` for the teardown/rebuild
-  /// mechanics.
+  /// True while this is the selected shell tab. Only pauses the Dart-side
+  /// pulse/ant-path animation tickers while off-screen — see
+  /// `_isMapActive`'s doc comment for why this deliberately does NOT also
+  /// control the native `MapLibreMap` view's mount lifecycle.
   final ValueListenable<bool> isActive;
 
   @override
@@ -313,10 +313,6 @@ class _TerritoryPageState extends State<TerritoryPage> {
     super.initState();
     _isMapActive = widget.isActive.value;
     widget.isActive.addListener(_handleActiveChanged);
-    // Data loading (location, rival/decay status, squad membership) starts
-    // regardless of `_isMapActive` — cheap, and keeps state fresh for
-    // whenever the map itself first gets built. Only the native map view
-    // construction in `build()` is gated on tab visibility.
     unawaited(_locateSelf());
     unawaited(_loadRivalAndDecayStatus());
     _loadSquadInfo();
@@ -331,19 +327,26 @@ class _TerritoryPageState extends State<TerritoryPage> {
     });
   }
 
-  /// True only while this tab is the shell's selected tab — gates whether
-  /// `build()` constructs the native `MapLibreMap` widget at all. MapLibre's
-  /// own render thread has no concept of Flutter's `IndexedStack`-based
-  /// hiding, so simply being visually obscured/offstage does not stop it
-  /// from continuing to composite frames — confirmed live via DevTools
-  /// (Raster-thread-bound jank, and a flat ~20fps of continuous frame
-  /// production sitting idle on a different tab). Not building the widget at
-  /// all when inactive tears down the underlying platform view/render
-  /// thread the same way a `MapStyleLoader` fallback-tier swap already
-  /// does — `_onMapCreated`'s existing reset logic (every layer-ready flag
-  /// back to false) already handles "a completely fresh native view"
-  /// generically, so re-activating needs no special-cased setup beyond that
-  /// already-correct path.
+  /// True only while this tab is the shell's selected tab. **Deliberately
+  /// does not gate whether `build()` constructs the native `MapLibreMap`
+  /// widget** — an earlier version of this fix did exactly that (tearing
+  /// the platform view down/rebuilding it on tab switches), which crashed
+  /// instantly on a real iPhone the first time the map was ever built after
+  /// app launch (confirmed live via a screen recording — Android
+  /// emulator/profile-mode testing never caught it, since the crash is
+  /// specific to iOS's platform-view creation timing). A dynamically-created
+  /// `MapLibreMap` mid-session is not equivalent to one built as part of the
+  /// initial `IndexedStack` construction at launch, at least on iOS — so the
+  /// map now stays mounted continuously exactly as it did before that fix,
+  /// and this flag is used only to pause the Dart-side pulse/ant-path
+  /// ticker platform-channel traffic while off-screen (safe: no platform
+  /// view lifecycle involved, just cancelling plain `Timer`s). The
+  /// underlying "MapLibre's native render thread keeps compositing in the
+  /// background regardless of tab" performance cost from the original bug
+  /// report is NOT fixed by this — see `performance_qa_findings` memory for
+  /// why a real fix needs either an upstream maplibre_gl pause API or
+  /// further iOS-specific investigation neither available nor safe to
+  /// attempt blindly right now.
   late bool _isMapActive;
 
   void _handleActiveChanged() {
@@ -352,18 +355,18 @@ class _TerritoryPageState extends State<TerritoryPage> {
     setState(() {
       _isMapActive = active;
       if (!active) {
-        // Mirrors `_onMapCreated`'s reset — the controller/timers are about
-        // to belong to a view `build()` is no longer going to construct.
         _pulseTimer?.cancel();
         _pulseTimer = null;
         _antPathTimer?.cancel();
         _antPathTimer = null;
-        _bboxRefreshDebounceTimer?.cancel();
-        _controller = null;
-        _styleReady = false;
-        _territoryLayersReady = false;
       }
     });
+    // Re-evaluate whether the pulse/ant-path tickers should be running now
+    // that we're active again — `_redrawFills` recomputes `hasAtRisk`/
+    // `hasRival` from current data and calls `_updatePulseTimer`/
+    // `_updateAntPathTimer` itself; without this they'd stay off until the
+    // next unrelated territory-data change happened to fire.
+    if (active) unawaited(_redrawFills());
   }
 
   @override
@@ -1322,7 +1325,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
   /// `_territoryAtRiskOutlineLayerId`'s `filter` either way, so
   /// reduce-motion users don't lose the at-risk signal, only its animation.
   void _updatePulseTimer(bool hasAtRisk) {
-    if (!hasAtRisk) {
+    if (!hasAtRisk || !_isMapActive) {
       _pulseTimer?.cancel();
       _pulseTimer = null;
       return;
@@ -1390,7 +1393,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
   /// still get the dashed-vs-solid ownership cue, just not the marching
   /// animation.
   void _updateAntPathTimer(bool hasRival) {
-    if (!hasRival) {
+    if (!hasRival || !_isMapActive) {
       _antPathTimer?.cancel();
       _antPathTimer = null;
       return;
@@ -1993,72 +1996,69 @@ class _TerritoryPageState extends State<TerritoryPage> {
                   '${_atRisk.length == 1 ? 'territory' : 'territories'} '
                   'undefended.'
                   '${_currentRival != null ? ' Recent rival activity nearby.' : ''}',
-              child: !_isMapActive
-                  ? ColoredBox(color: scheme.surface)
-                  : MapLibreMap(
-                      key: _styleLoader.styleKey,
-                      styleString: _styleLoader.styleString,
-                      // Tilted from the very first frame (§5.3: 3D is the default
-                      // visual language, not a hidden toggle) — `_locateSelf`/
-                      // `_onStyleLoaded` re-apply this same tilt once a real GPS
-                      // fix/style load lands, via `_cameraUpdateForFocus`.
-                      initialCameraPosition: const CameraPosition(
-                        target: LatLng(20, 0),
-                        zoom: 2,
-                        tilt: 45,
-                      ),
-                      onMapCreated: _onMapCreated,
-                      onStyleLoadedCallback: _onStyleLoaded,
-                      onCameraMove: (_) => _cameraMoving = true,
-                      onCameraIdle: () {
-                        _cameraMoving = false;
-                        _scheduleRefreshForCurrentView();
-                      },
-                      onMapClick: _onMapTapped,
-                      // Confirmed live (real-device/emulator tap testing, not
-                      // static analysis — same standard this repo's other map
-                      // gotchas were found by): the plugin's *default*
-                      // `annotationConsumeTapEvents` includes `fill`, so a tap
-                      // landing on the neutral-zone ring or a bounty-zone circle
-                      // (both plain `Fill` *annotations*, added via `addFill` —
-                      // distinct from the territory polygons, which are style
-                      // layers, not annotations) was silently swallowed before
-                      // `onMapClick` ever fired, making tap-to-inspect (§1) a
-                      // dead zone anywhere those overlays sat. This app never
-                      // registers `onFillTapped`/`onCircleTapped`/`onLineTapped`,
-                      // so there's no annotation-tap behavior worth keeping —
-                      // `[AnnotationType.symbol]` (a type this page never adds as
-                      // an annotation) is the smallest list satisfying the
-                      // plugin's "at least 1 type" assert while letting every
-                      // fill/circle/line tap fall through to `onMapClick`.
-                      annotationConsumeTapEvents: const [AnnotationType.symbol],
-                      // A second, independent gotcha found the same way: this
-                      // defaults to `false`, meaning a tap landing directly on a
-                      // rendered *style-layer* feature (the territory fill/
-                      // extrusion polygon itself, not an annotation) fires
-                      // `onFeatureTapped` only and explicitly does **not** call
-                      // `onMapClick` — the exact opposite of what tap-to-inspect
-                      // (§1) needs, since `_onMapTapped` is built on `onMapClick`
-                      // + `queryRenderedFeatures` rather than `onFeatureTapped`
-                      // (whose native-side `id` payload doesn't reliably map back
-                      // to this GeoJSON source's `properties.id` the way a fresh
-                      // `queryRenderedFeatures` call at the tap point does).
-                      featureTapsTriggersMapClick: true,
-                      myLocationEnabled: false,
-                      logoEnabled: false,
-                      attributionButtonPosition:
-                          AttributionButtonPosition.bottomLeft,
-                      // Required for `controller.cameraPosition` to ever be
-                      // non-stale — without this, the plugin's own doc comment
-                      // says it stays permanently null (or, worse, permanently
-                      // equal to `initialCameraPosition`), which was silently
-                      // breaking `_toggle3DView`'s "preserve wherever the user
-                      // currently is, just add tilt" logic: every toggle jumped
-                      // the camera back to `initialCameraPosition`'s zoom-2 world
-                      // view instead of tilting in place. Found via live device
-                      // testing, not static analysis.
-                      trackCameraPosition: true,
-                    ),
+              child: MapLibreMap(
+                key: _styleLoader.styleKey,
+                styleString: _styleLoader.styleString,
+                // Tilted from the very first frame (§5.3: 3D is the default
+                // visual language, not a hidden toggle) — `_locateSelf`/
+                // `_onStyleLoaded` re-apply this same tilt once a real GPS
+                // fix/style load lands, via `_cameraUpdateForFocus`.
+                initialCameraPosition: const CameraPosition(
+                  target: LatLng(20, 0),
+                  zoom: 2,
+                  tilt: 45,
+                ),
+                onMapCreated: _onMapCreated,
+                onStyleLoadedCallback: _onStyleLoaded,
+                onCameraMove: (_) => _cameraMoving = true,
+                onCameraIdle: () {
+                  _cameraMoving = false;
+                  _scheduleRefreshForCurrentView();
+                },
+                onMapClick: _onMapTapped,
+                // Confirmed live (real-device/emulator tap testing, not
+                // static analysis — same standard this repo's other map
+                // gotchas were found by): the plugin's *default*
+                // `annotationConsumeTapEvents` includes `fill`, so a tap
+                // landing on the neutral-zone ring or a bounty-zone circle
+                // (both plain `Fill` *annotations*, added via `addFill` —
+                // distinct from the territory polygons, which are style
+                // layers, not annotations) was silently swallowed before
+                // `onMapClick` ever fired, making tap-to-inspect (§1) a
+                // dead zone anywhere those overlays sat. This app never
+                // registers `onFillTapped`/`onCircleTapped`/`onLineTapped`,
+                // so there's no annotation-tap behavior worth keeping —
+                // `[AnnotationType.symbol]` (a type this page never adds as
+                // an annotation) is the smallest list satisfying the
+                // plugin's "at least 1 type" assert while letting every
+                // fill/circle/line tap fall through to `onMapClick`.
+                annotationConsumeTapEvents: const [AnnotationType.symbol],
+                // A second, independent gotcha found the same way: this
+                // defaults to `false`, meaning a tap landing directly on a
+                // rendered *style-layer* feature (the territory fill/
+                // extrusion polygon itself, not an annotation) fires
+                // `onFeatureTapped` only and explicitly does **not** call
+                // `onMapClick` — the exact opposite of what tap-to-inspect
+                // (§1) needs, since `_onMapTapped` is built on `onMapClick`
+                // + `queryRenderedFeatures` rather than `onFeatureTapped`
+                // (whose native-side `id` payload doesn't reliably map back
+                // to this GeoJSON source's `properties.id` the way a fresh
+                // `queryRenderedFeatures` call at the tap point does).
+                featureTapsTriggersMapClick: true,
+                myLocationEnabled: false,
+                logoEnabled: false,
+                attributionButtonPosition: AttributionButtonPosition.bottomLeft,
+                // Required for `controller.cameraPosition` to ever be
+                // non-stale — without this, the plugin's own doc comment
+                // says it stays permanently null (or, worse, permanently
+                // equal to `initialCameraPosition`), which was silently
+                // breaking `_toggle3DView`'s "preserve wherever the user
+                // currently is, just add tilt" logic: every toggle jumped
+                // the camera back to `initialCameraPosition`'s zoom-2 world
+                // view instead of tilting in place. Found via live device
+                // testing, not static analysis.
+                trackCameraPosition: true,
+              ),
             ),
           ),
 
