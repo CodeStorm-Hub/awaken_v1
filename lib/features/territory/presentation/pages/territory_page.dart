@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show MissingPluginException, PlatformException;
+import 'package:flutter/services.dart'
+    show MissingPluginException, PlatformException;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../../core/di/injection.dart';
@@ -50,7 +52,13 @@ import 'active_run_page.dart';
 /// bounty zones) still use the simpler `Fill`/`Circle` annotation API, which
 /// is fine for infrequently-redrawn, non-animated shapes.
 class TerritoryPage extends StatefulWidget {
-  const TerritoryPage({super.key});
+  const TerritoryPage({required this.isActive, super.key});
+
+  /// True while this is the selected shell tab. The native `MapLibreMap`
+  /// view is only ever built while this is true — see `_isMapActive`'s doc
+  /// comment on why, and `_handleActiveChanged` for the teardown/rebuild
+  /// mechanics.
+  final ValueListenable<bool> isActive;
 
   @override
   State<TerritoryPage> createState() => _TerritoryPageState();
@@ -92,8 +100,10 @@ class _TerritoryPageState extends State<TerritoryPage> {
   // so each layer here only ever contains one territory type and its
   // `lineDasharray` is always a plain `['literal', [...]]` — no data
   // expression, no rejection.
-  static const _territoryOutlineOwnedLayerId = 'territories-outline-owned-layer';
-  static const _territoryOutlineRivalLayerId = 'territories-outline-rival-layer';
+  static const _territoryOutlineOwnedLayerId =
+      'territories-outline-owned-layer';
+  static const _territoryOutlineRivalLayerId =
+      'territories-outline-rival-layer';
   static const _territoryExtrusionLayerId = 'territories-extrusion-layer';
   // Rim-light/glow (territory map 3D redesign §5.2) — MapLibre has no
   // native glow/bloom paint property, so this fakes one the way comparable
@@ -262,7 +272,8 @@ class _TerritoryPageState extends State<TerritoryPage> {
   // rather than `addGeoJsonSource`, since clustering params only exist on
   // `GeojsonSourceProperties` (`addGeoJsonSource` has no clustering args).
   static const _bountyMarkersSourceId = 'bounty-zones-source';
-  static const _bountyClusterCircleLayerId = 'bounty-zones-cluster-circle-layer';
+  static const _bountyClusterCircleLayerId =
+      'bounty-zones-cluster-circle-layer';
   static const _bountyClusterCountLayerId = 'bounty-zones-cluster-count-layer';
   static const _bountyUnclusteredLayerId = 'bounty-zones-unclustered-layer';
   bool _bountyMarkersLayerReady = false;
@@ -300,6 +311,12 @@ class _TerritoryPageState extends State<TerritoryPage> {
   @override
   void initState() {
     super.initState();
+    _isMapActive = widget.isActive.value;
+    widget.isActive.addListener(_handleActiveChanged);
+    // Data loading (location, rival/decay status, squad membership) starts
+    // regardless of `_isMapActive` — cheap, and keeps state fresh for
+    // whenever the map itself first gets built. Only the native map view
+    // construction in `build()` is gated on tab visibility.
     unawaited(_locateSelf());
     unawaited(_loadRivalAndDecayStatus());
     _loadSquadInfo();
@@ -311,6 +328,41 @@ class _TerritoryPageState extends State<TerritoryPage> {
       _,
     ) {
       if (_showCaptureHeatmap) unawaited(_redrawCaptureHeatmap());
+    });
+  }
+
+  /// True only while this tab is the shell's selected tab — gates whether
+  /// `build()` constructs the native `MapLibreMap` widget at all. MapLibre's
+  /// own render thread has no concept of Flutter's `IndexedStack`-based
+  /// hiding, so simply being visually obscured/offstage does not stop it
+  /// from continuing to composite frames — confirmed live via DevTools
+  /// (Raster-thread-bound jank, and a flat ~20fps of continuous frame
+  /// production sitting idle on a different tab). Not building the widget at
+  /// all when inactive tears down the underlying platform view/render
+  /// thread the same way a `MapStyleLoader` fallback-tier swap already
+  /// does — `_onMapCreated`'s existing reset logic (every layer-ready flag
+  /// back to false) already handles "a completely fresh native view"
+  /// generically, so re-activating needs no special-cased setup beyond that
+  /// already-correct path.
+  late bool _isMapActive;
+
+  void _handleActiveChanged() {
+    if (!mounted) return;
+    final active = widget.isActive.value;
+    setState(() {
+      _isMapActive = active;
+      if (!active) {
+        // Mirrors `_onMapCreated`'s reset — the controller/timers are about
+        // to belong to a view `build()` is no longer going to construct.
+        _pulseTimer?.cancel();
+        _pulseTimer = null;
+        _antPathTimer?.cancel();
+        _antPathTimer = null;
+        _bboxRefreshDebounceTimer?.cancel();
+        _controller = null;
+        _styleReady = false;
+        _territoryLayersReady = false;
+      }
     });
   }
 
@@ -346,6 +398,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
 
   @override
   void dispose() {
+    widget.isActive.removeListener(_handleActiveChanged);
     unawaited(_territoriesSub?.cancel());
     unawaited(_squadSub?.cancel());
     unawaited(_presenceSub?.cancel());
@@ -518,7 +571,11 @@ class _TerritoryPageState extends State<TerritoryPage> {
       if (!_flagIconRegistered) {
         try {
           final bytes = await TerritoryMapStyle.generateFlagIconBytes();
-          await controller.addImage(TerritoryMapStyle.flagIconName, bytes, true);
+          await controller.addImage(
+            TerritoryMapStyle.flagIconName,
+            bytes,
+            true,
+          );
           _flagIconRegistered = true;
         } catch (_) {
           // Best-effort — a missing flag icon just means territories render
@@ -747,7 +804,10 @@ class _TerritoryPageState extends State<TerritoryPage> {
     final lat2 = b.latitude * (math.pi / 180);
     final h =
         math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1) * math.cos(lat2) * math.sin(dLng / 2) * math.sin(dLng / 2);
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
     return 2 * earthRadiusM * math.asin(math.sqrt(h));
   }
 
@@ -790,7 +850,8 @@ class _TerritoryPageState extends State<TerritoryPage> {
     // purposes (`owner` below stays binary, unchanged), but gets its own
     // fill/extrusion/flag color instead of collapsing into the same hostile
     // red every non-owned territory used to render as.
-    final isSquadmate = !territory.isMine && _squadMemberIds.contains(territory.ownerId);
+    final isSquadmate =
+        !territory.isMine && _squadMemberIds.contains(territory.ownerId);
     final fillColor = territory.isMine
         ? semantic.territoryOwnedFill
         : isSquadmate
@@ -816,15 +877,19 @@ class _TerritoryPageState extends State<TerritoryPage> {
     final health = territory.isMine
         ? (territory.health?.toDouble() ?? _healthOf(territory.id, atRiskById))
         : 100.0;
-    final healthFactor = (0.4 + 0.6 * ((health - 25).clamp(0, 75) / 75))
-        .clamp(0.4, 1.0);
+    final healthFactor = (0.4 + 0.6 * ((health - 25).clamp(0, 75) / 75)).clamp(
+      0.4,
+      1.0,
+    );
     final targetOpacity = territory.isMine
         ? baseOpacity * healthFactor
         : baseOpacity;
 
     return {
       'owner': territory.isMine ? 'me' : 'rival',
-      'ownerTier': territory.isMine ? 'me' : (isSquadmate ? 'squadmate' : 'rival'),
+      'ownerTier': territory.isMine
+          ? 'me'
+          : (isSquadmate ? 'squadmate' : 'rival'),
       'atRisk': territory.isMine && atRiskById.containsKey(territory.id),
       'contested': contested,
       'areaSqm': territory.areaSqm,
@@ -882,9 +947,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
     // features, and the pulse-timer contested check below — this used to be
     // an O(owned × rival) haversine scan run three separate times per
     // redraw (once each for `features`, `wallFeatures`, and `hasContested`).
-    final contestedById = {
-      for (final t in visible) t.id: isContested(t),
-    };
+    final contestedById = {for (final t in visible) t.id: isContested(t)};
     final propsById = {
       for (final t in visible)
         t.id: _territoryFeatureProperties(
@@ -950,12 +1013,18 @@ class _TerritoryPageState extends State<TerritoryPage> {
             'interpolate',
             ['linear'],
             ['get', 'areaSqm'],
-            0, 0,
-            1, 2,
-            250, 5,
-            1000, 8,
-            2500, 11,
-            20000, 16,
+            0,
+            0,
+            1,
+            2,
+            250,
+            5,
+            1000,
+            8,
+            2500,
+            11,
+            20000,
+            16,
           ],
         ),
       );
@@ -973,7 +1042,11 @@ class _TerritoryPageState extends State<TerritoryPage> {
           lineBlur: 6,
           lineOpacity: 0.55,
         ),
-        filter: ['==', ['get', 'owner'], 'me'],
+        filter: [
+          '==',
+          ['get', 'owner'],
+          'me',
+        ],
       );
       await controller.addLineLayer(
         _territorySourceId,
@@ -984,7 +1057,11 @@ class _TerritoryPageState extends State<TerritoryPage> {
           lineBlur: 6,
           lineOpacity: 0.45,
         ),
-        filter: ['==', ['get', 'owner'], 'rival'],
+        filter: [
+          '==',
+          ['get', 'owner'],
+          'rival',
+        ],
       );
       // Owned territory's outline — always solid, no `lineDasharray` at all
       // (the property's absence renders as a solid line; no literal
@@ -999,7 +1076,11 @@ class _TerritoryPageState extends State<TerritoryPage> {
           lineColor: ['get', 'outlineColor'],
           lineWidth: 2,
         ),
-        filter: ['==', ['get', 'owner'], 'me'],
+        filter: [
+          '==',
+          ['get', 'owner'],
+          'me',
+        ],
       );
       // Rival territory's dashed outline (item 3) — a real `line-dasharray`
       // *literal* (see class-field-level comment above for why this can't
@@ -1014,7 +1095,11 @@ class _TerritoryPageState extends State<TerritoryPage> {
           lineWidth: 2,
           lineDasharray: ['literal', _antPathDashSequence.first],
         ),
-        filter: ['==', ['get', 'owner'], 'rival'],
+        filter: [
+          '==',
+          ['get', 'owner'],
+          'rival',
+        ],
       );
       // Pulsing at-risk border (item 5) — a second outline layer reading
       // the same source, filtered to only at-risk features via the style
@@ -1029,7 +1114,11 @@ class _TerritoryPageState extends State<TerritoryPage> {
           lineWidth: 3,
           lineOpacity: 1.0,
         ),
-        filter: ['==', ['get', 'atRisk'], true],
+        filter: [
+          '==',
+          ['get', 'atRisk'],
+          true,
+        ],
       );
       // "Front line" pulsing border — same `_tickPulse` ticker as the
       // at-risk outline above (see `_tickPulse`'s updated doc comment),
@@ -1043,7 +1132,11 @@ class _TerritoryPageState extends State<TerritoryPage> {
           lineWidth: 3,
           lineOpacity: 1.0,
         ),
-        filter: ['==', ['get', 'contested'], true],
+        filter: [
+          '==',
+          ['get', 'contested'],
+          true,
+        ],
       );
       _territoryLayersReady = true;
     } else {
@@ -1103,7 +1196,8 @@ class _TerritoryPageState extends State<TerritoryPage> {
         ))
           () {
             final isSquadmate =
-                !territory.isMine && _squadMemberIds.contains(territory.ownerId);
+                !territory.isMine &&
+                _squadMemberIds.contains(territory.ownerId);
             final flagColor = territory.isMine
                 ? semantic.territoryOwnedExtrusion
                 : isSquadmate
@@ -1111,7 +1205,10 @@ class _TerritoryPageState extends State<TerritoryPage> {
                 : semantic.territoryRivalExtrusion;
             return {
               'type': 'Feature',
-              'properties': {'id': territory.id, 'flagColor': _colorToHex(flagColor)},
+              'properties': {
+                'id': territory.id,
+                'flagColor': _colorToHex(flagColor),
+              },
               'geometry': {
                 'type': 'Point',
                 'coordinates': [centroid.longitude, centroid.latitude],
@@ -1136,9 +1233,12 @@ class _TerritoryPageState extends State<TerritoryPage> {
             'interpolate',
             ['linear'],
             ['zoom'],
-            12, 0.22,
-            16, 0.45,
-            19, 0.7,
+            12,
+            0.22,
+            16,
+            0.45,
+            19,
+            0.7,
           ],
           iconAllowOverlap: true,
           iconIgnorePlacement: true,
@@ -1192,8 +1292,16 @@ class _TerritoryPageState extends State<TerritoryPage> {
         FillLayerProperties(
           fillOpacity: [
             'case',
-            ['in', ['get', 'id'], ['literal', idsList]],
-            ['*', ['get', 'fillOpacity'], fraction],
+            [
+              'in',
+              ['get', 'id'],
+              ['literal', idsList],
+            ],
+            [
+              '*',
+              ['get', 'fillOpacity'],
+              fraction,
+            ],
             ['get', 'fillOpacity'],
           ],
         ),
@@ -1351,10 +1459,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
       await controller.addFillLayer(
         _squadHeatmapSourceId,
         _squadHeatmapFillLayerId,
-        FillLayerProperties(
-          fillColor: _colorToHex(tint),
-          fillOpacity: 0.22,
-        ),
+        FillLayerProperties(fillColor: _colorToHex(tint), fillOpacity: 0.22),
         belowLayerId: _territoryLayersReady ? _territoryFillLayerId : null,
       );
       _squadHeatmapLayerReady = true;
@@ -1403,9 +1508,12 @@ class _TerritoryPageState extends State<TerritoryPage> {
             'interpolate',
             ['linear'],
             ['get', 'areaSqm'],
-            0, 0.2,
-            2500, 0.6,
-            20000, 1.0,
+            0,
+            0.2,
+            2500,
+            0.6,
+            20000,
+            1.0,
           ],
           heatmapIntensity: 1,
           heatmapOpacity: 0.6,
@@ -1536,7 +1644,10 @@ class _TerritoryPageState extends State<TerritoryPage> {
       );
       _squadMemberMarkersLayerReady = true;
     } else {
-      await controller.setGeoJsonSource(_squadMemberMarkersSourceId, collection);
+      await controller.setGeoJsonSource(
+        _squadMemberMarkersSourceId,
+        collection,
+      );
     }
   }
 
@@ -1613,7 +1724,10 @@ class _TerritoryPageState extends State<TerritoryPage> {
   /// fill/extrusion layers at the tapped screen point and, if it hit one,
   /// looks the territory back up by the `id` property `_territoryFeatureProperties`
   /// already stamps onto every feature.
-  Future<void> _onMapTapped(math.Point<double> point, LatLng coordinates) async {
+  Future<void> _onMapTapped(
+    math.Point<double> point,
+    LatLng coordinates,
+  ) async {
     final controller = _controller;
     if (controller == null || !_territoryLayersReady) return;
     List<dynamic> features;
@@ -1703,7 +1817,9 @@ class _TerritoryPageState extends State<TerritoryPage> {
                           height: 5,
                           margin: const EdgeInsets.only(bottom: 18),
                           decoration: BoxDecoration(
-                            color: scheme.onSurfaceVariant.withValues(alpha: 0.3),
+                            color: scheme.onSurfaceVariant.withValues(
+                              alpha: 0.3,
+                            ),
                             borderRadius: BorderRadius.circular(999),
                           ),
                         ),
@@ -1877,69 +1993,72 @@ class _TerritoryPageState extends State<TerritoryPage> {
                   '${_atRisk.length == 1 ? 'territory' : 'territories'} '
                   'undefended.'
                   '${_currentRival != null ? ' Recent rival activity nearby.' : ''}',
-              child: MapLibreMap(
-                key: _styleLoader.styleKey,
-                styleString: _styleLoader.styleString,
-                // Tilted from the very first frame (§5.3: 3D is the default
-                // visual language, not a hidden toggle) — `_locateSelf`/
-                // `_onStyleLoaded` re-apply this same tilt once a real GPS
-                // fix/style load lands, via `_cameraUpdateForFocus`.
-                initialCameraPosition: const CameraPosition(
-                  target: LatLng(20, 0),
-                  zoom: 2,
-                  tilt: 45,
-                ),
-                onMapCreated: _onMapCreated,
-                onStyleLoadedCallback: _onStyleLoaded,
-                onCameraMove: (_) => _cameraMoving = true,
-                onCameraIdle: () {
-                  _cameraMoving = false;
-                  _scheduleRefreshForCurrentView();
-                },
-                onMapClick: _onMapTapped,
-                // Confirmed live (real-device/emulator tap testing, not
-                // static analysis — same standard this repo's other map
-                // gotchas were found by): the plugin's *default*
-                // `annotationConsumeTapEvents` includes `fill`, so a tap
-                // landing on the neutral-zone ring or a bounty-zone circle
-                // (both plain `Fill` *annotations*, added via `addFill` —
-                // distinct from the territory polygons, which are style
-                // layers, not annotations) was silently swallowed before
-                // `onMapClick` ever fired, making tap-to-inspect (§1) a
-                // dead zone anywhere those overlays sat. This app never
-                // registers `onFillTapped`/`onCircleTapped`/`onLineTapped`,
-                // so there's no annotation-tap behavior worth keeping —
-                // `[AnnotationType.symbol]` (a type this page never adds as
-                // an annotation) is the smallest list satisfying the
-                // plugin's "at least 1 type" assert while letting every
-                // fill/circle/line tap fall through to `onMapClick`.
-                annotationConsumeTapEvents: const [AnnotationType.symbol],
-                // A second, independent gotcha found the same way: this
-                // defaults to `false`, meaning a tap landing directly on a
-                // rendered *style-layer* feature (the territory fill/
-                // extrusion polygon itself, not an annotation) fires
-                // `onFeatureTapped` only and explicitly does **not** call
-                // `onMapClick` — the exact opposite of what tap-to-inspect
-                // (§1) needs, since `_onMapTapped` is built on `onMapClick`
-                // + `queryRenderedFeatures` rather than `onFeatureTapped`
-                // (whose native-side `id` payload doesn't reliably map back
-                // to this GeoJSON source's `properties.id` the way a fresh
-                // `queryRenderedFeatures` call at the tap point does).
-                featureTapsTriggersMapClick: true,
-                myLocationEnabled: false,
-                logoEnabled: false,
-                attributionButtonPosition: AttributionButtonPosition.bottomLeft,
-                // Required for `controller.cameraPosition` to ever be
-                // non-stale — without this, the plugin's own doc comment
-                // says it stays permanently null (or, worse, permanently
-                // equal to `initialCameraPosition`), which was silently
-                // breaking `_toggle3DView`'s "preserve wherever the user
-                // currently is, just add tilt" logic: every toggle jumped
-                // the camera back to `initialCameraPosition`'s zoom-2 world
-                // view instead of tilting in place. Found via live device
-                // testing, not static analysis.
-                trackCameraPosition: true,
-              ),
+              child: !_isMapActive
+                  ? ColoredBox(color: scheme.surface)
+                  : MapLibreMap(
+                      key: _styleLoader.styleKey,
+                      styleString: _styleLoader.styleString,
+                      // Tilted from the very first frame (§5.3: 3D is the default
+                      // visual language, not a hidden toggle) — `_locateSelf`/
+                      // `_onStyleLoaded` re-apply this same tilt once a real GPS
+                      // fix/style load lands, via `_cameraUpdateForFocus`.
+                      initialCameraPosition: const CameraPosition(
+                        target: LatLng(20, 0),
+                        zoom: 2,
+                        tilt: 45,
+                      ),
+                      onMapCreated: _onMapCreated,
+                      onStyleLoadedCallback: _onStyleLoaded,
+                      onCameraMove: (_) => _cameraMoving = true,
+                      onCameraIdle: () {
+                        _cameraMoving = false;
+                        _scheduleRefreshForCurrentView();
+                      },
+                      onMapClick: _onMapTapped,
+                      // Confirmed live (real-device/emulator tap testing, not
+                      // static analysis — same standard this repo's other map
+                      // gotchas were found by): the plugin's *default*
+                      // `annotationConsumeTapEvents` includes `fill`, so a tap
+                      // landing on the neutral-zone ring or a bounty-zone circle
+                      // (both plain `Fill` *annotations*, added via `addFill` —
+                      // distinct from the territory polygons, which are style
+                      // layers, not annotations) was silently swallowed before
+                      // `onMapClick` ever fired, making tap-to-inspect (§1) a
+                      // dead zone anywhere those overlays sat. This app never
+                      // registers `onFillTapped`/`onCircleTapped`/`onLineTapped`,
+                      // so there's no annotation-tap behavior worth keeping —
+                      // `[AnnotationType.symbol]` (a type this page never adds as
+                      // an annotation) is the smallest list satisfying the
+                      // plugin's "at least 1 type" assert while letting every
+                      // fill/circle/line tap fall through to `onMapClick`.
+                      annotationConsumeTapEvents: const [AnnotationType.symbol],
+                      // A second, independent gotcha found the same way: this
+                      // defaults to `false`, meaning a tap landing directly on a
+                      // rendered *style-layer* feature (the territory fill/
+                      // extrusion polygon itself, not an annotation) fires
+                      // `onFeatureTapped` only and explicitly does **not** call
+                      // `onMapClick` — the exact opposite of what tap-to-inspect
+                      // (§1) needs, since `_onMapTapped` is built on `onMapClick`
+                      // + `queryRenderedFeatures` rather than `onFeatureTapped`
+                      // (whose native-side `id` payload doesn't reliably map back
+                      // to this GeoJSON source's `properties.id` the way a fresh
+                      // `queryRenderedFeatures` call at the tap point does).
+                      featureTapsTriggersMapClick: true,
+                      myLocationEnabled: false,
+                      logoEnabled: false,
+                      attributionButtonPosition:
+                          AttributionButtonPosition.bottomLeft,
+                      // Required for `controller.cameraPosition` to ever be
+                      // non-stale — without this, the plugin's own doc comment
+                      // says it stays permanently null (or, worse, permanently
+                      // equal to `initialCameraPosition`), which was silently
+                      // breaking `_toggle3DView`'s "preserve wherever the user
+                      // currently is, just add tilt" logic: every toggle jumped
+                      // the camera back to `initialCameraPosition`'s zoom-2 world
+                      // view instead of tilting in place. Found via live device
+                      // testing, not static analysis.
+                      trackCameraPosition: true,
+                    ),
             ),
           ),
 
@@ -2076,8 +2195,12 @@ class _TerritoryPageState extends State<TerritoryPage> {
                     ),
                     const SizedBox(width: 6),
                     RoundIconButton(
-                      icon: _is3D ? Icons.view_in_ar : Icons.view_in_ar_outlined,
-                      tooltip: _is3D ? 'Switch to 2D view' : 'Switch to 3D view',
+                      icon: _is3D
+                          ? Icons.view_in_ar
+                          : Icons.view_in_ar_outlined,
+                      tooltip: _is3D
+                          ? 'Switch to 2D view'
+                          : 'Switch to 3D view',
                       onTap: _toggle3DView,
                     ),
                     const SizedBox(width: 6),
@@ -2300,4 +2423,3 @@ String _colorToHex(Color color) {
   final argb = color.toARGB32().toRadixString(16).padLeft(8, '0');
   return '#${argb.substring(2)}';
 }
-

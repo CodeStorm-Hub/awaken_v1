@@ -83,7 +83,14 @@ class NoSquadView extends StatelessWidget {
             // user had no path from here to Territory at all.
             TextButton.icon(
               onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const TerritoryPage()),
+                MaterialPageRoute<void>(
+                  // Pushed as its own route here, not a shell tab — always
+                  // active for as long as this route exists, so a
+                  // never-changing `true` listenable is correct (no shell
+                  // tab-switching to react to).
+                  builder: (_) =>
+                      TerritoryPage(isActive: ValueNotifier<bool>(true)),
+                ),
               ),
               icon: const Icon(Icons.map_outlined, size: 18),
               label: const Text('Capture territory to start earning a rank'),

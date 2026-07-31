@@ -23,6 +23,22 @@ class AppShellPage extends StatefulWidget {
 class _AppShellPageState extends State<AppShellPage> {
   var _index = 0;
 
+  // Separate from `_index` deliberately: `_pages` below is a `late final`
+  // list built once in `initState` (see its own doc comment for why), so a
+  // plain constructor argument computed from `_index` would freeze at
+  // whatever `_index` was at that one moment. A `ValueNotifier` is a stable
+  // object identity `TerritoryPage` can listen to directly, letting it react
+  // to live tab-visibility changes without the page list itself ever
+  // needing to rebuild. Powers `TerritoryPage`'s native MapLibre view being
+  // paused (not built at all) while its tab isn't the active one — that
+  // view's own render thread otherwise keeps compositing in the background
+  // indefinitely once created, regardless of which tab IndexedStack is
+  // showing (confirmed live via DevTools: continuous ~20fps frame
+  // production and Raster-thread-bound jank even sitting idle on Home).
+  final _isTerritoryTabActive = ValueNotifier<bool>(false);
+
+  static const _territoryTabIndex = 2;
+
   static const _destinations = [
     NavigationDestination(
       icon: Icon(Icons.home_outlined),
@@ -46,7 +62,16 @@ class _AppShellPageState extends State<AppShellPage> {
     ),
   ];
 
-  void _goTo(int index) => setState(() => _index = index);
+  void _goTo(int index) {
+    setState(() => _index = index);
+    _isTerritoryTabActive.value = index == _territoryTabIndex;
+  }
+
+  @override
+  void dispose() {
+    _isTerritoryTabActive.dispose();
+    super.dispose();
+  }
 
   // Previously constructed inline in `build()`, on every shell rebuild
   // (e.g. every `_goTo` tab switch) — that handed `IndexedStack` a brand
@@ -63,7 +88,7 @@ class _AppShellPageState extends State<AppShellPage> {
       onOpenSquad: () => _goTo(3),
     ),
     const AlarmListPage(),
-    const TerritoryPage(),
+    TerritoryPage(isActive: _isTerritoryTabActive),
     const SquadPage(),
   ];
 
@@ -76,7 +101,11 @@ class _AppShellPageState extends State<AppShellPage> {
       body: Stack(
         children: [
           IndexedStack(index: _index, children: _pages),
-          const Positioned(top: 0, right: 0, child: SafeArea(child: _ShellSyncBadge())),
+          const Positioned(
+            top: 0,
+            right: 0,
+            child: SafeArea(child: _ShellSyncBadge()),
+          ),
         ],
       ),
     );
@@ -120,7 +149,11 @@ class _ShellSyncBadge extends StatelessWidget {
             scheme.errorContainer,
             scheme.onErrorContainer,
           ),
-          SyncStatus.idle => (Icons.cloud_done, scheme.surface, scheme.onSurface),
+          SyncStatus.idle => (
+            Icons.cloud_done,
+            scheme.surface,
+            scheme.onSurface,
+          ),
         };
 
         return Padding(
