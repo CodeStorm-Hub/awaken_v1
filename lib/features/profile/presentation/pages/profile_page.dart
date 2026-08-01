@@ -222,22 +222,18 @@ class ProfilePage extends StatelessWidget {
                                           ),
                                         ),
                                       ),
-                                      onPressed: () => showDialog<void>(
-                                        context: context,
-                                        builder: (_) => const AuthDialog(
-                                          mode: AuthDialogMode.link,
-                                        ),
+                                      onPressed: () => AuthDialog.show(
+                                        context,
+                                        mode: AuthDialogMode.link,
                                       ),
-                                      child: const Text('Migrate to cloud'),
+                                      child: const Text('Save progress to cloud'),
                                     ),
                                   ),
                                   Center(
                                     child: TextButton(
-                                      onPressed: () => showDialog<void>(
-                                        context: context,
-                                        builder: (_) => const AuthDialog(
-                                          mode: AuthDialogMode.signIn,
-                                        ),
+                                      onPressed: () => AuthDialog.show(
+                                        context,
+                                        mode: AuthDialogMode.signIn,
                                       ),
                                       child: const Text(
                                         'Already have an account? Sign in',

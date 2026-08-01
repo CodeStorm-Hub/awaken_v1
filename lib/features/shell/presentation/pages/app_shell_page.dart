@@ -69,10 +69,7 @@ class _AppShellPageState extends State<AppShellPage> {
       final user = Supabase.instance.client.auth.currentUser;
       final isGuest = user == null || user.isAnonymous;
       if (isGuest) {
-        showDialog<void>(
-          context: context,
-          builder: (_) => const AuthDialog(mode: AuthDialogMode.link),
-        );
+        AuthDialog.show(context, mode: AuthDialogMode.link);
         return;
       }
     }
