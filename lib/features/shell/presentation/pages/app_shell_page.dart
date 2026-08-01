@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
@@ -6,6 +7,7 @@ import '../../../../sync/outbox/sync_worker.dart';
 import '../../../../sync/sync_status.dart';
 import '../../../alarm/presentation/pages/alarm_list_page.dart';
 import '../../../home/presentation/pages/home_page.dart';
+import '../../../profile/presentation/widgets/auth_dialog.dart';
 import '../../../squad/presentation/pages/squad_page.dart';
 import '../../../territory/presentation/pages/territory_page.dart';
 
@@ -63,6 +65,17 @@ class _AppShellPageState extends State<AppShellPage> {
   ];
 
   void _goTo(int index) {
+    if (index == _territoryTabIndex || index == 3) {
+      final user = Supabase.instance.client.auth.currentUser;
+      final isGuest = user == null || user.isAnonymous;
+      if (isGuest) {
+        showDialog<void>(
+          context: context,
+          builder: (_) => const AuthDialog(mode: AuthDialogMode.link),
+        );
+        return;
+      }
+    }
     setState(() => _index = index);
     _isTerritoryTabActive.value = index == _territoryTabIndex;
   }

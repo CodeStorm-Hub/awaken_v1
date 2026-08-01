@@ -77,11 +77,15 @@ class _ActiveRunView extends StatefulWidget {
 class _ActiveRunViewState extends State<_ActiveRunView> {
   MapLibreMapController? _controller;
   bool _styleLoaded = false;
+  static const _activeUserLocationSourceId = 'awaken-active-user-location-source';
+  static const _activeUserLocationPulseLayerId = 'awaken-active-user-location-pulse';
+  static const _activeUserLocationOuterLayerId = 'awaken-active-user-location-outer';
+  static const _activeUserLocationInnerLayerId = 'awaken-active-user-location-inner';
+  bool _activeUserLocationLayerReady = false;
+  LatLng? _lastPosition;
+
   Line? _routeLine;
   Circle? _startMarker;
-  /// "3D puck" avatar (replaces the old flat `Circle` blue dot) — see
-  /// `TerritoryMapStyle.generateAvatarPuckIconBytes`'s doc comment.
-  Symbol? _currentMarker;
   bool _avatarIconRegistered = false;
   int _syncedPointCount = 0;
   bool _autoFollow = true;
@@ -138,8 +142,8 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
     // view, so the whole route must be re-synced onto the fresh one.
     _routeLine = null;
     _startMarker = null;
-    _currentMarker = null;
     _avatarIconRegistered = false;
+    _activeUserLocationLayerReady = false;
     _syncedPointCount = 0;
     _styleLoaded = false;
     _territoryContextLayerReady = false;
@@ -178,7 +182,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
       if (!_avatarIconRegistered) {
         try {
           final bytes = await TerritoryMapStyle.generateAvatarPuckIconBytes(
-            color: Theme.of(context).colorScheme.primary,
+            color: const Color(0xFF00E5FF),
           );
           await controller.addImage(
             TerritoryMapStyle.avatarPuckIconNamePrefix,
@@ -196,7 +200,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
       // `_autoFollow` branch) hasn't arrived yet. Only while no route point
       // has been drawn yet, so this never fights a live run already in
       // progress after a style-tier fallback swap.
-      if (widget.focusLocation != null && _currentMarker == null) {
+      if (widget.focusLocation != null && _lastPosition == null) {
         await controller.animateCamera(
           _cameraUpdateFor(widget.focusLocation!),
         );
@@ -322,6 +326,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
       for (final p in points) TerritoryMapStyle.trackPointToLatLng(p),
     ];
     final current = latLngPoints.last;
+    _lastPosition = current;
 
     _startMarker ??= await controller.addCircle(
       CircleOptions(
@@ -333,22 +338,62 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
       ),
     );
 
-    if (_currentMarker == null) {
-      if (_avatarIconRegistered) {
-        _currentMarker = await controller.addSymbol(
-          SymbolOptions(
-            geometry: current,
-            iconImage: TerritoryMapStyle.avatarPuckIconNamePrefix,
-            iconSize: 0.34,
-            iconAnchor: 'center',
+    final locationGeojson = {
+      'type': 'FeatureCollection',
+      'features': [
+        {
+          'type': 'Feature',
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [current.longitude, current.latitude],
+          },
+        },
+      ],
+    };
+
+    if (!_activeUserLocationLayerReady) {
+      try {
+        await controller.addSource(
+          _activeUserLocationSourceId,
+          GeojsonSourceProperties(data: locationGeojson),
+        );
+        await controller.addCircleLayer(
+          _activeUserLocationSourceId,
+          _activeUserLocationPulseLayerId,
+          const CircleLayerProperties(
+            circleRadius: 18,
+            circleColor: '#00E5FF',
+            circleOpacity: 0.18,
+            circlePitchAlignment: 'viewport',
           ),
         );
-      }
+        await controller.addCircleLayer(
+          _activeUserLocationSourceId,
+          _activeUserLocationOuterLayerId,
+          const CircleLayerProperties(
+            circleRadius: 9,
+            circleColor: '#FFFFFF',
+            circlePitchAlignment: 'viewport',
+          ),
+        );
+        await controller.addCircleLayer(
+          _activeUserLocationSourceId,
+          _activeUserLocationInnerLayerId,
+          const CircleLayerProperties(
+            circleRadius: 6.5,
+            circleColor: '#00E5FF',
+            circlePitchAlignment: 'viewport',
+          ),
+        );
+        _activeUserLocationLayerReady = true;
+      } catch (_) {}
     } else {
-      await controller.updateSymbol(
-        _currentMarker!,
-        SymbolOptions(geometry: current),
-      );
+      try {
+        await controller.setGeoJsonSource(
+          _activeUserLocationSourceId,
+          locationGeojson,
+        );
+      } catch (_) {}
     }
 
     if (latLngPoints.length >= 2) {
@@ -377,9 +422,9 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
   Future<void> _recenter() async {
     final controller = _controller;
     setState(() => _autoFollow = true);
-    if (controller == null || _currentMarker == null) return;
+    if (controller == null || _lastPosition == null) return;
     await controller.animateCamera(
-      _cameraUpdateFor(_currentMarker!.options.geometry!),
+      _cameraUpdateFor(_lastPosition!),
     );
   }
 
@@ -471,7 +516,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
       // detached modal. Closer zoom + steeper tilt than the run's normal
       // follow camera; best-effort (a run's capture must never fail because
       // a camera animation did) and only when a position is actually known.
-      final captureLocation = _currentMarker?.options.geometry;
+      final captureLocation = _lastPosition;
       if (captureLocation != null) {
         try {
           // `easeCamera` + `easeOut` (not `animateCamera`, which has no

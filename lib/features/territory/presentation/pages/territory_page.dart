@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
     show HapticFeedback, MissingPluginException, PlatformException;
 import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
@@ -13,6 +14,7 @@ import '../../../../core/theme/motion_tokens.dart';
 import '../../../../core/theme/semantic_colors.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
+import '../widgets/territory_gate_card.dart';
 import '../../../squad/domain/entities/squad.dart';
 import '../../../squad/domain/entities/squad_presence_member.dart';
 import '../../../squad/domain/entities/territory_capture_feed_item.dart';
@@ -480,29 +482,75 @@ class _TerritoryPageState extends State<TerritoryPage> {
     }
   }
 
-  /// "3D puck" avatar (replaces the old flat `Circle` dot) — a `Symbol`
-  /// annotation using `TerritoryMapStyle.avatarPuckIconNamePrefix`, a
-  /// runtime-rendered icon baked with the theme's `primary` color (see
-  /// `_avatarIconRegistered`).
-  Symbol? _positionMarker;
+  static const _userLocationSourceId = 'awaken-user-location-source';
+  static const _userLocationPulseLayerId = 'awaken-user-location-pulse';
+  static const _userLocationOuterLayerId = 'awaken-user-location-outer';
+  static const _userLocationInnerLayerId = 'awaken-user-location-inner';
+  bool _userLocationLayerReady = false;
 
   Future<void> _syncCurrentPositionMarker() async {
     final controller = _controller;
-    if (controller == null || !_hasFix || !_avatarIconRegistered) return;
-    if (_positionMarker == null) {
-      _positionMarker = await controller.addSymbol(
-        SymbolOptions(
-          geometry: _center,
-          iconImage: TerritoryMapStyle.avatarPuckIconNamePrefix,
-          iconSize: 0.34,
-          iconAnchor: 'center',
-        ),
-      );
+    if (controller == null || !_hasFix || !_styleReady) return;
+
+    final geojson = {
+      'type': 'FeatureCollection',
+      'features': [
+        {
+          'type': 'Feature',
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [_center.longitude, _center.latitude],
+          },
+        },
+      ],
+    };
+
+    if (!_userLocationLayerReady) {
+      try {
+        await controller.addSource(
+          _userLocationSourceId,
+          GeojsonSourceProperties(data: geojson),
+        );
+        // Precision pulse aura ring — subtle, elegant
+        await controller.addCircleLayer(
+          _userLocationSourceId,
+          _userLocationPulseLayerId,
+          const CircleLayerProperties(
+            circleRadius: 18,
+            circleColor: '#00E5FF',
+            circleOpacity: 0.18,
+            circlePitchAlignment: 'viewport',
+          ),
+        );
+        // Crisp white outer rim
+        await controller.addCircleLayer(
+          _userLocationSourceId,
+          _userLocationOuterLayerId,
+          const CircleLayerProperties(
+            circleRadius: 9,
+            circleColor: '#FFFFFF',
+            circlePitchAlignment: 'viewport',
+          ),
+        );
+        // Electric cyan inner core puck
+        await controller.addCircleLayer(
+          _userLocationSourceId,
+          _userLocationInnerLayerId,
+          const CircleLayerProperties(
+            circleRadius: 6.5,
+            circleColor: '#00E5FF',
+            circlePitchAlignment: 'viewport',
+          ),
+        );
+        _userLocationLayerReady = true;
+      } catch (_) {}
     } else {
-      await controller.updateSymbol(
-        _positionMarker!,
-        SymbolOptions(geometry: _center),
-      );
+      try {
+        await controller.setGeoJsonSource(
+          _userLocationSourceId,
+          geojson,
+        );
+      } catch (_) {}
     }
   }
 
@@ -523,17 +571,12 @@ class _TerritoryPageState extends State<TerritoryPage> {
     _flagsLayerReady = false;
     _flagIconRegistered = false;
     _avatarIconRegistered = false;
+    _userLocationLayerReady = false;
     _styleReady = false;
     _pulseTimer?.cancel();
     _pulseTimer = null;
     _antPathTimer?.cancel();
     _antPathTimer = null;
-    // Missed here previously: the marker handle from before the swap also
-    // belongs to the now-destroyed view, so `_syncCurrentPositionMarker`'s
-    // `updateCircle` on the stale handle silently no-oped against the new
-    // one — the blue position dot never reappeared after a style-tier
-    // fallback, even though fills/bounty zones correctly redrew.
-    _positionMarker = null;
     _controller = controller;
     _styleLoader.start();
   }
@@ -555,7 +598,6 @@ class _TerritoryPageState extends State<TerritoryPage> {
       // and must re-run on every style (re)load, including a fallback-tier
       // swap, since that's a brand new native view with the recolor undone.
       final isDark = mounted && Theme.of(context).brightness == Brightness.dark;
-      final primaryColor = Theme.of(context).colorScheme.primary;
       unawaited(TerritoryBasemapRecolor.apply(controller, isDark: isDark));
       // Real 3D city buildings (§5.1) — skipped on the bundled offline
       // fallback tier, which is a minimal low-zoom (z0-6) extract with no
@@ -586,7 +628,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
       if (!_avatarIconRegistered) {
         try {
           final bytes = await TerritoryMapStyle.generateAvatarPuckIconBytes(
-            color: primaryColor,
+            color: const Color(0xFF00E5FF),
           );
           await controller.addImage(
             TerritoryMapStyle.avatarPuckIconNamePrefix,
@@ -1794,6 +1836,18 @@ class _TerritoryPageState extends State<TerritoryPage> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    final isGuest = currentUser == null || currentUser.isAnonymous;
+
+    if (isGuest) {
+      return Scaffold(
+        backgroundColor: scheme.surface,
+        body: const SafeArea(
+          child: TerritoryGateCard(),
+        ),
+      );
+    }
+
     final topPadding = MediaQuery.of(context).padding.top;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 

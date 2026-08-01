@@ -326,8 +326,8 @@ abstract final class TerritoryMapStyle {
   /// terrain), so this is the same trick [generateFlagIconBytes] uses: a
   /// flat baked PNG that *reads* as dimensional rather than an actual mesh.
   static Future<Uint8List> generateAvatarPuckIconBytes({
-    required ui.Color color,
-    int size = 144,
+    ui.Color color = const ui.Color(0xFF00E5FF),
+    int size = 192,
   }) async {
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(
@@ -335,67 +335,49 @@ abstract final class TerritoryMapStyle {
       ui.Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble()),
     );
     final s = size.toDouble();
-    final center = ui.Offset(s / 2, s * 0.44);
-    final radius = s * 0.30;
+    final center = ui.Offset(s / 2, s / 2);
+    final radius = s * 0.28;
 
-    // Soft ground shadow — sells "resting on the map," not floating.
+    // 1. Outer Glowing Pulsing Aura (Cyan Glow)
+    final auraPaint = ui.Paint()
+      ..color = const ui.Color(0x6600E5FF)
+      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 14);
+    canvas.drawCircle(center, radius * 1.55, auraPaint);
+
+    // 2. Soft Drop Shadow
     final shadowPaint = ui.Paint()
-      ..color = const ui.Color(0x662B2B2B)
-      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 7);
-    canvas.drawOval(
-      ui.Rect.fromCenter(
-        center: ui.Offset(s / 2, s * 0.87),
-        width: s * 0.48,
-        height: s * 0.14,
-      ),
-      shadowPaint,
-    );
+      ..color = const ui.Color(0xAA000000)
+      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 8);
+    canvas.drawCircle(center + const ui.Offset(0, 4), radius * 1.25, shadowPaint);
 
-    // White contrast halo — keeps the puck legible over any basemap color.
-    // Noticeably thicker than the first pass (0.055 -> 0.11): at typical
-    // on-map render size the earlier ring was too thin to register as a
-    // deliberate rim, reading as a plain flat dot (found via on-device
-    // zoom-in review).
+    // 3. Thick Pure-White Contrast Outer Ring
     canvas.drawCircle(
       center,
-      radius + s * 0.11,
+      radius * 1.22,
       ui.Paint()..color = const ui.Color(0xFFFFFFFF),
     );
-    // Faint outer edge on the halo itself, for definition against a light
-    // basemap where a pure-white ring can otherwise blend into the ground.
-    canvas.drawCircle(
-      center,
-      radius + s * 0.11,
-      ui.Paint()
-        ..color = const ui.Color(0x33000000)
-        ..style = ui.PaintingStyle.stroke
-        ..strokeWidth = s * 0.012,
-    );
 
-    // Puck body.
+    // 4. Vibrant Electric Cyan Primary Puck Body
     canvas.drawCircle(center, radius, ui.Paint()..color = color);
 
-    // Bottom-edge shading crescent, for a lit-sphere look. Stronger than the
-    // first pass (0x30 -> 0x55 alpha) for the same too-subtle-at-scale
-    // reason as the halo above.
+    // 5. Lit Sphere Bottom Shading Crescent
     canvas.drawArc(
-      ui.Rect.fromCircle(center: center, radius: radius * 0.72),
-      0.15 * math.pi,
-      0.85 * math.pi,
+      ui.Rect.fromCircle(center: center, radius: radius * 0.85),
+      0.1 * math.pi,
+      0.9 * math.pi,
       false,
       ui.Paint()
-        ..color = const ui.Color(0x55000000)
+        ..color = const ui.Color(0x44000000)
         ..style = ui.PaintingStyle.stroke
-        ..strokeWidth = radius * 0.6
+        ..strokeWidth = radius * 0.4
         ..strokeCap = ui.StrokeCap.round,
     );
 
-    // Specular highlight, upper-left — brighter (0x70 -> 0xA5) so the
-    // "lit sphere" read survives being scaled down to marker size.
+    // 6. Bright 3D Specular Gem Highlight (Upper-Left)
     canvas.drawCircle(
-      ui.Offset(center.dx - radius * 0.32, center.dy - radius * 0.34),
-      radius * 0.4,
-      ui.Paint()..color = const ui.Color(0xA5FFFFFF),
+      ui.Offset(center.dx - radius * 0.35, center.dy - radius * 0.35),
+      radius * 0.38,
+      ui.Paint()..color = const ui.Color(0xEEFFFFFF),
     );
 
     final picture = recorder.endRecording();

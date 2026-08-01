@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
@@ -660,6 +661,9 @@ class _QuickActionsPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final user = Supabase.instance.client.auth.currentUser;
+    final isGuest = user == null || user.isAnonymous;
+
     return Row(
       children: [
         Expanded(
@@ -674,10 +678,10 @@ class _QuickActionsPill extends StatelessWidget {
               ),
             ),
             onPressed: onOpenTerritory,
-            icon: const Icon(Icons.directions_run, size: 18),
-            label: const Text(
-              'Start run',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            icon: Icon(isGuest ? Icons.lock_outline : Icons.directions_run, size: 18),
+            label: Text(
+              isGuest ? 'Unlock Run' : 'Start run',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ),
         ),
@@ -694,10 +698,10 @@ class _QuickActionsPill extends StatelessWidget {
               ),
             ),
             onPressed: onOpenSquad,
-            icon: const Icon(Icons.groups, size: 18),
-            label: const Text(
-              'Squad',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            icon: Icon(isGuest ? Icons.lock_outline : Icons.groups, size: 18),
+            label: Text(
+              isGuest ? 'Unlock Squad' : 'Squad',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ),
         ),
