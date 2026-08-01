@@ -661,8 +661,13 @@ class _QuickActionsPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final user = Supabase.instance.client.auth.currentUser;
-    final isGuest = user == null || user.isAnonymous;
+    bool isGuest = false;
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      isGuest = user == null || user.isAnonymous;
+    } catch (_) {
+      isGuest = false;
+    }
 
     return Row(
       children: [

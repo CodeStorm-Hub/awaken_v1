@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -74,7 +75,8 @@ class _ActiveRunView extends StatefulWidget {
   State<_ActiveRunView> createState() => _ActiveRunViewState();
 }
 
-class _ActiveRunViewState extends State<_ActiveRunView> {
+class _ActiveRunViewState extends State<_ActiveRunView>
+    with SingleTickerProviderStateMixin {
   MapLibreMapController? _controller;
   bool _styleLoaded = false;
   static const _activeUserLocationSourceId = 'awaken-active-user-location-source';
@@ -91,6 +93,9 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
   bool _autoFollow = true;
   bool _busy = false;
   ColorScheme? _scheme;
+
+  AnimationController? _locationAnimController;
+  LatLng? _previousLocation;
 
   // Minimal territory context (territory map 3D redesign §5.4) — a plain
   // fill overlay of whatever owned/rival territory rows are already cached
@@ -112,6 +117,22 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
   );
 
   @override
+  void initState() {
+    super.initState();
+    _locationAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..addListener(() {
+        if (_previousLocation != null && _lastPosition != null) {
+          final t = _locationAnimController!.value;
+          final lat = lerpDouble(_previousLocation!.latitude, _lastPosition!.latitude, t)!;
+          final lng = lerpDouble(_previousLocation!.longitude, _lastPosition!.longitude, t)!;
+          unawaited(_updateMarkerLocation(LatLng(lat, lng)));
+        }
+      });
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _scheme = Theme.of(context).colorScheme;
@@ -124,6 +145,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
 
   @override
   void dispose() {
+    _locationAnimController?.dispose();
     unawaited(_territoriesSub?.cancel());
     _styleLoader.dispose();
     super.dispose();
@@ -326,7 +348,9 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
       for (final p in points) TerritoryMapStyle.trackPointToLatLng(p),
     ];
     final current = latLngPoints.last;
+    _previousLocation = _lastPosition ?? current;
     _lastPosition = current;
+    unawaited(_locationAnimController?.forward(from: 0.0));
 
     _startMarker ??= await controller.addCircle(
       CircleOptions(
@@ -338,6 +362,47 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
       ),
     );
 
+    if (latLngPoints.length >= 2) {
+      if (_routeLine == null) {
+        _routeLine = await controller.addLine(
+          LineOptions(
+            geometry: latLngPoints,
+            lineColor: _colorToHex(scheme.primary),
+            lineWidth: 4,
+          ),
+        );
+      } else {
+        await controller.updateLine(
+          _routeLine!,
+          LineOptions(geometry: latLngPoints),
+        );
+      }
+    }
+
+    if (_autoFollow) {
+      await controller.animateCamera(_cameraUpdateFor(current));
+    }
+    unawaited(_refreshNearbyTerritories(current));
+  }
+
+  Future<void> _recenter() async {
+    setState(() {
+      _autoFollow = true;
+    });
+    unawaited(_recenterCamera());
+  }
+
+  Future<void> _recenterCamera() async {
+    final controller = _controller;
+    if (controller == null || _lastPosition == null) return;
+    await controller.animateCamera(
+      _cameraUpdateFor(_lastPosition!),
+    );
+  }
+
+  Future<void> _updateMarkerLocation(LatLng pos) async {
+    final controller = _controller;
+    if (controller == null || !_styleLoaded) return;
     final locationGeojson = {
       'type': 'FeatureCollection',
       'features': [
@@ -345,7 +410,7 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
           'type': 'Feature',
           'geometry': {
             'type': 'Point',
-            'coordinates': [current.longitude, current.latitude],
+            'coordinates': [pos.longitude, pos.latitude],
           },
         },
       ],
@@ -395,37 +460,6 @@ class _ActiveRunViewState extends State<_ActiveRunView> {
         );
       } catch (_) {}
     }
-
-    if (latLngPoints.length >= 2) {
-      if (_routeLine == null) {
-        _routeLine = await controller.addLine(
-          LineOptions(
-            geometry: latLngPoints,
-            lineColor: _colorToHex(scheme.primary),
-            lineWidth: 4,
-          ),
-        );
-      } else {
-        await controller.updateLine(
-          _routeLine!,
-          LineOptions(geometry: latLngPoints),
-        );
-      }
-    }
-
-    if (_autoFollow) {
-      await controller.animateCamera(_cameraUpdateFor(current));
-    }
-    unawaited(_refreshNearbyTerritories(current));
-  }
-
-  Future<void> _recenter() async {
-    final controller = _controller;
-    setState(() => _autoFollow = true);
-    if (controller == null || _lastPosition == null) return;
-    await controller.animateCamera(
-      _cameraUpdateFor(_lastPosition!),
-    );
   }
 
   /// Territory map 3D redesign §5.4: the live-run map defaults to a tilted

@@ -750,7 +750,7 @@ abstract final class TerritoryBasemapRecolor {
           fillExtrusionHeight: const ['get', 'render_height'],
         ),
         sourceLayer: _buildingSourceLayer,
-        minzoom: 14,
+        minzoom: 14.5,
       );
     } catch (_) {
       // Best-effort — a tier whose vector source doesn't actually carry a

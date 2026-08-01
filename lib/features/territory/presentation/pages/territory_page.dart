@@ -65,7 +65,11 @@ class TerritoryPage extends StatefulWidget {
   State<TerritoryPage> createState() => _TerritoryPageState();
 }
 
-class _TerritoryPageState extends State<TerritoryPage> {
+class _TerritoryPageState extends State<TerritoryPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   MapLibreMapController? _controller;
   StreamSubscription<List<Territory>>? _territoriesSub;
   List<Territory> _lastTerritories = const [];
@@ -354,16 +358,20 @@ class _TerritoryPageState extends State<TerritoryPage> {
     setState(() {
       _isMapActive = active;
       if (!active) {
-        // Mirrors `_onMapCreated`'s reset — the controller/timers are about
-        // to belong to a view `build()` is no longer going to construct.
         _pulseTimer?.cancel();
         _pulseTimer = null;
         _antPathTimer?.cancel();
         _antPathTimer = null;
         _bboxRefreshDebounceTimer?.cancel();
-        _controller = null;
-        _styleReady = false;
-        _territoryLayersReady = false;
+        _territoriesSub?.pause();
+        _squadSub?.pause();
+        _presenceSub?.pause();
+      } else {
+        _territoriesSub?.resume();
+        _squadSub?.resume();
+        _presenceSub?.resume();
+        _scheduleRefreshForCurrentView();
+        unawaited(_redrawFills());
       }
     });
   }
@@ -955,6 +963,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
             16,
           ],
         ),
+        minzoom: 14.5,
       );
       await controller.addLineLayer(
         _territorySourceId,
@@ -1835,6 +1844,7 @@ class _TerritoryPageState extends State<TerritoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final scheme = Theme.of(context).colorScheme;
     final currentUser = Supabase.instance.client.auth.currentUser;
     final isGuest = currentUser == null || currentUser.isAnonymous;
@@ -1870,30 +1880,32 @@ class _TerritoryPageState extends State<TerritoryPage> {
                   '${_atRisk.length == 1 ? 'territory' : 'territories'} '
                   'undefended.'
                   '${_currentRival != null ? ' Recent rival activity nearby.' : ''}',
-              child: !_isMapActive
-                  ? ColoredBox(color: scheme.surface)
-                  : RepaintBoundary(
-                      child: MapLibreMap(
-                        key: _styleLoader.styleKey,
-                        styleString: _styleLoader.styleString,
-                        // Tilted from the very first frame (§5.3: 3D is the default
-                        // visual language, not a hidden toggle) — `_locateSelf`/
-                        // `_onStyleLoaded` re-apply this same tilt once a real GPS
-                        // fix/style load lands, via `_cameraUpdateForFocus`.
-                        initialCameraPosition: const CameraPosition(
-                          target: LatLng(20, 0),
-                          zoom: 2,
-                          tilt: 45,
-                        ),
-                        onMapCreated: _onMapCreated,
-                        onStyleLoadedCallback: _onStyleLoaded,
-                        onCameraMove: (_) {
-                          if (!_cameraMoving) _cameraMoving = true;
-                        },
-                        onCameraIdle: () {
-                          _cameraMoving = false;
-                          _scheduleRefreshForCurrentView();
-                        },
+              child: TickerMode(
+                enabled: _isMapActive,
+                child: Offstage(
+                  offstage: !_isMapActive,
+                  child: RepaintBoundary(
+                    child: MapLibreMap(
+                      key: _styleLoader.styleKey,
+                      styleString: _styleLoader.styleString,
+                      // Tilted from the very first frame (§5.3: 3D is the default
+                      // visual language, not a hidden toggle) — `_locateSelf`/
+                      // `_onStyleLoaded` re-apply this same tilt once a real GPS
+                      // fix/style load lands, via `_cameraUpdateForFocus`.
+                      initialCameraPosition: const CameraPosition(
+                        target: LatLng(20, 0),
+                        zoom: 2,
+                        tilt: 45,
+                      ),
+                      onMapCreated: _onMapCreated,
+                      onStyleLoadedCallback: _onStyleLoaded,
+                      onCameraMove: (_) {
+                        if (!_cameraMoving) _cameraMoving = true;
+                      },
+                      onCameraIdle: () {
+                        _cameraMoving = false;
+                        _scheduleRefreshForCurrentView();
+                      },
                         onMapClick: _onMapTapped,
                         onMapLongClick: _onMapLongTapped,
                         compassEnabled: false,
@@ -1906,6 +1918,8 @@ class _TerritoryPageState extends State<TerritoryPage> {
                         trackCameraPosition: false,
                       ),
                     ),
+                  ),
+                ),
             ),
           ),
 
