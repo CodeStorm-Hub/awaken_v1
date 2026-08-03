@@ -18,7 +18,7 @@ if (hasReleaseSigning) {
 }
 
 android {
-    namespace = "com.awaken.awaken"
+    namespace = "com.awaken.alarm.v1"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -33,11 +33,11 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.awaken.awaken"
+        applicationId = "com.awaken.alarm.v1"
         // minSdk 26: ML Kit pose detection and full-screen-intent alarm behavior
         // are not worth supporting below Android 8.0 (see awaken_app_refined_plan.md §4).
         minSdk = 26
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

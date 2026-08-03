@@ -1,7 +1,7 @@
 name: awaken
 description: "Awaken — gamified alarm and fitness app with territory capture."
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.1.0+2
 
 environment:
   sdk: ^3.12.2
@@ -87,7 +87,7 @@ dev_dependencies:
   # run_tracking_repository_impl_test.dart (raw platform-channel calls have
   # nothing to answer them under plain `flutter test`).
   wakelock_plus_platform_interface: ^1.6.0
-
+  flutter_launcher_icons: ^0.13.1
 flutter:
   uses-material-design: true
   generate: true
@@ -95,3 +95,10 @@ flutter:
     - .env.client
     - assets/e2e/scripted_run_fixture.json
     - assets/map/fallback_style.json
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/app_icon.jpg"
+  adaptive_icon_background: "#22272d" # Exact dark background color from the logo
+  adaptive_icon_foreground: "assets/icon/app_icon_adaptive_fg.png"

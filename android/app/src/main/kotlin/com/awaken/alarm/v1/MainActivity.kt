@@ -1,4 +1,4 @@
-package com.awaken.awaken
+package com.awaken.alarm.v1
 
 import android.app.AlarmManager
 import android.app.KeyguardManager
