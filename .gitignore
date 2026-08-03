@@ -52,6 +52,7 @@ app.*.map.json
 .env.*
 !.env.example
 !.env.client.example
+!.env.client
 
 # Claude Code local settings
 .claude/settings.local.json
