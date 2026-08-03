@@ -53,6 +53,22 @@ void main() {
       expect(next.weekday, DateTime.sunday);
     });
 
+    test('same-day repair: returns today when today is a recurring day and '
+        "today's slot is still ahead of \"from\"", () {
+      // 2026-07-19 is a Sunday. Alarm fires at 07:00; app relaunches at
+      // 06:00 the same day (e.g. crash recovery before the slot fired) —
+      // must pick today 07:00, not skip a week ahead.
+      final alarm = AlarmSchedule(
+        id: 'a',
+        scheduledTime: DateTime(2026, 7, 19, 7),
+        exerciseMode: ExerciseMode.squat,
+        requiredReps: 20,
+        recurringDays: {DateTime.sunday},
+      );
+      final next = alarm.nextOccurrenceAfter(DateTime(2026, 7, 19, 6));
+      expect(next, DateTime(2026, 7, 19, 7));
+    });
+
     test('isRecurring reflects recurringDays', () {
       final oneShot = AlarmSchedule(
         id: 'a',

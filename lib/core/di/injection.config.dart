@@ -21,13 +21,18 @@ import '../../features/alarm/data/repositories/alarm_repository_impl.dart'
 import '../../features/alarm/domain/repositories/alarm_repository.dart'
     as _i1014;
 import '../../features/alarm/domain/usecases/cancel_alarm.dart' as _i915;
+import '../../features/alarm/domain/usecases/cancel_all_alarms.dart' as _i971;
 import '../../features/alarm/domain/usecases/complete_alarm_workout.dart'
     as _i738;
 import '../../features/alarm/domain/usecases/dismiss_alarm.dart' as _i735;
+import '../../features/alarm/domain/usecases/engage_alarm_lockdown.dart'
+    as _i830;
 import '../../features/alarm/domain/usecases/rearm_alarms_from_cache.dart'
     as _i278;
 import '../../features/alarm/domain/usecases/reconcile_recurring_alarms.dart'
     as _i273;
+import '../../features/alarm/domain/usecases/release_alarm_lockdown.dart'
+    as _i1042;
 import '../../features/alarm/domain/usecases/schedule_alarm.dart' as _i528;
 import '../../features/alarm/domain/usecases/set_alarm_active.dart' as _i1064;
 import '../../features/alarm/domain/usecases/watch_alarms.dart' as _i396;
@@ -43,6 +48,7 @@ import '../../features/home/domain/repositories/home_activity_repository.dart'
     as _i468;
 import '../../features/home/domain/usecases/watch_recent_activity.dart'
     as _i135;
+import '../../features/home/presentation/bloc/home_cubit.dart' as _i816;
 import '../../features/onboarding/data/datasources/onboarding_local_datasource.dart'
     as _i804;
 import '../../features/onboarding/data/repositories/battery_exemption_repository_impl.dart'
@@ -83,15 +89,29 @@ import '../../features/profile/domain/usecases/sign_in_with_google.dart'
 import '../../features/profile/domain/usecases/sign_in_with_password.dart'
     as _i224;
 import '../../features/profile/domain/usecases/sign_out.dart' as _i487;
+import '../../features/profile/domain/usecases/update_display_name.dart'
+    as _i28;
 import '../../features/profile/domain/usecases/watch_current_user.dart'
     as _i560;
+import '../../features/profile/presentation/bloc/profile_cubit.dart' as _i800;
 import '../../features/squad/data/datasources/squad_remote_datasource.dart'
     as _i654;
+import '../../features/squad/data/datasources/weekly_reset_local_datasource.dart'
+    as _i564;
 import '../../features/squad/data/repositories/squad_repository_impl.dart'
     as _i235;
 import '../../features/squad/domain/repositories/squad_repository.dart'
     as _i1051;
 import '../../features/squad/domain/usecases/create_squad.dart' as _i134;
+import '../../features/squad/domain/usecases/get_global_leaderboard.dart'
+    as _i752;
+import '../../features/squad/domain/usecases/get_my_leaderboard_rank.dart'
+    as _i113;
+import '../../features/squad/domain/usecases/get_my_squad_rank.dart' as _i771;
+import '../../features/squad/domain/usecases/get_nearby_leaderboard.dart'
+    as _i966;
+import '../../features/squad/domain/usecases/get_recent_territory_captures.dart'
+    as _i418;
 import '../../features/squad/domain/usecases/join_squad.dart' as _i36;
 import '../../features/squad/domain/usecases/leave_squad.dart' as _i769;
 import '../../features/squad/domain/usecases/watch_leaderboard.dart' as _i670;
@@ -104,6 +124,8 @@ import '../../features/territory/data/datasources/location_provider_factory.dart
     as _i427;
 import '../../features/territory/data/datasources/run_foreground_service.dart'
     as _i862;
+import '../../features/territory/data/datasources/run_progress_remote_datasource.dart'
+    as _i563;
 import '../../features/territory/data/datasources/territory_remote_datasource.dart'
     as _i246;
 import '../../features/territory/data/repositories/run_tracking_repository_impl.dart'
@@ -116,6 +138,14 @@ import '../../features/territory/domain/repositories/territory_repository.dart'
     as _i706;
 import '../../features/territory/domain/usecases/abandon_run.dart' as _i773;
 import '../../features/territory/domain/usecases/capture_run.dart' as _i125;
+import '../../features/territory/domain/usecases/get_active_bounty_zones.dart'
+    as _i412;
+import '../../features/territory/domain/usecases/get_current_position.dart'
+    as _i740;
+import '../../features/territory/domain/usecases/get_current_rival.dart'
+    as _i553;
+import '../../features/territory/domain/usecases/get_territories_at_risk.dart'
+    as _i143;
 import '../../features/territory/domain/usecases/refresh_territories.dart'
     as _i490;
 import '../../features/territory/domain/usecases/start_run.dart' as _i592;
@@ -169,6 +199,9 @@ _i174.GetIt init(
   gh.lazySingleton<_i804.OnboardingLocalDataSource>(
     () => _i804.OnboardingLocalDataSource(),
   );
+  gh.lazySingleton<_i564.WeeklyResetLocalDataSource>(
+    () => _i564.WeeklyResetLocalDataSource(),
+  );
   gh.lazySingleton<_i862.RunForegroundService>(
     () => _i862.RunForegroundService(),
   );
@@ -182,12 +215,8 @@ _i174.GetIt init(
   gh.lazySingleton<_i427.LocationProviderFactory>(
     () => _i427.GeolocatorLocationProviderFactory(),
   );
-  gh.lazySingleton<_i666.SyncWorker>(
-    () => _i666.SyncWorker(
-      gh<_i90.AppDatabase>(),
-      gh<_i454.SupabaseClient>(),
-      gh<_i1036.ConnectivityWatcher>(),
-    ),
+  gh.factory<_i563.RunProgressRemoteDataSource>(
+    () => _i563.RunProgressRemoteDataSource(gh<_i454.SupabaseClient>()),
   );
   gh.factory<_i246.TerritoryRemoteDataSource>(
     () => _i246.TerritoryRemoteDataSource(gh<_i454.SupabaseClient>()),
@@ -233,24 +262,17 @@ _i174.GetIt init(
   gh.lazySingleton<_i355.LocalWriter>(
     () => _i355.LocalWriter(gh<_i90.AppDatabase>()),
   );
-  gh.lazySingleton<_i175.RunTrackingRepository>(
-    () => _i501.RunTrackingRepositoryImpl(
-      gh<_i862.RunForegroundService>(),
-      gh<_i355.LocalWriter>(),
-      gh<_i666.SyncWorker>(),
-      gh<_i90.AppDatabase>(),
-      gh<_i427.LocationProviderFactory>(),
-    ),
-  );
   gh.lazySingleton<_i162.BatteryExemptionRepository>(
     () => _i694.BatteryExemptionRepositoryImpl(gh<_i703.SystemCapabilities>()),
   );
-  gh.lazySingleton<_i487.AuthRepository>(
-    () => _i1.AuthRepositoryImpl(
-      gh<_i670.AuthRemoteDataSource>(),
-      gh<_i90.AppDatabase>(),
-      gh<_i1039.PullDownSync>(),
-    ),
+  gh.factory<_i412.GetActiveBountyZones>(
+    () => _i412.GetActiveBountyZones(gh<_i706.TerritoryRepository>()),
+  );
+  gh.factory<_i553.GetCurrentRival>(
+    () => _i553.GetCurrentRival(gh<_i706.TerritoryRepository>()),
+  );
+  gh.factory<_i143.GetTerritoriesAtRisk>(
+    () => _i143.GetTerritoriesAtRisk(gh<_i706.TerritoryRepository>()),
   );
   gh.factory<_i490.RefreshTerritories>(
     () => _i490.RefreshTerritories(gh<_i706.TerritoryRepository>()),
@@ -293,6 +315,21 @@ _i174.GetIt init(
   gh.factory<_i134.CreateSquad>(
     () => _i134.CreateSquad(gh<_i1051.SquadRepository>()),
   );
+  gh.factory<_i752.GetGlobalLeaderboard>(
+    () => _i752.GetGlobalLeaderboard(gh<_i1051.SquadRepository>()),
+  );
+  gh.factory<_i113.GetMyLeaderboardRank>(
+    () => _i113.GetMyLeaderboardRank(gh<_i1051.SquadRepository>()),
+  );
+  gh.factory<_i771.GetMySquadRank>(
+    () => _i771.GetMySquadRank(gh<_i1051.SquadRepository>()),
+  );
+  gh.factory<_i966.GetNearbyLeaderboard>(
+    () => _i966.GetNearbyLeaderboard(gh<_i1051.SquadRepository>()),
+  );
+  gh.factory<_i418.GetRecentTerritoryCaptures>(
+    () => _i418.GetRecentTerritoryCaptures(gh<_i1051.SquadRepository>()),
+  );
   gh.factory<_i36.JoinSquad>(
     () => _i36.JoinSquad(gh<_i1051.SquadRepository>()),
   );
@@ -317,11 +354,55 @@ _i174.GetIt init(
   gh.factory<_i522.MarkOnboardingSeen>(
     () => _i522.MarkOnboardingSeen(gh<_i430.OnboardingRepository>()),
   );
+  gh.lazySingleton<_i666.SyncWorker>(
+    () => _i666.SyncWorker(
+      gh<_i90.AppDatabase>(),
+      gh<_i454.SupabaseClient>(),
+      gh<_i1036.ConnectivityWatcher>(),
+      gh<_i1039.PullDownSync>(),
+    ),
+  );
+  gh.factory<_i135.WatchRecentActivity>(
+    () => _i135.WatchRecentActivity(gh<_i468.HomeActivityRepository>()),
+  );
+  gh.lazySingleton<_i175.RunTrackingRepository>(
+    () => _i501.RunTrackingRepositoryImpl(
+      gh<_i862.RunForegroundService>(),
+      gh<_i355.LocalWriter>(),
+      gh<_i666.SyncWorker>(),
+      gh<_i90.AppDatabase>(),
+      gh<_i427.LocationProviderFactory>(),
+      gh<_i563.RunProgressRemoteDataSource>(),
+    ),
+  );
+  gh.lazySingleton<_i1014.AlarmRepository>(
+    () => _i153.AlarmRepositoryImpl(
+      gh<_i96.AlarmLocalDataSource>(),
+      gh<_i355.LocalWriter>(),
+      gh<_i90.AppDatabase>(),
+      gh<_i959.WakeUpTaxStore>(),
+      gh<_i703.SystemCapabilities>(),
+    ),
+  );
+  gh.factory<_i635.SquadCubit>(
+    () => _i635.SquadCubit(
+      gh<_i871.WatchMySquad>(),
+      gh<_i134.CreateSquad>(),
+      gh<_i36.JoinSquad>(),
+      gh<_i769.LeaveSquad>(),
+      gh<_i670.WatchLeaderboard>(),
+      gh<_i597.WatchSquadPresence>(),
+      gh<_i1051.SquadRepository>(),
+    ),
+  );
   gh.factory<_i773.AbandonRun>(
     () => _i773.AbandonRun(gh<_i175.RunTrackingRepository>()),
   );
   gh.factory<_i125.CaptureRun>(
     () => _i125.CaptureRun(gh<_i175.RunTrackingRepository>()),
+  );
+  gh.factory<_i740.GetCurrentPosition>(
+    () => _i740.GetCurrentPosition(gh<_i175.RunTrackingRepository>()),
   );
   gh.factory<_i592.StartRun>(
     () => _i592.StartRun(gh<_i175.RunTrackingRepository>()),
@@ -329,8 +410,89 @@ _i174.GetIt init(
   gh.factory<_i256.WatchRunState>(
     () => _i256.WatchRunState(gh<_i175.RunTrackingRepository>()),
   );
-  gh.factory<_i135.WatchRecentActivity>(
-    () => _i135.WatchRecentActivity(gh<_i468.HomeActivityRepository>()),
+  gh.factory<_i915.CancelAlarm>(
+    () => _i915.CancelAlarm(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i971.CancelAllAlarms>(
+    () => _i971.CancelAllAlarms(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i738.CompleteAlarmWorkout>(
+    () => _i738.CompleteAlarmWorkout(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i735.DismissAlarm>(
+    () => _i735.DismissAlarm(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i830.EngageAlarmLockdown>(
+    () => _i830.EngageAlarmLockdown(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i278.RearmAlarmsFromCache>(
+    () => _i278.RearmAlarmsFromCache(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i273.ReconcileRecurringAlarms>(
+    () => _i273.ReconcileRecurringAlarms(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i1042.ReleaseAlarmLockdown>(
+    () => _i1042.ReleaseAlarmLockdown(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i528.ScheduleAlarm>(
+    () => _i528.ScheduleAlarm(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i1064.SetAlarmActive>(
+    () => _i1064.SetAlarmActive(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i396.WatchAlarms>(
+    () => _i396.WatchAlarms(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i416.WatchCurrentStreak>(
+    () => _i416.WatchCurrentStreak(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i893.WatchCurrentTaxMultiplier>(
+    () => _i893.WatchCurrentTaxMultiplier(gh<_i1014.AlarmRepository>()),
+  );
+  gh.factory<_i879.WatchRingingAlarm>(
+    () => _i879.WatchRingingAlarm(gh<_i1014.AlarmRepository>()),
+  );
+  gh.lazySingleton<_i487.AuthRepository>(
+    () => _i1.AuthRepositoryImpl(
+      gh<_i670.AuthRemoteDataSource>(),
+      gh<_i90.AppDatabase>(),
+      gh<_i1039.PullDownSync>(),
+      gh<_i1014.AlarmRepository>(),
+      gh<_i1051.SquadRepository>(),
+      gh<_i666.SyncWorker>(),
+    ),
+  );
+  gh.factory<_i816.HomeCubit>(
+    () => _i816.HomeCubit(
+      gh<_i416.WatchCurrentStreak>(),
+      gh<_i838.WatchOwnedArea>(),
+      gh<_i343.WatchMyRank>(),
+      gh<_i871.WatchMySquad>(),
+      gh<_i135.WatchRecentActivity>(),
+      gh<_i959.WakeUpTaxStore>(),
+      gh<_i1039.PullDownSync>(),
+    ),
+  );
+  gh.factory<_i3.RunTrackingCubit>(
+    () => _i3.RunTrackingCubit(
+      gh<_i592.StartRun>(),
+      gh<_i773.AbandonRun>(),
+      gh<_i125.CaptureRun>(),
+      gh<_i256.WatchRunState>(),
+      gh<_i1051.SquadRepository>(),
+    ),
+  );
+  gh.lazySingleton<_i268.AlarmCubit>(
+    () => _i268.AlarmCubit(
+      gh<_i396.WatchAlarms>(),
+      gh<_i879.WatchRingingAlarm>(),
+      gh<_i528.ScheduleAlarm>(),
+      gh<_i915.CancelAlarm>(),
+      gh<_i735.DismissAlarm>(),
+      gh<_i738.CompleteAlarmWorkout>(),
+      gh<_i893.WatchCurrentTaxMultiplier>(),
+      gh<_i1064.SetAlarmActive>(),
+    ),
   );
   gh.factory<_i457.DeleteAccount>(
     () => _i457.DeleteAccount(gh<_i487.AuthRepository>()),
@@ -357,80 +519,17 @@ _i174.GetIt init(
     () => _i224.SignInWithPassword(gh<_i487.AuthRepository>()),
   );
   gh.factory<_i487.SignOut>(() => _i487.SignOut(gh<_i487.AuthRepository>()));
+  gh.factory<_i28.UpdateDisplayName>(
+    () => _i28.UpdateDisplayName(gh<_i487.AuthRepository>()),
+  );
   gh.factory<_i560.WatchCurrentUser>(
     () => _i560.WatchCurrentUser(gh<_i487.AuthRepository>()),
   );
-  gh.factory<_i635.SquadCubit>(
-    () => _i635.SquadCubit(
-      gh<_i871.WatchMySquad>(),
-      gh<_i134.CreateSquad>(),
-      gh<_i36.JoinSquad>(),
-      gh<_i769.LeaveSquad>(),
-      gh<_i670.WatchLeaderboard>(),
-      gh<_i597.WatchSquadPresence>(),
-      gh<_i1051.SquadRepository>(),
-    ),
-  );
-  gh.lazySingleton<_i1014.AlarmRepository>(
-    () => _i153.AlarmRepositoryImpl(
-      gh<_i96.AlarmLocalDataSource>(),
-      gh<_i355.LocalWriter>(),
-      gh<_i90.AppDatabase>(),
-      gh<_i959.WakeUpTaxStore>(),
-    ),
-  );
-  gh.factory<_i3.RunTrackingCubit>(
-    () => _i3.RunTrackingCubit(
-      gh<_i592.StartRun>(),
-      gh<_i773.AbandonRun>(),
-      gh<_i125.CaptureRun>(),
-      gh<_i256.WatchRunState>(),
-      gh<_i1051.SquadRepository>(),
-    ),
-  );
-  gh.factory<_i915.CancelAlarm>(
-    () => _i915.CancelAlarm(gh<_i1014.AlarmRepository>()),
-  );
-  gh.factory<_i738.CompleteAlarmWorkout>(
-    () => _i738.CompleteAlarmWorkout(gh<_i1014.AlarmRepository>()),
-  );
-  gh.factory<_i735.DismissAlarm>(
-    () => _i735.DismissAlarm(gh<_i1014.AlarmRepository>()),
-  );
-  gh.factory<_i278.RearmAlarmsFromCache>(
-    () => _i278.RearmAlarmsFromCache(gh<_i1014.AlarmRepository>()),
-  );
-  gh.factory<_i273.ReconcileRecurringAlarms>(
-    () => _i273.ReconcileRecurringAlarms(gh<_i1014.AlarmRepository>()),
-  );
-  gh.factory<_i528.ScheduleAlarm>(
-    () => _i528.ScheduleAlarm(gh<_i1014.AlarmRepository>()),
-  );
-  gh.factory<_i1064.SetAlarmActive>(
-    () => _i1064.SetAlarmActive(gh<_i1014.AlarmRepository>()),
-  );
-  gh.factory<_i396.WatchAlarms>(
-    () => _i396.WatchAlarms(gh<_i1014.AlarmRepository>()),
-  );
-  gh.factory<_i416.WatchCurrentStreak>(
-    () => _i416.WatchCurrentStreak(gh<_i1014.AlarmRepository>()),
-  );
-  gh.factory<_i893.WatchCurrentTaxMultiplier>(
-    () => _i893.WatchCurrentTaxMultiplier(gh<_i1014.AlarmRepository>()),
-  );
-  gh.factory<_i879.WatchRingingAlarm>(
-    () => _i879.WatchRingingAlarm(gh<_i1014.AlarmRepository>()),
-  );
-  gh.lazySingleton<_i268.AlarmCubit>(
-    () => _i268.AlarmCubit(
-      gh<_i396.WatchAlarms>(),
-      gh<_i879.WatchRingingAlarm>(),
-      gh<_i528.ScheduleAlarm>(),
-      gh<_i915.CancelAlarm>(),
-      gh<_i735.DismissAlarm>(),
-      gh<_i738.CompleteAlarmWorkout>(),
-      gh<_i893.WatchCurrentTaxMultiplier>(),
-      gh<_i1064.SetAlarmActive>(),
+  gh.factory<_i800.ProfileCubit>(
+    () => _i800.ProfileCubit(
+      gh<_i416.WatchCurrentStreak>(),
+      gh<_i838.WatchOwnedArea>(),
+      gh<_i560.WatchCurrentUser>(),
     ),
   );
   return getIt;

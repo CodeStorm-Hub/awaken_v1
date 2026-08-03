@@ -1,28 +1,25 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/gamification_widgets.dart';
+import '../../../../core/theme/semantic_colors.dart';
+import '../../../../core/theme/shape_tokens.dart';
 import '../../../alarm/domain/entities/alarm_schedule.dart';
-import '../../../alarm/domain/usecases/watch_current_streak.dart';
 import '../../../alarm/presentation/bloc/alarm_cubit.dart';
 import '../../../alarm/presentation/bloc/alarm_state.dart';
 import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
-import '../../../squad/domain/entities/squad.dart';
-import '../../../squad/domain/usecases/watch_my_rank.dart';
-import '../../../squad/domain/usecases/watch_my_squad.dart';
-import '../../../territory/domain/usecases/watch_owned_area.dart';
+import '../../../squad/domain/entities/streak_tier.dart';
 import '../../domain/entities/recent_activity_entry.dart';
-import '../../domain/usecases/watch_recent_activity.dart';
+import '../bloc/home_cubit.dart';
+import '../bloc/home_state.dart';
 
 const _weekdayAbbrLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-/// Home dashboard (Claude Design handoff — `isHome`). Next-alarm, streak,
-/// territory area, squad rank, achievements, and the activity feed are all
-/// real now (`AlarmCubit`, `WatchCurrentStreak`, `WatchOwnedArea`,
-/// `WatchMyRank`/`WatchMySquad`, `WatchRecentActivity` — plan §6 Phases 5c/
-/// 6). "Today's goal" remains the design prototype's placeholder — there's
-/// still no daily-goal domain concept.
 class HomePage extends StatelessWidget {
   const HomePage({
     required this.onOpenAlarms,
@@ -35,450 +32,389 @@ class HomePage extends StatelessWidget {
   final VoidCallback onOpenTerritory;
   final VoidCallback onOpenSquad;
 
-  AlarmSchedule? _nextAlarm(List<AlarmSchedule> alarms) {
-    if (alarms.isEmpty) return null;
-    final sorted = [...alarms]
-      ..sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
-    return sorted.first;
-  }
-
-  String _recurrenceSuffix(Set<int> recurringDays) {
-    if (recurringDays.isEmpty) return '';
-    if (recurringDays.length == 7) return ' · Every day';
-    final sorted = recurringDays.toList()..sort();
-    return ' · ${sorted.map((d) => _weekdayAbbrLabels[d - 1]).join(', ')}';
-  }
-
-  String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      backgroundColor: scheme.surface,
-      body: SafeArea(
-        child: BlocBuilder<AlarmCubit, AlarmState>(
-          builder: (context, state) {
-            final nextAlarm = _nextAlarm(state.alarms);
-            final nextAlarmLabel = nextAlarm == null
-                ? '--:--'
-                : '${nextAlarm.scheduledTime.hour.toString().padLeft(2, '0')}:'
-                      '${nextAlarm.scheduledTime.minute.toString().padLeft(2, '0')}';
-            final nextAlarmSubtitle = nextAlarm == null
-                ? 'No alarms scheduled'
-                : '${nextAlarm.exerciseMode == ExerciseMode.squat ? 'Squats' : 'Push-ups'} · '
-                      '${nextAlarm.requiredReps} reps'
-                      '${_recurrenceSuffix(nextAlarm.recurringDays)}';
-
-            return StreamBuilder<int>(
-              stream: getIt<WatchCurrentStreak>()(),
-              builder: (context, streakSnapshot) {
-                final streak = streakSnapshot.data ?? 0;
-                const goalPct =
-                    70; // no daily-goal domain concept yet — placeholder, matches handoff mock
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
+    return BlocProvider<HomeCubit>(
+      create: (_) => getIt<HomeCubit>(),
+      child: Scaffold(
+        backgroundColor: scheme.surface,
+        body: SafeArea(
+          child: BlocBuilder<HomeCubit, HomeState>(
+            builder: (context, home) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                    child: AppleGlassContainer(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      borderRadius: BorderRadius.circular(22),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                _greeting(),
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
+                              const RepaintBoundary(child: _GreetingText()),
                               Text(
                                 'Awaken',
-                                style: TextStyle(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.5,
-                                  color: scheme.onSurface,
-                                ),
+                                style:
+                                    Theme.of(context).textTheme.titleLarge
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.5,
+                                          color: scheme.onSurface,
+                                        ) ??
+                                    TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.5,
+                                      color: scheme.onSurface,
+                                    ),
                               ),
                             ],
                           ),
                           Row(
                             children: [
                               Container(
-                                height: 36,
+                                // A hard `height:` forces the child Row
+                                // into that exact cross-axis size — at
+                                // large system text scale the Text
+                                // below needs more than 30dp and
+                                // overflows (`RenderFlex`) instead of
+                                // the pill growing. `constraints` with
+                                // only a minimum lets it grow.
+                                constraints: const BoxConstraints(
+                                  minHeight: 30,
+                                ),
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
+                                  horizontal: 10,
+                                  vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: scheme.tertiaryContainer,
+                                  color: context.semanticColors.streakFlame
+                                      .withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
                                       Icons.local_fire_department,
-                                      size: 17,
-                                      color: scheme.onTertiaryContainer,
+                                      size: 14,
+                                      color: context.semanticColors.streakFlame,
                                     ),
-                                    const SizedBox(width: 5),
+                                    const SizedBox(width: 4),
                                     Text(
-                                      '$streak',
+                                      '${home.streak}',
                                       style: TextStyle(
+                                        fontSize: 12,
                                         fontWeight: FontWeight.bold,
-                                        color: scheme.onTertiaryContainer,
+                                        color:
+                                            context.semanticColors.streakFlame,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              const CurrentUserAvatarButton(),
+                              StreakTierAvatarRing(
+                                tier: streakTierForDays(home.streak),
+                                // 44 (the avatar's own tap target) + ring
+                                // width/padding so the ring wraps around the
+                                // button instead of clipping it down.
+                                size: 53,
+                                child: const CurrentUserAvatarButton(),
+                              ),
                             ],
                           ),
                         ],
                       ),
                     ),
-                    Expanded(
+                  ),
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: () => context.read<HomeCubit>().refresh(),
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _NextAlarmCard(
-                              label: nextAlarmLabel,
-                              subtitle: nextAlarmSubtitle,
-                              onViewAlarms: onOpenAlarms,
-                            ),
-                            const SizedBox(height: 18),
-                            StreamBuilder<double>(
-                              stream: getIt<WatchOwnedArea>()(),
-                              builder: (context, areaHintSnapshot) {
-                                final areaSqm = areaHintSnapshot.data ?? 0;
-                                // A brand-new account showing raw "0"/"0.00 km²"
-                                // stat tiles right next to a populated "#1"
-                                // squad rank read as broken rather than
-                                // "you haven't started yet" — found in design
-                                // critique. Only shown for the genuinely fresh
-                                // case; otherwise the tiles speak for themselves.
-                                if (streak != 0 || areaSqm != 0) {
-                                  return const SizedBox.shrink();
-                                }
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 10),
-                                  child: Text(
-                                    "You haven't started yet — dismiss an alarm or capture territory to build your stats.",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: scheme.onSurfaceVariant,
-                                    ),
+                            _NextAlarmCardBloc(onViewAlarms: onOpenAlarms),
+                            const SizedBox(height: 12),
+                            if (home.wakeUpTaxMultiplier > 1.0)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: WakeUpTaxMeter(
+                                  multiplier: home.wakeUpTaxMultiplier,
+                                ),
+                              ),
+                            if (home.streak == 0 &&
+                                home.ownedAreaSqm == 0 &&
+                                !home.streakError &&
+                                !home.ownedAreaError &&
+                                !home.streakLoading &&
+                                !home.ownedAreaLoading)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                  "Dismiss an alarm or capture territory to build your stats.",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: secondaryLabelColor(context),
                                   ),
-                                );
-                              },
-                            ),
+                                ),
+                              ),
                             Row(
                               children: [
                                 Expanded(
-                                  child: StatTile(
-                                    bg: scheme.tertiaryContainer,
-                                    fg: scheme.onTertiaryContainer,
-                                    icon: Icons.local_fire_department,
-                                    value: '$streak',
-                                    label: 'Day streak',
-                                    radius: const BorderRadius.horizontal(
-                                      left: Radius.circular(24),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 3),
-                                Expanded(
-                                  child: StreamBuilder<double>(
-                                    stream: getIt<WatchOwnedArea>()(),
-                                    builder: (context, ownedAreaSnapshot) {
-                                      final areaSqm =
-                                          ownedAreaSnapshot.data ?? 0;
-                                      return StatTile(
-                                        bg: scheme.secondaryContainer,
-                                        fg: scheme.onSecondaryContainer,
-                                        icon: Icons.landscape,
-                                        value: (areaSqm / 1000000)
-                                            .toStringAsFixed(2),
-                                        label: 'km² owned',
-                                      );
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 3),
-                                Expanded(
-                                  child: StreamBuilder<int?>(
-                                    stream: getIt<WatchMyRank>()(),
-                                    builder: (context, rankSnapshot) {
-                                      final rank = rankSnapshot.data;
-                                      return StatTile(
-                                        // surfaceContainerHigh (tone ~92) sat
-                                        // only ~6 tones below the page's own
-                                        // surface (~98) with zero chroma —
-                                        // visually invisible next to its
-                                        // chroma-bearing siblings
-                                        // (tertiary/secondaryContainer),
-                                        // confirmed against a live
-                                        // screenshot. primaryContainer
-                                        // completes the primary/secondary/
-                                        // tertiary triad across the row
-                                        // instead of relying on lightness
-                                        // alone to read as a tile.
-                                        bg: scheme.primaryContainer,
-                                        fg: scheme.onPrimaryContainer,
-                                        icon: Icons.emoji_events,
-                                        value: rank == null ? '—' : '#$rank',
-                                        label: 'Squad rank',
-                                        radius: const BorderRadius.horizontal(
-                                          right: Radius.circular(24),
+                                  child: home.streakLoading
+                                      ? const _SkeletonStatTile(
+                                          radius: BorderRadius.horizontal(
+                                            left: Radius.circular(14),
+                                          ),
+                                        )
+                                      : StatTile(
+                                          bg: scheme.surfaceContainer,
+                                          fg: scheme.primary,
+                                          icon: Icons.local_fire_department,
+                                          value: '${home.streak}',
+                                          label: 'Day streak',
+                                          hasError: home.streakError,
+                                          radius: const BorderRadius.horizontal(
+                                            left: Radius.circular(14),
+                                          ),
                                         ),
-                                      );
-                                    },
+                                ),
+                                const SizedBox(width: 2),
+                                Expanded(
+                                  child: home.ownedAreaLoading
+                                      ? const _SkeletonStatTile()
+                                      : StatTile(
+                                          bg: scheme.surfaceContainer,
+                                          fg: context
+                                              .semanticColors
+                                              .territoryOwned,
+                                          icon: Icons.landscape,
+                                          value: (home.ownedAreaSqm / 1000000)
+                                              .toStringAsFixed(2),
+                                          label: 'km² owned',
+                                          hasError: home.ownedAreaError,
+                                        ),
+                                ),
+                                const SizedBox(width: 2),
+                                Expanded(
+                                  child: StatTile(
+                                    bg: scheme.surfaceContainer,
+                                    fg: context.semanticColors.success,
+                                    icon: Icons.emoji_events,
+                                    value: home.squadRank == null
+                                        ? '—'
+                                        : '#${home.squadRank}',
+                                    label: 'Squad rank',
+                                    hasError: home.squadRankError,
+                                    radius: const BorderRadius.horizontal(
+                                      right: Radius.circular(14),
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 18),
-                            Material(
-                              color: scheme.surfaceContainerHigh,
-                              borderRadius: BorderRadius.circular(24),
-                              elevation: 2,
-                              shadowColor: scheme.shadow,
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 64,
-                                      height: 64,
-                                      child: Stack(
-                                        alignment: Alignment.center,
-                                        children: [
-                                          CircularProgressIndicator(
-                                            value: goalPct / 100,
-                                            strokeWidth: 6,
-                                            strokeCap: StrokeCap.round,
-                                            color: scheme.primary,
-                                            // The unfilled track needs real
-                                            // contrast against this card's own
-                                            // surfaceContainerHigh background —
-                                            // surfaceContainer was a near-
-                                            // identical tone (remaining 30% was
-                                            // invisible), and outlineVariant
-                                            // only measures ~1.4:1 here, well
-                                            // under WCAG 1.4.11's 3:1 for a
-                                            // functional progress track.
-                                            backgroundColor: scheme.outline,
-                                          ),
-                                          Text(
-                                            '$goalPct%',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                              color: scheme.onSurface,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            "Today's goal",
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: scheme.onSurface,
-                                            ),
-                                          ),
-                                          Text(
-                                            '14 / 20 squats completed',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: scheme.onSurfaceVariant,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Icon(
-                                      Icons.chevron_right,
-                                      color: scheme.onSurfaceVariant,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 22),
-                            Text(
-                              'Achievements',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: scheme.onSurface,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            _AchievementsRow(streak: streak),
-                            const SizedBox(height: 22),
+                            const SizedBox(height: 14),
                             _QuickActionsPill(
                               onOpenTerritory: onOpenTerritory,
                               onOpenSquad: onOpenSquad,
                             ),
-                            const SizedBox(height: 22),
-                            Text(
-                              'Recent activity',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: scheme.onSurface,
+                            const SizedBox(height: 14),
+                            Semantics(
+                              header: true,
+                              child: const _SectionLabel('ACHIEVEMENTS'),
+                            ),
+                            _AchievementsRow(
+                              streak: home.streak,
+                              ownedAreaSqm: home.ownedAreaSqm,
+                              hasSquad: home.squad != null,
+                            ),
+                            const SizedBox(height: 14),
+                            Semantics(
+                              header: true,
+                              child: const _SectionLabel('RECENT ACTIVITY'),
+                            ),
+                            RepaintBoundary(
+                              child: _RecentActivitySection(
+                                activity: home.recentActivity,
+                                hasError: home.recentActivityError,
+                                loading: home.recentActivityLoading,
+                                onRetry: () => context
+                                    .read<HomeCubit>()
+                                    .retryRecentActivity(),
                               ),
                             ),
-                            const SizedBox(height: 10),
-                            const _RecentActivitySection(),
                           ],
                         ),
                       ),
                     ),
-                  ],
-                );
-              },
-            );
-          },
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 }
 
-/// Real unlock state (previously a hardcoded mock list contradicting the
-/// adjacent real "Day streak"/squad stats — found in a live UI review).
 class _AchievementsRow extends StatelessWidget {
-  const _AchievementsRow({required this.streak});
+  const _AchievementsRow({
+    required this.streak,
+    required this.ownedAreaSqm,
+    required this.hasSquad,
+  });
 
   final int streak;
+  final double ownedAreaSqm;
+  final bool hasSquad;
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<double>(
-      stream: getIt<WatchOwnedArea>()(),
-      builder: (context, areaSnapshot) {
-        final areaSqm = areaSnapshot.data ?? 0;
-        return StreamBuilder<Squad?>(
-          stream: getIt<WatchMySquad>()(),
-          builder: (context, squadSnapshot) {
-            final scheme = Theme.of(context).colorScheme;
-            final achievements = [
-              (
-                icon: Icons.local_fire_department,
-                label: '4-day streak',
-                unlocked: streak >= 4,
-                hint: streak >= 4
+    final scheme = Theme.of(context).colorScheme;
+    final achievements = [
+      (
+        icon: Icons.local_fire_department,
+        label: '4d Streak',
+        unlocked: streak >= 4,
+        requirement: 'Dismiss alarms 4 days in a row to unlock.',
+      ),
+      (
+        icon: Icons.landscape,
+        label: 'Territory',
+        unlocked: ownedAreaSqm > 0,
+        requirement: 'Complete a run that closes a loop to capture territory.',
+      ),
+      (
+        icon: Icons.groups,
+        label: 'Squad',
+        unlocked: hasSquad,
+        requirement: 'Join or create a squad to unlock.',
+      ),
+      (
+        icon: Icons.emoji_events,
+        label: '30d Streak',
+        unlocked: streak >= 30,
+        requirement: 'Dismiss alarms 30 days in a row to unlock.',
+      ),
+    ];
+    return AppleGlassContainer(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      borderRadius: BorderRadius.circular(14),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: achievements.map((a) {
+          return Semantics(
+            label: '${a.label}, ${a.unlocked ? 'unlocked' : 'locked'}',
+            button: !a.unlocked,
+            hint: a.unlocked ? null : a.requirement,
+            child: ExcludeSemantics(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: a.unlocked
                     ? null
-                    : '${4 - streak} more day${4 - streak == 1 ? '' : 's'}',
-              ),
-              (
-                icon: Icons.landscape,
-                label: 'First territory',
-                unlocked: areaSqm > 0,
-                hint: areaSqm > 0 ? null : 'Capture territory',
-              ),
-              (
-                icon: Icons.groups,
-                label: 'Squad player',
-                unlocked: squadSnapshot.data != null,
-                hint: squadSnapshot.data != null ? null : 'Join a squad',
-              ),
-              (
-                icon: Icons.emoji_events,
-                label: '30-day streak',
-                unlocked: streak >= 30,
-                hint: streak >= 30 ? null : '${30 - streak} more days',
-              ),
-            ];
-            return Row(
-              children: achievements.map((a) {
-                return Expanded(
-                  child: Semantics(
-                    // Lock state was previously color-only (tertiaryContainer
-                    // vs. surfaceContainerHigh) — a screen-reader user had no
-                    // way to tell which achievements were earned. WCAG 1.3.1.
-                    label:
-                        '${a.label}, ${a.unlocked ? 'unlocked' : 'locked'}'
-                        '${a.hint == null ? '' : ', ${a.hint}'}',
-                    child: ExcludeSemantics(
-                      child: Column(
-                        children: [
-                          ExpressiveFlower(
-                            size: 58,
-                            color: a.unlocked
-                                ? scheme.tertiaryContainer
-                                : scheme.surfaceContainerHigh,
-                            // surfaceContainerHigh alone can render
-                            // near-invisible against the page background on
-                            // some dynamic-color palettes (confirmed live) —
-                            // an outline keeps the locked badge's shape
-                            // legible without implying "almost unlocked"
-                            // the way a chroma-bearing fill would.
-                            borderColor: a.unlocked ? null : scheme.outline,
-                            child: Icon(
-                              a.icon,
-                              size: 26,
-                              color: a.unlocked
-                                  ? scheme.onTertiaryContainer
-                                  : scheme.outline,
+                    : () {
+                        ScaffoldMessenger.of(context)
+                          ..hideCurrentSnackBar()
+                          ..showSnackBar(
+                            SnackBar(
+                              content: Text('${a.label}: ${a.requirement}'),
                             ),
-                          ),
-                          const SizedBox(height: 7),
-                          Text(
-                            a.label,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                          if (a.hint != null)
-                            Text(
-                              a.hint!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: scheme.outline,
-                              ),
-                            ),
-                        ],
+                          );
+                      },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: a.unlocked
+                            ? scheme.primary.withValues(alpha: 0.2)
+                            : scheme.surfaceContainerHigh,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        a.icon,
+                        size: 18,
+                        color: a.unlocked
+                            ? scheme.primary
+                            : secondaryLabelColor(context),
                       ),
                     ),
-                  ),
-                );
-              }).toList(),
-            );
-          },
-        );
-      },
+                    const SizedBox(height: 4),
+                    Text(
+                      a.label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: a.unlocked
+                            ? scheme.onSurface
+                            : secondaryLabelColor(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 }
 
-/// Real activity feed sourced from local `sessions`/`runs` (previously a
-/// hardcoded mock list, including a "Joined Squad" entry with no backing
-/// event data — found in a live UI review). Squad-join isn't modeled here
-/// since nothing tracks a join timestamp yet.
-class _RecentActivitySection extends StatelessWidget {
-  const _RecentActivitySection();
+class _RecentActivitySection extends StatefulWidget {
+  const _RecentActivitySection({
+    required this.activity,
+    required this.hasError,
+    required this.loading,
+    required this.onRetry,
+  });
+
+  final List<RecentActivityEntry> activity;
+  final bool hasError;
+  final bool loading;
+  final VoidCallback onRetry;
+
+  @override
+  State<_RecentActivitySection> createState() =>
+      _RecentActivitySectionState();
+}
+
+/// Ticks the relative-time labels ("Just now" / "5m ago") on the same coarse
+/// timer pattern as `_GreetingTextState` — previously computed once per
+/// build and never re-evaluated, so an entry would say "Just now" forever
+/// until some unrelated rebuild happened to occur.
+class _RecentActivitySectionState extends State<_RecentActivitySection> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   String _relativeTime(DateTime dt) {
     final diff = DateTime.now().difference(dt);
@@ -493,72 +429,135 @@ class _RecentActivitySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return StreamBuilder<List<RecentActivityEntry>>(
-      stream: getIt<WatchRecentActivity>()(),
-      builder: (context, snapshot) {
-        final activity = snapshot.data ?? const [];
-        if (activity.isEmpty) {
-          return Text(
-            'No activity yet — dismiss an alarm or capture territory to see it here.',
-            style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
-          );
-        }
-        return Column(
-          children: List.generate(activity.length, (i) {
-            final a = activity[i];
-            final icon = a.kind == RecentActivityKind.alarmDismissed
-                ? Icons.check_circle
-                : Icons.landscape;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 3),
-              child: Material(
-                color: scheme.surfaceContainerLow,
-                borderRadius: groupedItemRadius(
-                  index: i,
-                  count: activity.length,
-                  outer: 18,
-                ),
-                elevation: 1,
-                shadowColor: scheme.shadow,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
+    if (widget.loading) {
+      return Column(
+        children: List.generate(
+          3,
+          (i) => Padding(
+            padding: const EdgeInsets.only(bottom: 3),
+            child: _SkeletonBlock(
+              height: 50,
+              radius: groupedItemRadius(index: i, count: 3, outer: 14),
+            ),
+          ),
+        ),
+      );
+    }
+    if (widget.hasError) {
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              "Couldn't load recent activity.",
+              style: TextStyle(fontSize: 13, color: scheme.error),
+            ),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+            onPressed: widget.onRetry,
+            child: const Text('Try again'),
+          ),
+        ],
+      );
+    }
+    if (widget.activity.isEmpty) {
+      return Text(
+        'No activity yet — dismiss an alarm or capture territory.',
+        style: TextStyle(fontSize: 12, color: secondaryLabelColor(context)),
+      );
+    }
+    return Column(
+      children: List.generate(widget.activity.length, (i) {
+        final a = widget.activity[i];
+        final icon = a.kind == RecentActivityKind.alarmDismissed
+            ? Icons.check_circle_outline
+            : Icons.landscape_outlined;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 3),
+          child: AppleGlassContainer(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            borderRadius: groupedItemRadius(
+              index: i,
+              count: widget.activity.length,
+              outer: 14,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(icon, size: 19, color: scheme.primary),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          a.text,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: scheme.onSurface,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        _relativeTime(a.occurredAt),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                  child: Icon(icon, size: 16, color: scheme.primary),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    a.text,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: scheme.onSurface,
+                    ),
                   ),
                 ),
-              ),
-            );
-          }),
+                Text(
+                  _relativeTime(a.occurredAt),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: secondaryLabelColor(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+/// Owns its own narrowly-scoped `BlocBuilder<AlarmCubit>` so an alarm
+/// change only rebuilds this card, not the whole `HomeCubit`-driven page
+/// body (see `HomePage.build`).
+class _NextAlarmCardBloc extends StatelessWidget {
+  const _NextAlarmCardBloc({required this.onViewAlarms});
+
+  final VoidCallback onViewAlarms;
+
+  AlarmSchedule? _nextAlarm(List<AlarmSchedule> alarms) {
+    final eligible = alarms.where((a) => a.isActive).toList()
+      ..sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
+    return eligible.isEmpty ? null : eligible.first;
+  }
+
+  String _recurrenceSuffix(Set<int> recurringDays) {
+    if (recurringDays.isEmpty) return '';
+    if (recurringDays.length == 7) return ' · Every day';
+    final sorted = recurringDays.toList()..sort();
+    return ' · ${sorted.map((d) => _weekdayAbbrLabels[d - 1]).join(', ')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<AlarmCubit, AlarmState>(
+      builder: (context, alarmState) {
+        final nextAlarm = _nextAlarm(alarmState.alarms);
+        final label = nextAlarm == null
+            ? '--:--'
+            : '${nextAlarm.scheduledTime.hour.toString().padLeft(2, '0')}:'
+                  '${nextAlarm.scheduledTime.minute.toString().padLeft(2, '0')}';
+        final subtitle = nextAlarm == null
+            ? 'No alarms scheduled'
+            : '${nextAlarm.exerciseMode == ExerciseMode.squat ? 'Squats' : 'Push-ups'} · '
+                  '${nextAlarm.requiredReps} reps'
+                  '${_recurrenceSuffix(nextAlarm.recurringDays)}';
+        return _NextAlarmCard(
+          label: label,
+          subtitle: subtitle,
+          onViewAlarms: onViewAlarms,
         );
       },
     );
@@ -579,84 +578,70 @@ class _NextAlarmCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-      decoration: BoxDecoration(
-        color: scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(32),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return AppleGlassContainer(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      borderRadius: BorderRadius.circular(14),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.alarm,
-                size: 17,
-                color: scheme.onPrimaryContainer.withValues(alpha: 0.8),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Next alarm',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: scheme.onPrimaryContainer.withValues(alpha: 0.8),
-                ),
-              ),
-            ],
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 60,
-              height: 64 / 60,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -2.5,
-              color: scheme.onPrimaryContainer,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontWeight: FontWeight.w500,
-              color: scheme.onPrimaryContainer.withValues(alpha: 0.85),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: scheme.onPrimaryContainer,
-                  foregroundColor: scheme.primaryContainer,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-                onPressed: onViewAlarms,
-                child: const Text('View alarms'),
-              ),
-              const SizedBox(width: 8),
-              Material(
-                color: scheme.onPrimaryContainer.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(14),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: onViewAlarms,
-                  child: SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: Icon(
-                      Icons.add,
-                      size: 22,
-                      color: scheme.onPrimaryContainer,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.alarm, size: 14, color: scheme.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      'NEXT ALARM',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: scheme.primary,
+                      ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -1.0,
+                    color: scheme.onSurface,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: secondaryLabelColor(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: scheme.primaryContainer,
+              foregroundColor: scheme.onPrimaryContainer,
+              elevation: 0,
+              minimumSize: const Size(0, 36),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
               ),
-            ],
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            ),
+            onPressed: onViewAlarms,
+            child: const Text(
+              'Alarms',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -664,27 +649,6 @@ class _NextAlarmCard extends StatelessWidget {
   }
 }
 
-/// "Start run" (primary) + "Squad" (secondary shortcut) as two visually
-/// distinct pills, not one split-down-the-middle segmented control.
-///
-/// Redesigned from an earlier single-pill version (shared outer border +
-/// 1px divider, equal 50/50 width) that fixed a real Impeller border-radius
-/// rendering bug but, in doing so, made two *unrelated destinations* read
-/// as mutually-exclusive options in a toggle — the visual grammar of a
-/// segmented control implies "pick one," not "here's the hero action plus
-/// a shortcut." Flagged directly by the user against a live screenshot.
-/// Fixed by giving each its own pill (own radius, own color fill) instead
-/// of a shared frame — equal-width, with the color fill (primary-filled vs.
-/// tonal-container) carrying the hierarchy instead of unequal sizing, per
-/// user preference. "Squad" is deliberately not dropped even though the
-/// bottom nav already has a Squad tab: this is a one-tap shortcut from the
-/// dashboard, the nav tab is a destination: both are legitimate, common
-/// mobile patterns (e.g. a card's own "View all" beside a tab bar entry).
-/// No custom shadow was added even though a generic mobile-UI pass would
-/// suggest one — no other pill button in this app (Squad's Create/Join,
-/// Profile's Migrate-to-cloud, `_NextAlarmCard`'s View-alarms) uses a
-/// shadow, and matching the app's own established flat-pill language wins
-/// over a one-off treatment here.
 class _QuickActionsPill extends StatelessWidget {
   const _QuickActionsPill({
     required this.onOpenTerritory,
@@ -697,73 +661,263 @@ class _QuickActionsPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    bool isGuest = false;
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      isGuest = user == null || user.isAnonymous;
+    } catch (_) {
+      isGuest = false;
+    }
+
     return Row(
       children: [
         Expanded(
-          child: Material(
-            color: scheme.primary,
-            borderRadius: BorderRadius.circular(999),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onOpenTerritory,
-              child: SizedBox(
-                height: 56,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.directions_run,
-                      size: 22,
-                      color: scheme.onPrimary,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Start run',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: scheme.onPrimary,
-                      ),
-                    ),
-                  ],
-                ),
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(44),
+              backgroundColor: scheme.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
+            ),
+            onPressed: onOpenTerritory,
+            icon: Icon(isGuest ? Icons.lock_outline : Icons.directions_run, size: 18),
+            label: Text(
+              isGuest ? 'Unlock Run' : 'Start run',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Expanded(
-          child: Material(
-            color: scheme.secondaryContainer,
-            borderRadius: BorderRadius.circular(999),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onOpenSquad,
-              child: SizedBox(
-                height: 56,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.groups,
-                      size: 20,
-                      color: scheme.onSecondaryContainer,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Squad',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: scheme.onSecondaryContainer,
-                      ),
-                    ),
-                  ],
-                ),
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(44),
+              foregroundColor: scheme.onSurface,
+              side: BorderSide(color: scheme.outline, width: 0.5),
+              backgroundColor: scheme.surfaceContainer,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
+            ),
+            onPressed: onOpenSquad,
+            icon: Icon(isGuest ? Icons.lock_outline : Icons.groups, size: 18),
+            label: Text(
+              isGuest ? 'Unlock Squad' : 'Squad',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Previously computed once per `HomePage.build()` and never re-evaluated —
+/// a user who opened the app just before a morning/afternoon/evening
+/// rollover and left it foregrounded (this tab stays mounted via the shell's
+/// `IndexedStack`) would keep seeing the stale greeting indefinitely. Ticks
+/// on a coarse timer rather than depending on some other rebuild happening
+/// to occur near the rollover.
+/// The small uppercase section header ("ACHIEVEMENTS", "RECENT ACTIVITY")
+/// — extracted since its color depends on `context` (`secondaryLabelColor`),
+/// so it's no longer expressible as a top-level `const` literal the way it
+/// was before, and this keeps that at one definition instead of two.
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, bottom: 6),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+          color: secondaryLabelColor(context),
+        ),
+      ),
+    );
+  }
+}
+
+/// Loading placeholder for `StatTile` — same size/shape (padding, icon
+/// circle, value/label lines) as the real tile, so the layout doesn't jump
+/// once the underlying stream produces its first value. Wrapped in
+/// [_Pulsing] rather than a static gray block so it doesn't read as a
+/// permanently-broken tile.
+class _SkeletonStatTile extends StatelessWidget {
+  const _SkeletonStatTile({this.radius = ShapeTokens.small});
+
+  final BorderRadius radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return _Pulsing(
+      child: Container(
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainer,
+          borderRadius: radius,
+          border: Border.all(
+            color: scheme.outline.withValues(alpha: 0.15),
+            width: 1,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                width: 32,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                width: 48,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Generic pulsing placeholder block — used for `_RecentActivitySection`'s
+/// loading rows, matching each real row's approximate height/shape.
+class _SkeletonBlock extends StatelessWidget {
+  const _SkeletonBlock({required this.height, required this.radius});
+
+  final double height;
+  final BorderRadius radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return _Pulsing(
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainer,
+          borderRadius: radius,
+          border: Border.all(
+            color: scheme.outline.withValues(alpha: 0.15),
+            width: 1,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shared shimmer loop for the skeleton placeholders above — a plain
+/// `AnimatedOpacity` toggled on a timer between 0.4 and 1.0, per the audit's
+/// "no new package needed" note (no `shimmer`/`skeletonizer` dependency).
+class _Pulsing extends StatefulWidget {
+  const _Pulsing({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_Pulsing> createState() => _PulsingState();
+}
+
+class _PulsingState extends State<_Pulsing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _animation = Tween<double>(begin: 1.0, end: 0.4).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    _controller.repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) return widget.child;
+    return FadeTransition(
+      opacity: _animation,
+      child: widget.child,
+    );
+  }
+}
+
+class _GreetingText extends StatefulWidget {
+  const _GreetingText();
+
+  @override
+  State<_GreetingText> createState() => _GreetingTextState();
+}
+
+class _GreetingTextState extends State<_GreetingText> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String get _greeting {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _greeting,
+      style: TextStyle(fontSize: 11, color: secondaryLabelColor(context)),
     );
   }
 }

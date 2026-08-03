@@ -12,12 +12,27 @@ class Runs extends Table {
   DateTimeColumn get endedAt => dateTime().nullable()();
   IntColumn get pointCount => integer()();
   TextColumn get pathGeoJson => text()();
+
+  /// JSON array of per-point ISO8601 capture timestamps, same order as
+  /// `pathGeoJson`'s coordinates. Sent to `submit_run()`'s
+  /// `p_point_timestamps` param so the server can validate per-segment
+  /// speed (P0 anti-cheat finding — the RPC couldn't do this at all
+  /// without per-point timing, since `pathGeoJson` alone carries no time
+  /// information). Nullable for rows written before this column existed.
+  TextColumn get pointTimestampsJson => text().nullable()();
   BoolColumn get isClosedLoop => boolean().withDefault(const Constant(false))();
   /// This run's own captured polygon area — what `submit_run()` returns as
   /// `captured_area_sqm` (the celebration-UI "delta"), distinct from
   /// `areaSqm` (the user's total territory area after server-side merge).
   RealColumn get capturedAreaSqm => real().nullable()();
   RealColumn get areaSqm => real().nullable()();
+
+  /// Bounty-zone bonus (refined territory plan item 1) — `submit_run()`'s
+  /// `bonus_area_sqm`/`bounty_multiplier`, a celebration-UI-only credit
+  /// that never affects the stored territory polygon/`areaSqm`. Null when
+  /// no active bounty zone covered this run's capture point.
+  RealColumn get bonusAreaSqm => real().nullable()();
+  RealColumn get bountyMultiplier => real().nullable()();
   TextColumn get integrityVerdict => text().nullable()();
   TextColumn get rejectedReason => text().nullable()();
   DateTimeColumn get updatedAt => dateTime()();

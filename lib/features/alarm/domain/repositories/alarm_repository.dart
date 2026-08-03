@@ -11,6 +11,27 @@ abstract interface class AlarmRepository {
   Future<void> scheduleAlarm(AlarmSchedule alarm);
   Future<void> cancelAlarm(String id);
 
+  /// Stops every natively-scheduled alarm without touching the local Drift
+  /// cache — used only from account sign-out/switch/delete, immediately
+  /// before `AppDatabase.clearAllLocalData()` wipes the alarms table.
+  /// Without this, a stale scheduled alarm could still fire and reference
+  /// now-wiped local data (e.g. `completeWorkout`'s session insert racing a
+  /// wipe, or an alarm ringing for a session that's no longer this user's).
+  Future<void> cancelAllAlarms();
+
+  /// Engages Android screen pinning for as long as a real (non-preview)
+  /// alarm is ringing — the strongest escape-blocking a normal Play Store
+  /// app can do (no Device Owner/kiosk mode). Android-only; a no-op on iOS.
+  /// Best-effort and never throws — the ring screen's own UI blocking
+  /// (`PopScope`, full-screen overlay) is the load-bearing mechanism, this
+  /// is additional hardening on top of it, not a replacement for it.
+  Future<void> engageRingLockdown();
+
+  /// Releases the screen pinning engaged by [engageRingLockdown]. Safe to
+  /// call even if lockdown was never engaged (e.g. iOS, or the engage call
+  /// itself failed).
+  Future<void> releaseRingLockdown();
+
   /// Enable/disable an alarm without discarding its settings (unlike
   /// `cancelAlarm`, which deletes it outright). Disabling cancels the
   /// native schedule but keeps the alarm's config in the local cache so it
@@ -27,7 +48,26 @@ abstract interface class AlarmRepository {
   /// wake-up tax (reset on a verified completion, stepped up on a skip —
   /// see `watchCurrentTaxMultiplier`), and re-arms recurring alarms for
   /// their next occurrence.
-  Future<void> completeWorkout(AlarmSchedule alarm, {required bool verified, required int repsCompleted});
+  ///
+  /// [isPreview] (P0 fix — "destructive preview"): when true, none of the
+  /// above production side effects happen — no native stop of a real
+  /// future alarm, no session logged, no tax mutation, no recurrence
+  /// advance. `AlarmListPage`'s "tap one to preview the wake-up flow" opens
+  /// a *real* alarm's `AlarmRingPage` to demo the ring→verify flow; without
+  /// this flag, finishing or skipping that preview silently cancelled the
+  /// real future occurrence, advanced its recurrence, logged a fake
+  /// streak-eligible session, and reset/bumped the user's actual wake-up
+  /// tax — all from what the user believed was a harmless demo.
+  /// [startedAt] is when the user tapped "start workout" (verification
+  /// began), not when it finished — recorded separately from the session's
+  /// completion time so session duration is actually measurable.
+  Future<void> completeWorkout(
+    AlarmSchedule alarm, {
+    required bool verified,
+    required int repsCompleted,
+    required DateTime startedAt,
+    bool isPreview = false,
+  });
 
   /// Consecutive days (ending today or yesterday) with at least one
   /// verified completion, computed from the local session log.

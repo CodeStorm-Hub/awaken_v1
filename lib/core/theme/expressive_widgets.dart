@@ -1,9 +1,130 @@
 import 'package:flutter/material.dart';
 
+import 'motion_tokens.dart';
+import 'shape_tokens.dart';
+
 /// Shared M3-Expressive-style building blocks used across the redesigned
 /// alarm/verification/onboarding screens (see the "Awaken Flutter Mobile
 /// App" Claude Design handoff, `m3x.css`). Core Flutter ships none of this
 /// — same rationale as `motion_tokens.dart`/`shape_tokens.dart`.
+
+/// Secondary/de-emphasized label color used across every card subtitle,
+/// section header, and empty state — previously a single hardcoded
+/// `Color(0xFF8E8E93)` regardless of theme brightness. Contrast against the
+/// dark canvas (`AppTheme.darkCanvas`) is already ~5.5:1, well past WCAG
+/// AA's 4.5:1, so dark mode keeps that value unchanged. Against the light
+/// surface (`0xFFF2F2F7`) the same color only clears ~3:1 — below AA for
+/// the 10-13px sizes it's used at throughout. `0xFF6E6E73` clears ~4.5:1
+/// against that light surface while staying visually in the same "iOS
+/// secondary label" gray family.
+Color secondaryLabelColor(BuildContext context) {
+  final isDark = Theme.of(context).colorScheme.brightness == Brightness.dark;
+  return isDark ? const Color(0xFF8E8E93) : const Color(0xFF6E6E73);
+}
+
+/// The single-letter fallback shown on avatar badges (top-bar avatar,
+/// Profile's own avatar) when there's no provider photo. `displayName`/
+/// `email` can be an empty string — not just null — for some Supabase
+/// providers/email sign-ups, and indexing `[0]` on an empty string throws a
+/// `RangeError`; every call site used to do that inline via `?? 'A'`, which
+/// only guards `null`, not `''`, crashing the avatar (and with it every top
+/// bar it appears in) for those accounts.
+String avatarInitial({
+  required bool isAnonymous,
+  String? displayName,
+  String? email,
+}) {
+  if (isAnonymous) return 'G';
+  final label = (displayName != null && displayName.isNotEmpty)
+      ? displayName
+      : email;
+  return (label != null && label.isNotEmpty) ? label[0].toUpperCase() : 'A';
+}
+
+/// A high-performance modern surface container widget supporting both Light
+/// and Dark iOS appearances. Replaces legacy GPU-heavy BackdropFilter glass blur
+/// with fast, modern solid surface cards, crisp borders, and subtle drop shadows.
+class AppleGlassContainer extends StatelessWidget {
+  const AppleGlassContainer({
+    required this.child,
+    this.padding,
+    this.margin,
+    this.borderRadius,
+    this.blurAmount = 20.0,
+    this.borderColor,
+    this.borderWidth = 0.5,
+    this.onTap,
+    super.key,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final BorderRadius? borderRadius;
+
+  /// Retained for backwards compatibility. Blur filters are bypassed for optimal GPU performance.
+  final double blurAmount;
+  final Color? borderColor;
+  final double borderWidth;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = scheme.brightness == Brightness.dark;
+    final effectiveRadius = borderRadius ?? ShapeTokens.mediumLarge;
+
+    // Fast, modern solid surface container styling (zero BackdropFilter GPU pass)
+    final surfaceColor = isDark
+        ? const Color(0xFF1E1E24)
+        : Colors.white;
+
+    final surfaceBorder =
+        borderColor ??
+        (isDark
+            ? Colors.white.withValues(alpha: 0.12)
+            : Colors.black.withValues(alpha: 0.08));
+
+    final surfaceShadow = isDark
+        ? [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 16,
+              spreadRadius: 0,
+              offset: const Offset(0, 4),
+            ),
+          ]
+        : [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              spreadRadius: 0,
+              offset: const Offset(0, 3),
+            ),
+          ];
+
+    Widget content = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: effectiveRadius,
+        border: Border.all(color: surfaceBorder, width: borderWidth),
+        boxShadow: surfaceShadow,
+      ),
+      child: child,
+    );
+
+    if (margin != null) {
+      content = Padding(padding: margin!, child: content);
+    }
+
+    if (onTap != null) {
+      return GestureDetector(onTap: onTap, child: content);
+    }
+
+    return content;
+  }
+}
 
 /// The "G" profile-avatar circle used in the top-right corner of Home,
 /// Territory, and Squad's app bars — previously duplicated three times as a
@@ -30,6 +151,7 @@ class ProfileAvatarButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
     final fallback = Container(
       width: 40,
       height: 40,
@@ -71,7 +193,10 @@ class ProfileAvatarButton extends StatelessWidget {
                           width: 40,
                           height: 40,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => fallback,
+                          cacheWidth: (40 * dpr).round(),
+                          cacheHeight: (40 * dpr).round(),
+                          errorBuilder: (context, error, stackTrace) =>
+                              fallback,
                           loadingBuilder: (context, child, progress) =>
                               progress == null ? child : fallback,
                         ),
@@ -152,11 +277,13 @@ class ExpressiveFlower extends StatelessWidget {
         ],
       ),
     );
-    if (!animatePop) return blob;
+    // "Reduce motion" accessibility setting — a purely decorative pop-in
+    // shouldn't play for a user who has asked the OS to minimize animation.
+    if (!animatePop || MediaQuery.disableAnimationsOf(context)) return blob;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeOutBack,
+      duration: MotionTokens.defaultSpatial,
+      curve: MotionTokens.spatialCurve,
       builder: (context, value, scaledChild) =>
           Transform.scale(scale: value, child: scaledChild),
       child: blob,
@@ -203,6 +330,20 @@ class _ExpressiveLoaderState extends State<ExpressiveLoader>
   @override
   Widget build(BuildContext context) {
     final color = widget.color ?? Theme.of(context).colorScheme.primary;
+    // Reduce-motion: freeze on the resting shape instead of looping the
+    // morph/spin — matches the guard already applied to [ExpressiveFlower].
+    if (MediaQuery.disableAnimationsOf(context)) {
+      if (_controller.isAnimating) _controller.stop();
+      return Container(
+        width: widget.size,
+        height: widget.size,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(widget.size * _shapeStops.first),
+        ),
+      );
+    }
+    if (!_controller.isAnimating) _controller.repeat();
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -253,37 +394,48 @@ class ExpressiveSwitch extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => onChanged(!value),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
+        // The switch's own visual size (56x32) sits under WCAG 2.5.5's
+        // 48x48 tap-target minimum, and it's the primary control for
+        // enabling/disabling an alarm. `SizedBox` extends the opaque hit
+        // area to 48 tall while keeping the visual pill the same size,
+        // centered inside it.
+        child: SizedBox(
           width: 56,
-          height: 32,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            color: value ? scheme.primary : scheme.surfaceContainerHigh,
-            border: Border.all(
-              color: value ? scheme.primary : scheme.outline,
-              width: 2,
-            ),
-          ),
-          child: AnimatedAlign(
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeOutBack,
-            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeOutBack,
-                width: value ? 24 : 18,
-                height: value ? 24 : 18,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: value ? scheme.onPrimary : scheme.outline,
+          height: 48,
+          child: Center(
+            child: AnimatedContainer(
+              duration: MotionTokens.fastEffects,
+              curve: MotionTokens.effectsCurve,
+              width: 56,
+              height: 32,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                color: value ? scheme.primary : scheme.surfaceContainerHigh,
+                border: Border.all(
+                  color: value ? scheme.primary : scheme.outline,
+                  width: 2,
                 ),
-                child: value
-                    ? Icon(Icons.check, size: 15, color: scheme.primary)
-                    : null,
+              ),
+              child: AnimatedAlign(
+                duration: MotionTokens.fastSpatial,
+                curve: MotionTokens.spatialCurve,
+                alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: AnimatedContainer(
+                    duration: MotionTokens.fastSpatial,
+                    curve: MotionTokens.spatialCurve,
+                    width: value ? 24 : 18,
+                    height: value ? 24 : 18,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: value ? scheme.onPrimary : scheme.outline,
+                    ),
+                    child: value
+                        ? Icon(Icons.check, size: 15, color: scheme.primary)
+                        : null,
+                  ),
+                ),
               ),
             ),
           ),
@@ -299,8 +451,8 @@ class ExpressiveSwitch extends StatelessWidget {
 BorderRadius groupedItemRadius({
   required int index,
   required int count,
-  double outer = 24,
-  double inner = 8,
+  double outer = 24, // ShapeTokens.extraLarge
+  double inner = 8, // ShapeTokens.small
 }) {
   final top = index == 0 ? outer : inner;
   final bottom = index == count - 1 ? outer : inner;
@@ -321,7 +473,9 @@ class StatTile extends StatelessWidget {
     required this.value,
     required this.label,
     this.icon,
-    this.radius = const BorderRadius.all(Radius.circular(8)),
+    this.radius = ShapeTokens.small,
+    this.hasError = false,
+    this.padding = const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
     super.key,
   });
 
@@ -331,38 +485,81 @@ class StatTile extends StatelessWidget {
   final String label;
   final IconData? icon;
   final BorderRadius radius;
+  final EdgeInsetsGeometry padding;
+
+  /// Set when the stream backing [value] emitted an error — without this,
+  /// every stat tile on Home/Profile fell back to `?? 0`, which renders
+  /// identically to a genuine zero (a real "you haven't started yet" state)
+  /// and silently hides a failed fetch. When true, an error glyph replaces
+  /// [value] and [icon] and the tile tints toward `errorContainer` instead
+  /// of masking the failure.
+  final bool hasError;
 
   @override
   Widget build(BuildContext context) {
-    // Flat, no elevation — the handoff's own CSS for these tiles has no
-    // box-shadow. Elevation here previously cast a drop shadow into the
-    // 3px gap between adjacent tiles, reading as a stray colored seam.
-    return Material(
-      color: bg,
-      borderRadius: radius,
+    final scheme = Theme.of(context).colorScheme;
+    final effectiveBg = hasError ? scheme.errorContainer : bg;
+    final effectiveFg = hasError ? scheme.onErrorContainer : fg;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: effectiveBg,
+        borderRadius: radius,
+        border: Border.all(
+          color: hasError
+              ? scheme.error
+              : scheme.outline.withValues(alpha: 0.15),
+          width: 1,
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        padding: padding,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (icon != null) Icon(icon, size: 22, color: fg),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -1,
-                color: fg,
-                fontFeatures: const [FontFeature.tabularFigures()],
+            if (hasError)
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: scheme.error.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.error_outline, size: 20, color: effectiveFg),
+              )
+            else if (icon != null)
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: effectiveFg.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 20, color: effectiveFg),
+              ),
+            if (icon != null || hasError) const SizedBox(height: 6),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                hasError ? '—' : value,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                  color: effectiveFg,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ),
+            const SizedBox(height: 2),
             Text(
-              label,
+              hasError ? "Couldn't load" : label,
               textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: fg,
+                color: effectiveFg.withValues(alpha: 0.8),
               ),
             ),
           ],

@@ -1,0 +1,20 @@
+name = "awaken-tile-fallback"
+main = "src/index.ts"
+compatibility_date = "2024-09-02"
+minify = false
+
+# R2 bucket binding — env.BUCKET in src/index.ts. Same bucket for dev/preview
+# and production since this only ever serves a static, occasionally-updated
+# basemap extract, not per-environment data.
+[[r2_buckets]]
+binding = "BUCKET"
+preview_bucket_name = "awaken-tile-fallback"
+bucket_name = "awaken-tile-fallback"
+
+[vars]
+# Awaken's own client origins only — not "*". Tighten further once the app's
+# actual bundle id / web origin (if any) is confirmed.
+ALLOWED_ORIGINS = "*"
+# Fallback tier only gets hit during an outage; cache aggressively since the
+# archive itself only changes when someone re-extracts and re-uploads it.
+CACHE_CONTROL = "public, max-age=604800"

@@ -48,7 +48,8 @@ class HomeActivityRepositoryImpl implements HomeActivityRepository {
           latestSessions = rows.map((row) {
             return RecentActivityEntry(
               kind: RecentActivityKind.alarmDismissed,
-              text: 'Dismissed alarm — ${row.repsCompleted} ${_exerciseLabel(row.exerciseMode)}',
+              text:
+                  'Dismissed alarm — ${row.repsCompleted} ${_exerciseLabel(row.exerciseMode)}',
               occurredAt: row.completedAt!,
             );
           }).toList();

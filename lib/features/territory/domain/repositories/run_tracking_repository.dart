@@ -26,4 +26,10 @@ abstract interface class RunTrackingRepository {
   /// persists locally first (outbox-durable) even if the submission itself
   /// can't complete immediately (offline).
   Future<RunCaptureResult> captureRun();
+
+  /// A single best-effort location fix, for one-time uses like centering
+  /// the territory map on open — distinct from the continuous tracking
+  /// [startRun] begins. Returns `null` on denied permission or a failed
+  /// fix; callers treat this as advisory only.
+  Future<({double latitude, double longitude})?> getCurrentPosition();
 }

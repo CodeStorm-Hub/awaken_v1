@@ -79,12 +79,6 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
-		<string>audio</string>
-		<string>fetch</string>
-	</array>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>com.pravera.flutter_foreground_task.refresh</string>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>

@@ -1,0 +1,20 @@
+{
+  "name": "awaken-tile-fallback-worker",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "tsx shared/index.test.ts"
+  },
+  "dependencies": {
+    "pmtiles": "^4.3.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.5.0",
+    "wrangler": "^4.59.1"
+  }
+}

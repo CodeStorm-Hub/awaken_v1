@@ -9,16 +9,28 @@ import '../../domain/entities/track_point.dart';
 /// API surface isn't worth taking on for an algorithm this small, and the
 /// plan already scopes turf to client pre-checks, not path processing.
 abstract final class PathSimplifier {
-  static List<TrackPoint> simplify(List<TrackPoint> points, {double epsilonMeters = 5}) {
+  static List<TrackPoint> simplify(
+    List<TrackPoint> points, {
+    double epsilonMeters = 5,
+  }) {
     if (points.length < 3) return points;
     final keep = List<bool>.filled(points.length, false);
     keep[0] = true;
     keep[points.length - 1] = true;
     _rdp(points, 0, points.length - 1, epsilonMeters, keep);
-    return [for (var i = 0; i < points.length; i++) if (keep[i]) points[i]];
+    return [
+      for (var i = 0; i < points.length; i++)
+        if (keep[i]) points[i],
+    ];
   }
 
-  static void _rdp(List<TrackPoint> pts, int start, int end, double epsilon, List<bool> keep) {
+  static void _rdp(
+    List<TrackPoint> pts,
+    int start,
+    int end,
+    double epsilon,
+    List<bool> keep,
+  ) {
     if (end <= start + 1) return;
     var maxDist = 0.0;
     var splitIndex = start;
@@ -38,10 +50,15 @@ abstract final class PathSimplifier {
 
   /// Equirectangular projection to local meters centered at [a] — accurate
   /// enough at run-scale (a few km), much cheaper than a full geodesic.
-  static double _perpendicularDistanceMeters(TrackPoint p, TrackPoint a, TrackPoint b) {
+  static double _perpendicularDistanceMeters(
+    TrackPoint p,
+    TrackPoint a,
+    TrackPoint b,
+  ) {
     const metersPerDegLat = 111320.0;
     final cosLat = math.cos(a.latitude * math.pi / 180);
-    double toX(TrackPoint t) => (t.longitude - a.longitude) * metersPerDegLat * cosLat;
+    double toX(TrackPoint t) =>
+        (t.longitude - a.longitude) * metersPerDegLat * cosLat;
     double toY(TrackPoint t) => (t.latitude - a.latitude) * metersPerDegLat;
 
     final bx = toX(b), by = toY(b);
@@ -56,10 +73,25 @@ abstract final class PathSimplifier {
     return math.sqrt(dx * dx + dy * dy);
   }
 
-  static String toGeoJsonLineString(List<TrackPoint> points) {
-    return jsonEncode({
+  static Map<String, Object?> toGeoJsonMap(List<TrackPoint> points) {
+    return {
       'type': 'LineString',
-      'coordinates': [for (final p in points) [p.longitude, p.latitude]],
-    });
+      'coordinates': [
+        for (final p in points) [p.longitude, p.latitude],
+      ],
+    };
+  }
+
+  static String toGeoJsonLineString(List<TrackPoint> points) {
+    return jsonEncode(toGeoJsonMap(points));
+  }
+
+  /// Per-point capture timestamps, same order as [toGeoJsonLineString]'s
+  /// coordinates — carried separately since GeoJSON has no standard place
+  /// for per-vertex time. Sent to `submit_run()`'s `p_point_timestamps`
+  /// param so the server can validate per-segment speed (P0 anti-cheat
+  /// finding).
+  static String toTimestampsJson(List<TrackPoint> points) {
+    return jsonEncode([for (final p in points) p.timestamp.toIso8601String()]);
   }
 }

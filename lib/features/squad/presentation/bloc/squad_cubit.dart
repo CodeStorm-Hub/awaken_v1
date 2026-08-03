@@ -14,6 +14,7 @@ import '../../domain/usecases/leave_squad.dart';
 import '../../domain/usecases/watch_leaderboard.dart';
 import '../../domain/usecases/watch_my_squad.dart';
 import '../../domain/usecases/watch_squad_presence.dart';
+import '../squad_error_message.dart';
 import 'squad_state.dart';
 
 /// Per-page Cubit (like `RunTrackingCubit`/`VerificationCubit`), created
@@ -29,7 +30,31 @@ class SquadCubit extends Cubit<SquadState> {
     this._watchSquadPresence,
     this._squadRepository,
   ) : super(const SquadState()) {
-    _mySquadSub = _watchMySquad().listen(_onSquadChanged);
+    _subscribeToMySquad();
+  }
+
+  void _subscribeToMySquad() {
+    // `SquadStatus.error` is reserved for a genuine failure of this stream
+    // itself (e.g. a dropped realtime connection) — not for a failed
+    // create/join action, which must not blow away whatever the user was
+    // already looking at. See `createSquad`/`joinSquad` below.
+    _mySquadSub = _watchMySquad().listen(
+      _onSquadChanged,
+      onError: (Object e) => emit(
+        state.copyWith(
+          status: SquadStatus.error,
+          errorMessage: friendlySquadErrorMessage(e),
+        ),
+      ),
+    );
+  }
+
+  /// Re-subscribes after a genuine stream failure (`SquadStatus.error`) —
+  /// the retry action on `_SquadErrorView`.
+  Future<void> retry() async {
+    await _mySquadSub.cancel();
+    emit(state.copyWith(status: SquadStatus.loading));
+    _subscribeToMySquad();
   }
 
   final WatchMySquad _watchMySquad;
@@ -40,7 +65,9 @@ class SquadCubit extends Cubit<SquadState> {
   final WatchSquadPresence _watchSquadPresence;
   final SquadRepository _squadRepository;
 
-  late final StreamSubscription<Squad?> _mySquadSub;
+  // Not `final` — `retry()` cancels and replaces it after a genuine stream
+  // failure.
+  late StreamSubscription<Squad?> _mySquadSub;
   StreamSubscription<List<LeaderboardEntry>>? _leaderboardSub;
   StreamSubscription<List<SquadPresenceMember>>? _presenceSub;
 
@@ -54,36 +81,49 @@ class SquadCubit extends Cubit<SquadState> {
     }
 
     emit(state.copyWith(status: SquadStatus.loaded, squad: squad));
-    _leaderboardSub = _watchLeaderboard(squad.id).listen(
-      (entries) => emit(state.copyWith(leaderboard: entries)),
-    );
-    _presenceSub = _watchSquadPresence(squad.id).listen(
-      (members) => emit(state.copyWith(presence: members)),
-    );
+    _leaderboardSub = _watchLeaderboard(
+      squad.id,
+    ).listen((entries) => emit(state.copyWith(leaderboard: entries)));
+    _presenceSub = _watchSquadPresence(
+      squad.id,
+    ).listen((members) => emit(state.copyWith(presence: members)));
   }
 
-  Future<void> createSquad(String name) async {
-    try {
-      await _createSquad(name);
-    } catch (e) {
-      emit(state.copyWith(status: SquadStatus.error, errorMessage: e.toString()));
-    }
-  }
+  /// Rethrows on failure (instead of flipping `status` to `error`, as this
+  /// used to) so a bad squad name just surfaces a SnackBar over the still-
+  /// current `noSquad` view — the page keeps both "Create"/"Join" actions
+  /// live. Previously a failed create/join stranded the user on the generic
+  /// error screen, whose only action re-opened *this same* create dialog —
+  /// there was no way back to "Join with invite code" from there.
+  Future<void> createSquad(String name) => _createSquad(name);
 
-  Future<void> joinSquad(String inviteCode) async {
-    try {
-      await _joinSquad(inviteCode);
-    } catch (e) {
-      emit(state.copyWith(status: SquadStatus.error, errorMessage: e.toString()));
-    }
-  }
+  /// See [createSquad] — same rationale.
+  Future<void> joinSquad(String inviteCode) => _joinSquad(inviteCode);
 
+  /// Previously fire-and-forget with no confirmation, loading, or error
+  /// handling — a failure here (e.g. a dropped connection mid-request)
+  /// silently left the button looking like it did nothing. Rethrows on
+  /// failure so the page can surface it as a SnackBar without disturbing
+  /// the still-current `loaded` squad view.
   Future<void> leaveSquad() async {
-    await _leaveSquad(const NoParams());
+    emit(state.copyWith(isLeavingSquad: true));
+    try {
+      await _leaveSquad(const NoParams());
+    } catch (e) {
+      emit(state.copyWith(isLeavingSquad: false));
+      rethrow;
+    }
+    emit(state.copyWith(isLeavingSquad: false));
   }
 
-  Future<void> reportMember({required String reportedUserId, required String reason}) {
-    return _squadRepository.reportMember(reportedUserId: reportedUserId, reason: reason);
+  Future<void> reportMember({
+    required String reportedUserId,
+    required String reason,
+  }) {
+    return _squadRepository.reportMember(
+      reportedUserId: reportedUserId,
+      reason: reason,
+    );
   }
 
   @override

@@ -16,6 +16,7 @@ class RunTrackState extends Equatable {
     this.distanceMeters = 0,
     this.gpsQuality = GpsQuality.none,
     this.permissionDenied = false,
+    this.startFailed = false,
   });
 
   final bool isTracking;
@@ -27,14 +28,31 @@ class RunTrackState extends Equatable {
   /// Location permission was denied when `startRun()` was called.
   final bool permissionDenied;
 
+  /// `startRun()` threw after permission was already granted — e.g. the
+  /// foreground service or wakelock failed to start. Distinct from
+  /// [permissionDenied]: this is a device/OS-level failure, not a user
+  /// choice, so the UI should offer retry rather than a settings deep-link.
+  final bool startFailed;
+
   /// A loop only counts as closed once the run has covered the plan's
   /// minimum length — otherwise the very first fix (start == "current
   /// position") would trivially satisfy the closure radius check.
   bool get isLoopClosed {
-    if (points.length < 2 || distanceMeters < _minLoopLengthMeters) return false;
-    final start = points.first;
-    final current = points.last;
-    return _haversineMeters(start, current) <= _loopClosureRadiusMeters;
+    if (points.length < 2 || distanceMeters < _minLoopLengthMeters) {
+      return false;
+    }
+    return distanceToStartMeters <= _loopClosureRadiusMeters;
+  }
+
+  /// Straight-line distance from the current position back to the run's
+  /// start point — the other half of [isLoopClosed] (alongside
+  /// [distanceMeters] vs the minimum length), surfaced for the UI so a
+  /// straight-out-and-back run can show *why* it isn't closing the loop
+  /// once the minimum distance is already covered, instead of a progress
+  /// bar that reads "done" while the run stays open indefinitely.
+  double get distanceToStartMeters {
+    if (points.length < 2) return 0;
+    return _haversineMeters(points.first, points.last);
   }
 
   RunTrackState copyWith({
@@ -44,6 +62,7 @@ class RunTrackState extends Equatable {
     double? distanceMeters,
     GpsQuality? gpsQuality,
     bool? permissionDenied,
+    bool? startFailed,
   }) {
     return RunTrackState(
       isTracking: isTracking ?? this.isTracking,
@@ -52,11 +71,20 @@ class RunTrackState extends Equatable {
       distanceMeters: distanceMeters ?? this.distanceMeters,
       gpsQuality: gpsQuality ?? this.gpsQuality,
       permissionDenied: permissionDenied ?? this.permissionDenied,
+      startFailed: startFailed ?? this.startFailed,
     );
   }
 
   @override
-  List<Object?> get props => [isTracking, points, elapsed, distanceMeters, gpsQuality, permissionDenied];
+  List<Object?> get props => [
+    isTracking,
+    points,
+    elapsed,
+    distanceMeters,
+    gpsQuality,
+    permissionDenied,
+    startFailed,
+  ];
 }
 
 // Mirrors AppConstants.loopClosureRadiusMeters/minRunLengthMeters — kept as

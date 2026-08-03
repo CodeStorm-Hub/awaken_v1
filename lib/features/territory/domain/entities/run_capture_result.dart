@@ -12,31 +12,43 @@ class RunCaptureResult extends Equatable {
     this.closedLoop = false,
     this.capturedAreaSqm,
     this.territoryAreaSqm,
+    this.bonusAreaSqm,
+    this.bountyMultiplier,
     this.rejectedReason,
   });
 
   const RunCaptureResult.pending()
-      : pending = true,
-        accepted = null,
-        closedLoop = false,
-        capturedAreaSqm = null,
-        territoryAreaSqm = null,
-        rejectedReason = null;
+    : pending = true,
+      accepted = null,
+      closedLoop = false,
+      capturedAreaSqm = null,
+      territoryAreaSqm = null,
+      bonusAreaSqm = null,
+      bountyMultiplier = null,
+      rejectedReason = null;
 
   final bool pending;
   final bool? accepted;
   final bool closedLoop;
   final double? capturedAreaSqm;
   final double? territoryAreaSqm;
+
+  /// Bounty-zone bonus (celebration-UI-only credit — see `Runs` table's
+  /// doc comment on these two columns). Null/zero when no active bounty
+  /// zone covered this capture.
+  final double? bonusAreaSqm;
+  final double? bountyMultiplier;
   final String? rejectedReason;
 
   @override
   List<Object?> get props => [
-        pending,
-        accepted,
-        closedLoop,
-        capturedAreaSqm,
-        territoryAreaSqm,
-        rejectedReason,
-      ];
+    pending,
+    accepted,
+    closedLoop,
+    capturedAreaSqm,
+    territoryAreaSqm,
+    bonusAreaSqm,
+    bountyMultiplier,
+    rejectedReason,
+  ];
 }

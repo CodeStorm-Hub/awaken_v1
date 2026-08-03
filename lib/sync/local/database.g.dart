@@ -17,6 +17,17 @@ class $AlarmsTable extends Alarms with TableInfo<$AlarmsTable, AlarmRow> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _nativeIdMeta = const VerificationMeta(
+    'nativeId',
+  );
+  @override
+  late final GeneratedColumn<int> nativeId = GeneratedColumn<int>(
+    'native_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _scheduledTimeMeta = const VerificationMeta(
     'scheduledTime',
   );
@@ -116,6 +127,7 @@ class $AlarmsTable extends Alarms with TableInfo<$AlarmsTable, AlarmRow> {
   @override
   List<GeneratedColumn> get $columns => [
     id,
+    nativeId,
     scheduledTime,
     exerciseMode,
     requiredReps,
@@ -141,6 +153,12 @@ class $AlarmsTable extends Alarms with TableInfo<$AlarmsTable, AlarmRow> {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     } else if (isInserting) {
       context.missing(_idMeta);
+    }
+    if (data.containsKey('native_id')) {
+      context.handle(
+        _nativeIdMeta,
+        nativeId.isAcceptableOrUnknown(data['native_id']!, _nativeIdMeta),
+      );
     }
     if (data.containsKey('scheduled_time')) {
       context.handle(
@@ -226,6 +244,10 @@ class $AlarmsTable extends Alarms with TableInfo<$AlarmsTable, AlarmRow> {
         DriftSqlType.string,
         data['${effectivePrefix}id'],
       )!,
+      nativeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}native_id'],
+      ),
       scheduledTime: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}scheduled_time'],
@@ -269,6 +291,16 @@ class $AlarmsTable extends Alarms with TableInfo<$AlarmsTable, AlarmRow> {
 
 class AlarmRow extends DataClass implements Insertable<AlarmRow> {
   final String id;
+
+  /// The `alarm` package's native int id, computed once (via
+  /// `AlarmPayload.deriveNativeId` — a specified FNV-1a hash, not Dart's
+  /// `String.hashCode`, which isn't guaranteed stable across SDK versions)
+  /// and persisted here from that point on. Every later native operation
+  /// (reschedule/cancel/dismiss) reads this column rather than recomputing,
+  /// so the native-alarm mapping can't silently drift out from under an
+  /// already-scheduled alarm after an app/SDK update. Nullable only for
+  /// rows written before this column existed; backfilled on first touch.
+  final int? nativeId;
   final DateTime scheduledTime;
   final String exerciseMode;
   final int requiredReps;
@@ -284,6 +316,7 @@ class AlarmRow extends DataClass implements Insertable<AlarmRow> {
   final DateTime? deletedAt;
   const AlarmRow({
     required this.id,
+    this.nativeId,
     required this.scheduledTime,
     required this.exerciseMode,
     required this.requiredReps,
@@ -297,6 +330,9 @@ class AlarmRow extends DataClass implements Insertable<AlarmRow> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
+    if (!nullToAbsent || nativeId != null) {
+      map['native_id'] = Variable<int>(nativeId);
+    }
     map['scheduled_time'] = Variable<DateTime>(scheduledTime);
     map['exercise_mode'] = Variable<String>(exerciseMode);
     map['required_reps'] = Variable<int>(requiredReps);
@@ -313,6 +349,9 @@ class AlarmRow extends DataClass implements Insertable<AlarmRow> {
   AlarmsCompanion toCompanion(bool nullToAbsent) {
     return AlarmsCompanion(
       id: Value(id),
+      nativeId: nativeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nativeId),
       scheduledTime: Value(scheduledTime),
       exerciseMode: Value(exerciseMode),
       requiredReps: Value(requiredReps),
@@ -333,6 +372,7 @@ class AlarmRow extends DataClass implements Insertable<AlarmRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return AlarmRow(
       id: serializer.fromJson<String>(json['id']),
+      nativeId: serializer.fromJson<int?>(json['nativeId']),
       scheduledTime: serializer.fromJson<DateTime>(json['scheduledTime']),
       exerciseMode: serializer.fromJson<String>(json['exerciseMode']),
       requiredReps: serializer.fromJson<int>(json['requiredReps']),
@@ -348,6 +388,7 @@ class AlarmRow extends DataClass implements Insertable<AlarmRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
+      'nativeId': serializer.toJson<int?>(nativeId),
       'scheduledTime': serializer.toJson<DateTime>(scheduledTime),
       'exerciseMode': serializer.toJson<String>(exerciseMode),
       'requiredReps': serializer.toJson<int>(requiredReps),
@@ -361,6 +402,7 @@ class AlarmRow extends DataClass implements Insertable<AlarmRow> {
 
   AlarmRow copyWith({
     String? id,
+    Value<int?> nativeId = const Value.absent(),
     DateTime? scheduledTime,
     String? exerciseMode,
     int? requiredReps,
@@ -371,6 +413,7 @@ class AlarmRow extends DataClass implements Insertable<AlarmRow> {
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => AlarmRow(
     id: id ?? this.id,
+    nativeId: nativeId.present ? nativeId.value : this.nativeId,
     scheduledTime: scheduledTime ?? this.scheduledTime,
     exerciseMode: exerciseMode ?? this.exerciseMode,
     requiredReps: requiredReps ?? this.requiredReps,
@@ -383,6 +426,7 @@ class AlarmRow extends DataClass implements Insertable<AlarmRow> {
   AlarmRow copyWithCompanion(AlarmsCompanion data) {
     return AlarmRow(
       id: data.id.present ? data.id.value : this.id,
+      nativeId: data.nativeId.present ? data.nativeId.value : this.nativeId,
       scheduledTime: data.scheduledTime.present
           ? data.scheduledTime.value
           : this.scheduledTime,
@@ -408,6 +452,7 @@ class AlarmRow extends DataClass implements Insertable<AlarmRow> {
   String toString() {
     return (StringBuffer('AlarmRow(')
           ..write('id: $id, ')
+          ..write('nativeId: $nativeId, ')
           ..write('scheduledTime: $scheduledTime, ')
           ..write('exerciseMode: $exerciseMode, ')
           ..write('requiredReps: $requiredReps, ')
@@ -423,6 +468,7 @@ class AlarmRow extends DataClass implements Insertable<AlarmRow> {
   @override
   int get hashCode => Object.hash(
     id,
+    nativeId,
     scheduledTime,
     exerciseMode,
     requiredReps,
@@ -437,6 +483,7 @@ class AlarmRow extends DataClass implements Insertable<AlarmRow> {
       identical(this, other) ||
       (other is AlarmRow &&
           other.id == this.id &&
+          other.nativeId == this.nativeId &&
           other.scheduledTime == this.scheduledTime &&
           other.exerciseMode == this.exerciseMode &&
           other.requiredReps == this.requiredReps &&
@@ -449,6 +496,7 @@ class AlarmRow extends DataClass implements Insertable<AlarmRow> {
 
 class AlarmsCompanion extends UpdateCompanion<AlarmRow> {
   final Value<String> id;
+  final Value<int?> nativeId;
   final Value<DateTime> scheduledTime;
   final Value<String> exerciseMode;
   final Value<int> requiredReps;
@@ -460,6 +508,7 @@ class AlarmsCompanion extends UpdateCompanion<AlarmRow> {
   final Value<int> rowid;
   const AlarmsCompanion({
     this.id = const Value.absent(),
+    this.nativeId = const Value.absent(),
     this.scheduledTime = const Value.absent(),
     this.exerciseMode = const Value.absent(),
     this.requiredReps = const Value.absent(),
@@ -472,6 +521,7 @@ class AlarmsCompanion extends UpdateCompanion<AlarmRow> {
   });
   AlarmsCompanion.insert({
     required String id,
+    this.nativeId = const Value.absent(),
     required DateTime scheduledTime,
     required String exerciseMode,
     required int requiredReps,
@@ -488,6 +538,7 @@ class AlarmsCompanion extends UpdateCompanion<AlarmRow> {
        updatedAt = Value(updatedAt);
   static Insertable<AlarmRow> custom({
     Expression<String>? id,
+    Expression<int>? nativeId,
     Expression<DateTime>? scheduledTime,
     Expression<String>? exerciseMode,
     Expression<int>? requiredReps,
@@ -500,6 +551,7 @@ class AlarmsCompanion extends UpdateCompanion<AlarmRow> {
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (nativeId != null) 'native_id': nativeId,
       if (scheduledTime != null) 'scheduled_time': scheduledTime,
       if (exerciseMode != null) 'exercise_mode': exerciseMode,
       if (requiredReps != null) 'required_reps': requiredReps,
@@ -514,6 +566,7 @@ class AlarmsCompanion extends UpdateCompanion<AlarmRow> {
 
   AlarmsCompanion copyWith({
     Value<String>? id,
+    Value<int?>? nativeId,
     Value<DateTime>? scheduledTime,
     Value<String>? exerciseMode,
     Value<int>? requiredReps,
@@ -526,6 +579,7 @@ class AlarmsCompanion extends UpdateCompanion<AlarmRow> {
   }) {
     return AlarmsCompanion(
       id: id ?? this.id,
+      nativeId: nativeId ?? this.nativeId,
       scheduledTime: scheduledTime ?? this.scheduledTime,
       exerciseMode: exerciseMode ?? this.exerciseMode,
       requiredReps: requiredReps ?? this.requiredReps,
@@ -543,6 +597,9 @@ class AlarmsCompanion extends UpdateCompanion<AlarmRow> {
     final map = <String, Expression>{};
     if (id.present) {
       map['id'] = Variable<String>(id.value);
+    }
+    if (nativeId.present) {
+      map['native_id'] = Variable<int>(nativeId.value);
     }
     if (scheduledTime.present) {
       map['scheduled_time'] = Variable<DateTime>(scheduledTime.value);
@@ -578,6 +635,7 @@ class AlarmsCompanion extends UpdateCompanion<AlarmRow> {
   String toString() {
     return (StringBuffer('AlarmsCompanion(')
           ..write('id: $id, ')
+          ..write('nativeId: $nativeId, ')
           ..write('scheduledTime: $scheduledTime, ')
           ..write('exerciseMode: $exerciseMode, ')
           ..write('requiredReps: $requiredReps, ')
@@ -1180,6 +1238,17 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _pointTimestampsJsonMeta =
+      const VerificationMeta('pointTimestampsJson');
+  @override
+  late final GeneratedColumn<String> pointTimestampsJson =
+      GeneratedColumn<String>(
+        'point_timestamps_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _isClosedLoopMeta = const VerificationMeta(
     'isClosedLoop',
   );
@@ -1212,6 +1281,28 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
   @override
   late final GeneratedColumn<double> areaSqm = GeneratedColumn<double>(
     'area_sqm',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _bonusAreaSqmMeta = const VerificationMeta(
+    'bonusAreaSqm',
+  );
+  @override
+  late final GeneratedColumn<double> bonusAreaSqm = GeneratedColumn<double>(
+    'bonus_area_sqm',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _bountyMultiplierMeta = const VerificationMeta(
+    'bountyMultiplier',
+  );
+  @override
+  late final GeneratedColumn<double> bountyMultiplier = GeneratedColumn<double>(
+    'bounty_multiplier',
     aliasedName,
     true,
     type: DriftSqlType.double,
@@ -1268,9 +1359,12 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
     endedAt,
     pointCount,
     pathGeoJson,
+    pointTimestampsJson,
     isClosedLoop,
     capturedAreaSqm,
     areaSqm,
+    bonusAreaSqm,
+    bountyMultiplier,
     integrityVerdict,
     rejectedReason,
     updatedAt,
@@ -1326,6 +1420,15 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
     } else if (isInserting) {
       context.missing(_pathGeoJsonMeta);
     }
+    if (data.containsKey('point_timestamps_json')) {
+      context.handle(
+        _pointTimestampsJsonMeta,
+        pointTimestampsJson.isAcceptableOrUnknown(
+          data['point_timestamps_json']!,
+          _pointTimestampsJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('is_closed_loop')) {
       context.handle(
         _isClosedLoopMeta,
@@ -1348,6 +1451,24 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
       context.handle(
         _areaSqmMeta,
         areaSqm.isAcceptableOrUnknown(data['area_sqm']!, _areaSqmMeta),
+      );
+    }
+    if (data.containsKey('bonus_area_sqm')) {
+      context.handle(
+        _bonusAreaSqmMeta,
+        bonusAreaSqm.isAcceptableOrUnknown(
+          data['bonus_area_sqm']!,
+          _bonusAreaSqmMeta,
+        ),
+      );
+    }
+    if (data.containsKey('bounty_multiplier')) {
+      context.handle(
+        _bountyMultiplierMeta,
+        bountyMultiplier.isAcceptableOrUnknown(
+          data['bounty_multiplier']!,
+          _bountyMultiplierMeta,
+        ),
       );
     }
     if (data.containsKey('integrity_verdict')) {
@@ -1411,6 +1532,10 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
         DriftSqlType.string,
         data['${effectivePrefix}path_geo_json'],
       )!,
+      pointTimestampsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}point_timestamps_json'],
+      ),
       isClosedLoop: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_closed_loop'],
@@ -1422,6 +1547,14 @@ class $RunsTable extends Runs with TableInfo<$RunsTable, RunRow> {
       areaSqm: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}area_sqm'],
+      ),
+      bonusAreaSqm: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}bonus_area_sqm'],
+      ),
+      bountyMultiplier: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}bounty_multiplier'],
       ),
       integrityVerdict: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -1454,6 +1587,14 @@ class RunRow extends DataClass implements Insertable<RunRow> {
   final DateTime? endedAt;
   final int pointCount;
   final String pathGeoJson;
+
+  /// JSON array of per-point ISO8601 capture timestamps, same order as
+  /// `pathGeoJson`'s coordinates. Sent to `submit_run()`'s
+  /// `p_point_timestamps` param so the server can validate per-segment
+  /// speed (P0 anti-cheat finding — the RPC couldn't do this at all
+  /// without per-point timing, since `pathGeoJson` alone carries no time
+  /// information). Nullable for rows written before this column existed.
+  final String? pointTimestampsJson;
   final bool isClosedLoop;
 
   /// This run's own captured polygon area — what `submit_run()` returns as
@@ -1461,6 +1602,13 @@ class RunRow extends DataClass implements Insertable<RunRow> {
   /// `areaSqm` (the user's total territory area after server-side merge).
   final double? capturedAreaSqm;
   final double? areaSqm;
+
+  /// Bounty-zone bonus (refined territory plan item 1) — `submit_run()`'s
+  /// `bonus_area_sqm`/`bounty_multiplier`, a celebration-UI-only credit
+  /// that never affects the stored territory polygon/`areaSqm`. Null when
+  /// no active bounty zone covered this run's capture point.
+  final double? bonusAreaSqm;
+  final double? bountyMultiplier;
   final String? integrityVerdict;
   final String? rejectedReason;
   final DateTime updatedAt;
@@ -1471,9 +1619,12 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     this.endedAt,
     required this.pointCount,
     required this.pathGeoJson,
+    this.pointTimestampsJson,
     required this.isClosedLoop,
     this.capturedAreaSqm,
     this.areaSqm,
+    this.bonusAreaSqm,
+    this.bountyMultiplier,
     this.integrityVerdict,
     this.rejectedReason,
     required this.updatedAt,
@@ -1489,12 +1640,21 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     }
     map['point_count'] = Variable<int>(pointCount);
     map['path_geo_json'] = Variable<String>(pathGeoJson);
+    if (!nullToAbsent || pointTimestampsJson != null) {
+      map['point_timestamps_json'] = Variable<String>(pointTimestampsJson);
+    }
     map['is_closed_loop'] = Variable<bool>(isClosedLoop);
     if (!nullToAbsent || capturedAreaSqm != null) {
       map['captured_area_sqm'] = Variable<double>(capturedAreaSqm);
     }
     if (!nullToAbsent || areaSqm != null) {
       map['area_sqm'] = Variable<double>(areaSqm);
+    }
+    if (!nullToAbsent || bonusAreaSqm != null) {
+      map['bonus_area_sqm'] = Variable<double>(bonusAreaSqm);
+    }
+    if (!nullToAbsent || bountyMultiplier != null) {
+      map['bounty_multiplier'] = Variable<double>(bountyMultiplier);
     }
     if (!nullToAbsent || integrityVerdict != null) {
       map['integrity_verdict'] = Variable<String>(integrityVerdict);
@@ -1518,6 +1678,9 @@ class RunRow extends DataClass implements Insertable<RunRow> {
           : Value(endedAt),
       pointCount: Value(pointCount),
       pathGeoJson: Value(pathGeoJson),
+      pointTimestampsJson: pointTimestampsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pointTimestampsJson),
       isClosedLoop: Value(isClosedLoop),
       capturedAreaSqm: capturedAreaSqm == null && nullToAbsent
           ? const Value.absent()
@@ -1525,6 +1688,12 @@ class RunRow extends DataClass implements Insertable<RunRow> {
       areaSqm: areaSqm == null && nullToAbsent
           ? const Value.absent()
           : Value(areaSqm),
+      bonusAreaSqm: bonusAreaSqm == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bonusAreaSqm),
+      bountyMultiplier: bountyMultiplier == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bountyMultiplier),
       integrityVerdict: integrityVerdict == null && nullToAbsent
           ? const Value.absent()
           : Value(integrityVerdict),
@@ -1549,9 +1718,14 @@ class RunRow extends DataClass implements Insertable<RunRow> {
       endedAt: serializer.fromJson<DateTime?>(json['endedAt']),
       pointCount: serializer.fromJson<int>(json['pointCount']),
       pathGeoJson: serializer.fromJson<String>(json['pathGeoJson']),
+      pointTimestampsJson: serializer.fromJson<String?>(
+        json['pointTimestampsJson'],
+      ),
       isClosedLoop: serializer.fromJson<bool>(json['isClosedLoop']),
       capturedAreaSqm: serializer.fromJson<double?>(json['capturedAreaSqm']),
       areaSqm: serializer.fromJson<double?>(json['areaSqm']),
+      bonusAreaSqm: serializer.fromJson<double?>(json['bonusAreaSqm']),
+      bountyMultiplier: serializer.fromJson<double?>(json['bountyMultiplier']),
       integrityVerdict: serializer.fromJson<String?>(json['integrityVerdict']),
       rejectedReason: serializer.fromJson<String?>(json['rejectedReason']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -1567,9 +1741,12 @@ class RunRow extends DataClass implements Insertable<RunRow> {
       'endedAt': serializer.toJson<DateTime?>(endedAt),
       'pointCount': serializer.toJson<int>(pointCount),
       'pathGeoJson': serializer.toJson<String>(pathGeoJson),
+      'pointTimestampsJson': serializer.toJson<String?>(pointTimestampsJson),
       'isClosedLoop': serializer.toJson<bool>(isClosedLoop),
       'capturedAreaSqm': serializer.toJson<double?>(capturedAreaSqm),
       'areaSqm': serializer.toJson<double?>(areaSqm),
+      'bonusAreaSqm': serializer.toJson<double?>(bonusAreaSqm),
+      'bountyMultiplier': serializer.toJson<double?>(bountyMultiplier),
       'integrityVerdict': serializer.toJson<String?>(integrityVerdict),
       'rejectedReason': serializer.toJson<String?>(rejectedReason),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -1583,9 +1760,12 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     Value<DateTime?> endedAt = const Value.absent(),
     int? pointCount,
     String? pathGeoJson,
+    Value<String?> pointTimestampsJson = const Value.absent(),
     bool? isClosedLoop,
     Value<double?> capturedAreaSqm = const Value.absent(),
     Value<double?> areaSqm = const Value.absent(),
+    Value<double?> bonusAreaSqm = const Value.absent(),
+    Value<double?> bountyMultiplier = const Value.absent(),
     Value<String?> integrityVerdict = const Value.absent(),
     Value<String?> rejectedReason = const Value.absent(),
     DateTime? updatedAt,
@@ -1596,11 +1776,18 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     endedAt: endedAt.present ? endedAt.value : this.endedAt,
     pointCount: pointCount ?? this.pointCount,
     pathGeoJson: pathGeoJson ?? this.pathGeoJson,
+    pointTimestampsJson: pointTimestampsJson.present
+        ? pointTimestampsJson.value
+        : this.pointTimestampsJson,
     isClosedLoop: isClosedLoop ?? this.isClosedLoop,
     capturedAreaSqm: capturedAreaSqm.present
         ? capturedAreaSqm.value
         : this.capturedAreaSqm,
     areaSqm: areaSqm.present ? areaSqm.value : this.areaSqm,
+    bonusAreaSqm: bonusAreaSqm.present ? bonusAreaSqm.value : this.bonusAreaSqm,
+    bountyMultiplier: bountyMultiplier.present
+        ? bountyMultiplier.value
+        : this.bountyMultiplier,
     integrityVerdict: integrityVerdict.present
         ? integrityVerdict.value
         : this.integrityVerdict,
@@ -1621,6 +1808,9 @@ class RunRow extends DataClass implements Insertable<RunRow> {
       pathGeoJson: data.pathGeoJson.present
           ? data.pathGeoJson.value
           : this.pathGeoJson,
+      pointTimestampsJson: data.pointTimestampsJson.present
+          ? data.pointTimestampsJson.value
+          : this.pointTimestampsJson,
       isClosedLoop: data.isClosedLoop.present
           ? data.isClosedLoop.value
           : this.isClosedLoop,
@@ -1628,6 +1818,12 @@ class RunRow extends DataClass implements Insertable<RunRow> {
           ? data.capturedAreaSqm.value
           : this.capturedAreaSqm,
       areaSqm: data.areaSqm.present ? data.areaSqm.value : this.areaSqm,
+      bonusAreaSqm: data.bonusAreaSqm.present
+          ? data.bonusAreaSqm.value
+          : this.bonusAreaSqm,
+      bountyMultiplier: data.bountyMultiplier.present
+          ? data.bountyMultiplier.value
+          : this.bountyMultiplier,
       integrityVerdict: data.integrityVerdict.present
           ? data.integrityVerdict.value
           : this.integrityVerdict,
@@ -1647,9 +1843,12 @@ class RunRow extends DataClass implements Insertable<RunRow> {
           ..write('endedAt: $endedAt, ')
           ..write('pointCount: $pointCount, ')
           ..write('pathGeoJson: $pathGeoJson, ')
+          ..write('pointTimestampsJson: $pointTimestampsJson, ')
           ..write('isClosedLoop: $isClosedLoop, ')
           ..write('capturedAreaSqm: $capturedAreaSqm, ')
           ..write('areaSqm: $areaSqm, ')
+          ..write('bonusAreaSqm: $bonusAreaSqm, ')
+          ..write('bountyMultiplier: $bountyMultiplier, ')
           ..write('integrityVerdict: $integrityVerdict, ')
           ..write('rejectedReason: $rejectedReason, ')
           ..write('updatedAt: $updatedAt, ')
@@ -1665,9 +1864,12 @@ class RunRow extends DataClass implements Insertable<RunRow> {
     endedAt,
     pointCount,
     pathGeoJson,
+    pointTimestampsJson,
     isClosedLoop,
     capturedAreaSqm,
     areaSqm,
+    bonusAreaSqm,
+    bountyMultiplier,
     integrityVerdict,
     rejectedReason,
     updatedAt,
@@ -1682,9 +1884,12 @@ class RunRow extends DataClass implements Insertable<RunRow> {
           other.endedAt == this.endedAt &&
           other.pointCount == this.pointCount &&
           other.pathGeoJson == this.pathGeoJson &&
+          other.pointTimestampsJson == this.pointTimestampsJson &&
           other.isClosedLoop == this.isClosedLoop &&
           other.capturedAreaSqm == this.capturedAreaSqm &&
           other.areaSqm == this.areaSqm &&
+          other.bonusAreaSqm == this.bonusAreaSqm &&
+          other.bountyMultiplier == this.bountyMultiplier &&
           other.integrityVerdict == this.integrityVerdict &&
           other.rejectedReason == this.rejectedReason &&
           other.updatedAt == this.updatedAt &&
@@ -1697,9 +1902,12 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
   final Value<DateTime?> endedAt;
   final Value<int> pointCount;
   final Value<String> pathGeoJson;
+  final Value<String?> pointTimestampsJson;
   final Value<bool> isClosedLoop;
   final Value<double?> capturedAreaSqm;
   final Value<double?> areaSqm;
+  final Value<double?> bonusAreaSqm;
+  final Value<double?> bountyMultiplier;
   final Value<String?> integrityVerdict;
   final Value<String?> rejectedReason;
   final Value<DateTime> updatedAt;
@@ -1711,9 +1919,12 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     this.endedAt = const Value.absent(),
     this.pointCount = const Value.absent(),
     this.pathGeoJson = const Value.absent(),
+    this.pointTimestampsJson = const Value.absent(),
     this.isClosedLoop = const Value.absent(),
     this.capturedAreaSqm = const Value.absent(),
     this.areaSqm = const Value.absent(),
+    this.bonusAreaSqm = const Value.absent(),
+    this.bountyMultiplier = const Value.absent(),
     this.integrityVerdict = const Value.absent(),
     this.rejectedReason = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1726,9 +1937,12 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     this.endedAt = const Value.absent(),
     required int pointCount,
     required String pathGeoJson,
+    this.pointTimestampsJson = const Value.absent(),
     this.isClosedLoop = const Value.absent(),
     this.capturedAreaSqm = const Value.absent(),
     this.areaSqm = const Value.absent(),
+    this.bonusAreaSqm = const Value.absent(),
+    this.bountyMultiplier = const Value.absent(),
     this.integrityVerdict = const Value.absent(),
     this.rejectedReason = const Value.absent(),
     required DateTime updatedAt,
@@ -1745,9 +1959,12 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     Expression<DateTime>? endedAt,
     Expression<int>? pointCount,
     Expression<String>? pathGeoJson,
+    Expression<String>? pointTimestampsJson,
     Expression<bool>? isClosedLoop,
     Expression<double>? capturedAreaSqm,
     Expression<double>? areaSqm,
+    Expression<double>? bonusAreaSqm,
+    Expression<double>? bountyMultiplier,
     Expression<String>? integrityVerdict,
     Expression<String>? rejectedReason,
     Expression<DateTime>? updatedAt,
@@ -1760,9 +1977,13 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
       if (endedAt != null) 'ended_at': endedAt,
       if (pointCount != null) 'point_count': pointCount,
       if (pathGeoJson != null) 'path_geo_json': pathGeoJson,
+      if (pointTimestampsJson != null)
+        'point_timestamps_json': pointTimestampsJson,
       if (isClosedLoop != null) 'is_closed_loop': isClosedLoop,
       if (capturedAreaSqm != null) 'captured_area_sqm': capturedAreaSqm,
       if (areaSqm != null) 'area_sqm': areaSqm,
+      if (bonusAreaSqm != null) 'bonus_area_sqm': bonusAreaSqm,
+      if (bountyMultiplier != null) 'bounty_multiplier': bountyMultiplier,
       if (integrityVerdict != null) 'integrity_verdict': integrityVerdict,
       if (rejectedReason != null) 'rejected_reason': rejectedReason,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -1777,9 +1998,12 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     Value<DateTime?>? endedAt,
     Value<int>? pointCount,
     Value<String>? pathGeoJson,
+    Value<String?>? pointTimestampsJson,
     Value<bool>? isClosedLoop,
     Value<double?>? capturedAreaSqm,
     Value<double?>? areaSqm,
+    Value<double?>? bonusAreaSqm,
+    Value<double?>? bountyMultiplier,
     Value<String?>? integrityVerdict,
     Value<String?>? rejectedReason,
     Value<DateTime>? updatedAt,
@@ -1792,9 +2016,12 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
       endedAt: endedAt ?? this.endedAt,
       pointCount: pointCount ?? this.pointCount,
       pathGeoJson: pathGeoJson ?? this.pathGeoJson,
+      pointTimestampsJson: pointTimestampsJson ?? this.pointTimestampsJson,
       isClosedLoop: isClosedLoop ?? this.isClosedLoop,
       capturedAreaSqm: capturedAreaSqm ?? this.capturedAreaSqm,
       areaSqm: areaSqm ?? this.areaSqm,
+      bonusAreaSqm: bonusAreaSqm ?? this.bonusAreaSqm,
+      bountyMultiplier: bountyMultiplier ?? this.bountyMultiplier,
       integrityVerdict: integrityVerdict ?? this.integrityVerdict,
       rejectedReason: rejectedReason ?? this.rejectedReason,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1821,6 +2048,11 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     if (pathGeoJson.present) {
       map['path_geo_json'] = Variable<String>(pathGeoJson.value);
     }
+    if (pointTimestampsJson.present) {
+      map['point_timestamps_json'] = Variable<String>(
+        pointTimestampsJson.value,
+      );
+    }
     if (isClosedLoop.present) {
       map['is_closed_loop'] = Variable<bool>(isClosedLoop.value);
     }
@@ -1829,6 +2061,12 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
     }
     if (areaSqm.present) {
       map['area_sqm'] = Variable<double>(areaSqm.value);
+    }
+    if (bonusAreaSqm.present) {
+      map['bonus_area_sqm'] = Variable<double>(bonusAreaSqm.value);
+    }
+    if (bountyMultiplier.present) {
+      map['bounty_multiplier'] = Variable<double>(bountyMultiplier.value);
     }
     if (integrityVerdict.present) {
       map['integrity_verdict'] = Variable<String>(integrityVerdict.value);
@@ -1856,9 +2094,12 @@ class RunsCompanion extends UpdateCompanion<RunRow> {
           ..write('endedAt: $endedAt, ')
           ..write('pointCount: $pointCount, ')
           ..write('pathGeoJson: $pathGeoJson, ')
+          ..write('pointTimestampsJson: $pointTimestampsJson, ')
           ..write('isClosedLoop: $isClosedLoop, ')
           ..write('capturedAreaSqm: $capturedAreaSqm, ')
           ..write('areaSqm: $areaSqm, ')
+          ..write('bonusAreaSqm: $bonusAreaSqm, ')
+          ..write('bountyMultiplier: $bountyMultiplier, ')
           ..write('integrityVerdict: $integrityVerdict, ')
           ..write('rejectedReason: $rejectedReason, ')
           ..write('updatedAt: $updatedAt, ')
@@ -1928,6 +2169,26 @@ class $TerritoriesTable extends Territories
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _healthMeta = const VerificationMeta('health');
+  @override
+  late final GeneratedColumn<int> health = GeneratedColumn<int>(
+    'health',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1935,6 +2196,8 @@ class $TerritoriesTable extends Territories
     geoJson,
     areaSqm,
     updatedAt,
+    deletedAt,
+    health,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1985,6 +2248,18 @@ class $TerritoriesTable extends Territories
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    if (data.containsKey('health')) {
+      context.handle(
+        _healthMeta,
+        health.isAcceptableOrUnknown(data['health']!, _healthMeta),
+      );
+    }
     return context;
   }
 
@@ -2014,6 +2289,14 @@ class $TerritoriesTable extends Territories
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+      health: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}health'],
+      ),
     );
   }
 
@@ -2029,12 +2312,27 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
   final String geoJson;
   final double areaSqm;
   final DateTime updatedAt;
+
+  /// Local-only tombstone (mirrors the backend's soft-delete column, but
+  /// this cache never round-trips it) — set when a refresh's bbox query no
+  /// longer returns a previously-cached row inside that same bbox
+  /// (decayed, captured to nothing, or otherwise removed server-side).
+  /// Kept rather than hard-deleting immediately so a row that reappears in
+  /// a later refresh (e.g. recaptured) can simply have this cleared.
+  final DateTime? deletedAt;
+
+  /// Server-computed decay health (0-100) from `territories_in_bbox()`'s
+  /// `health` column — nullable so rows cached before this column existed
+  /// (pre-migration) don't need a backfill.
+  final int? health;
   const TerritoryRow({
     required this.id,
     required this.ownerId,
     required this.geoJson,
     required this.areaSqm,
     required this.updatedAt,
+    this.deletedAt,
+    this.health,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2044,6 +2342,12 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
     map['geo_json'] = Variable<String>(geoJson);
     map['area_sqm'] = Variable<double>(areaSqm);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    if (!nullToAbsent || health != null) {
+      map['health'] = Variable<int>(health);
+    }
     return map;
   }
 
@@ -2054,6 +2358,12 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
       geoJson: Value(geoJson),
       areaSqm: Value(areaSqm),
       updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+      health: health == null && nullToAbsent
+          ? const Value.absent()
+          : Value(health),
     );
   }
 
@@ -2068,6 +2378,8 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
       geoJson: serializer.fromJson<String>(json['geoJson']),
       areaSqm: serializer.fromJson<double>(json['areaSqm']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+      health: serializer.fromJson<int?>(json['health']),
     );
   }
   @override
@@ -2079,6 +2391,8 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
       'geoJson': serializer.toJson<String>(geoJson),
       'areaSqm': serializer.toJson<double>(areaSqm),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+      'health': serializer.toJson<int?>(health),
     };
   }
 
@@ -2088,12 +2402,16 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
     String? geoJson,
     double? areaSqm,
     DateTime? updatedAt,
+    Value<DateTime?> deletedAt = const Value.absent(),
+    Value<int?> health = const Value.absent(),
   }) => TerritoryRow(
     id: id ?? this.id,
     ownerId: ownerId ?? this.ownerId,
     geoJson: geoJson ?? this.geoJson,
     areaSqm: areaSqm ?? this.areaSqm,
     updatedAt: updatedAt ?? this.updatedAt,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+    health: health.present ? health.value : this.health,
   );
   TerritoryRow copyWithCompanion(TerritoriesCompanion data) {
     return TerritoryRow(
@@ -2102,6 +2420,8 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
       geoJson: data.geoJson.present ? data.geoJson.value : this.geoJson,
       areaSqm: data.areaSqm.present ? data.areaSqm.value : this.areaSqm,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+      health: data.health.present ? data.health.value : this.health,
     );
   }
 
@@ -2112,13 +2432,16 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
           ..write('ownerId: $ownerId, ')
           ..write('geoJson: $geoJson, ')
           ..write('areaSqm: $areaSqm, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('health: $health')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, ownerId, geoJson, areaSqm, updatedAt);
+  int get hashCode =>
+      Object.hash(id, ownerId, geoJson, areaSqm, updatedAt, deletedAt, health);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2127,7 +2450,9 @@ class TerritoryRow extends DataClass implements Insertable<TerritoryRow> {
           other.ownerId == this.ownerId &&
           other.geoJson == this.geoJson &&
           other.areaSqm == this.areaSqm &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt &&
+          other.health == this.health);
 }
 
 class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
@@ -2136,6 +2461,8 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
   final Value<String> geoJson;
   final Value<double> areaSqm;
   final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int?> health;
   final Value<int> rowid;
   const TerritoriesCompanion({
     this.id = const Value.absent(),
@@ -2143,6 +2470,8 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     this.geoJson = const Value.absent(),
     this.areaSqm = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.health = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TerritoriesCompanion.insert({
@@ -2151,6 +2480,8 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     required String geoJson,
     required double areaSqm,
     required DateTime updatedAt,
+    this.deletedAt = const Value.absent(),
+    this.health = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        ownerId = Value(ownerId),
@@ -2163,6 +2494,8 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     Expression<String>? geoJson,
     Expression<double>? areaSqm,
     Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? health,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2171,6 +2504,8 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
       if (geoJson != null) 'geo_json': geoJson,
       if (areaSqm != null) 'area_sqm': areaSqm,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (health != null) 'health': health,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2181,6 +2516,8 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     Value<String>? geoJson,
     Value<double>? areaSqm,
     Value<DateTime>? updatedAt,
+    Value<DateTime?>? deletedAt,
+    Value<int?>? health,
     Value<int>? rowid,
   }) {
     return TerritoriesCompanion(
@@ -2189,6 +2526,8 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
       geoJson: geoJson ?? this.geoJson,
       areaSqm: areaSqm ?? this.areaSqm,
       updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      health: health ?? this.health,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2211,6 +2550,12 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (health.present) {
+      map['health'] = Variable<int>(health.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2225,6 +2570,8 @@ class TerritoriesCompanion extends UpdateCompanion<TerritoryRow> {
           ..write('geoJson: $geoJson, ')
           ..write('areaSqm: $areaSqm, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('health: $health, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2329,6 +2676,40 @@ class $SyncOutboxTable extends SyncOutbox
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _errorTypeMeta = const VerificationMeta(
+    'errorType',
+  );
+  @override
+  late final GeneratedColumn<String> errorType = GeneratedColumn<String>(
+    'error_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastErrorMeta = const VerificationMeta(
+    'lastError',
+  );
+  @override
+  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
+    'last_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _maxAttemptsMeta = const VerificationMeta(
+    'maxAttempts',
+  );
+  @override
+  late final GeneratedColumn<int> maxAttempts = GeneratedColumn<int>(
+    'max_attempts',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(10),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2339,6 +2720,9 @@ class $SyncOutboxTable extends SyncOutbox
     createdAt,
     nextAttemptAt,
     attemptCount,
+    errorType,
+    lastError,
+    maxAttempts,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2418,6 +2802,27 @@ class $SyncOutboxTable extends SyncOutbox
         ),
       );
     }
+    if (data.containsKey('error_type')) {
+      context.handle(
+        _errorTypeMeta,
+        errorType.isAcceptableOrUnknown(data['error_type']!, _errorTypeMeta),
+      );
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(
+        _lastErrorMeta,
+        lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
+      );
+    }
+    if (data.containsKey('max_attempts')) {
+      context.handle(
+        _maxAttemptsMeta,
+        maxAttempts.isAcceptableOrUnknown(
+          data['max_attempts']!,
+          _maxAttemptsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2459,6 +2864,18 @@ class $SyncOutboxTable extends SyncOutbox
         DriftSqlType.int,
         data['${effectivePrefix}attempt_count'],
       )!,
+      errorType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error_type'],
+      ),
+      lastError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_error'],
+      ),
+      maxAttempts: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}max_attempts'],
+      )!,
     );
   }
 
@@ -2477,6 +2894,15 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
   final DateTime createdAt;
   final DateTime nextAttemptAt;
   final int attemptCount;
+
+  /// Dead-letter classification: `'transient'` (network/timeout — keep
+  /// retrying with backoff) vs `'permanent'` (4xx/constraint violation —
+  /// the same payload will never succeed, so `SyncWorker` stops retrying
+  /// once `attemptCount` reaches [maxAttempts] and instead surfaces it via
+  /// `SyncStatus.error`). Null until the first failure.
+  final String? errorType;
+  final String? lastError;
+  final int maxAttempts;
   const OutboxEntryRow({
     required this.id,
     required this.entityTable,
@@ -2486,6 +2912,9 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
     required this.createdAt,
     required this.nextAttemptAt,
     required this.attemptCount,
+    this.errorType,
+    this.lastError,
+    required this.maxAttempts,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2498,6 +2927,13 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
     map['created_at'] = Variable<DateTime>(createdAt);
     map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
     map['attempt_count'] = Variable<int>(attemptCount);
+    if (!nullToAbsent || errorType != null) {
+      map['error_type'] = Variable<String>(errorType);
+    }
+    if (!nullToAbsent || lastError != null) {
+      map['last_error'] = Variable<String>(lastError);
+    }
+    map['max_attempts'] = Variable<int>(maxAttempts);
     return map;
   }
 
@@ -2511,6 +2947,13 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
       createdAt: Value(createdAt),
       nextAttemptAt: Value(nextAttemptAt),
       attemptCount: Value(attemptCount),
+      errorType: errorType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(errorType),
+      lastError: lastError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastError),
+      maxAttempts: Value(maxAttempts),
     );
   }
 
@@ -2528,6 +2971,9 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       nextAttemptAt: serializer.fromJson<DateTime>(json['nextAttemptAt']),
       attemptCount: serializer.fromJson<int>(json['attemptCount']),
+      errorType: serializer.fromJson<String?>(json['errorType']),
+      lastError: serializer.fromJson<String?>(json['lastError']),
+      maxAttempts: serializer.fromJson<int>(json['maxAttempts']),
     );
   }
   @override
@@ -2542,6 +2988,9 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'nextAttemptAt': serializer.toJson<DateTime>(nextAttemptAt),
       'attemptCount': serializer.toJson<int>(attemptCount),
+      'errorType': serializer.toJson<String?>(errorType),
+      'lastError': serializer.toJson<String?>(lastError),
+      'maxAttempts': serializer.toJson<int>(maxAttempts),
     };
   }
 
@@ -2554,6 +3003,9 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
     DateTime? createdAt,
     DateTime? nextAttemptAt,
     int? attemptCount,
+    Value<String?> errorType = const Value.absent(),
+    Value<String?> lastError = const Value.absent(),
+    int? maxAttempts,
   }) => OutboxEntryRow(
     id: id ?? this.id,
     entityTable: entityTable ?? this.entityTable,
@@ -2563,6 +3015,9 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
     createdAt: createdAt ?? this.createdAt,
     nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
     attemptCount: attemptCount ?? this.attemptCount,
+    errorType: errorType.present ? errorType.value : this.errorType,
+    lastError: lastError.present ? lastError.value : this.lastError,
+    maxAttempts: maxAttempts ?? this.maxAttempts,
   );
   OutboxEntryRow copyWithCompanion(SyncOutboxCompanion data) {
     return OutboxEntryRow(
@@ -2580,6 +3035,11 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
       attemptCount: data.attemptCount.present
           ? data.attemptCount.value
           : this.attemptCount,
+      errorType: data.errorType.present ? data.errorType.value : this.errorType,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      maxAttempts: data.maxAttempts.present
+          ? data.maxAttempts.value
+          : this.maxAttempts,
     );
   }
 
@@ -2593,7 +3053,10 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
           ..write('payload: $payload, ')
           ..write('createdAt: $createdAt, ')
           ..write('nextAttemptAt: $nextAttemptAt, ')
-          ..write('attemptCount: $attemptCount')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('errorType: $errorType, ')
+          ..write('lastError: $lastError, ')
+          ..write('maxAttempts: $maxAttempts')
           ..write(')'))
         .toString();
   }
@@ -2608,6 +3071,9 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
     createdAt,
     nextAttemptAt,
     attemptCount,
+    errorType,
+    lastError,
+    maxAttempts,
   );
   @override
   bool operator ==(Object other) =>
@@ -2620,7 +3086,10 @@ class OutboxEntryRow extends DataClass implements Insertable<OutboxEntryRow> {
           other.payload == this.payload &&
           other.createdAt == this.createdAt &&
           other.nextAttemptAt == this.nextAttemptAt &&
-          other.attemptCount == this.attemptCount);
+          other.attemptCount == this.attemptCount &&
+          other.errorType == this.errorType &&
+          other.lastError == this.lastError &&
+          other.maxAttempts == this.maxAttempts);
 }
 
 class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
@@ -2632,6 +3101,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
   final Value<DateTime> createdAt;
   final Value<DateTime> nextAttemptAt;
   final Value<int> attemptCount;
+  final Value<String?> errorType;
+  final Value<String?> lastError;
+  final Value<int> maxAttempts;
   const SyncOutboxCompanion({
     this.id = const Value.absent(),
     this.entityTable = const Value.absent(),
@@ -2641,6 +3113,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
     this.createdAt = const Value.absent(),
     this.nextAttemptAt = const Value.absent(),
     this.attemptCount = const Value.absent(),
+    this.errorType = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.maxAttempts = const Value.absent(),
   });
   SyncOutboxCompanion.insert({
     this.id = const Value.absent(),
@@ -2651,6 +3126,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
     required DateTime createdAt,
     required DateTime nextAttemptAt,
     this.attemptCount = const Value.absent(),
+    this.errorType = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.maxAttempts = const Value.absent(),
   }) : entityTable = Value(entityTable),
        entityId = Value(entityId),
        operation = Value(operation),
@@ -2666,6 +3144,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? nextAttemptAt,
     Expression<int>? attemptCount,
+    Expression<String>? errorType,
+    Expression<String>? lastError,
+    Expression<int>? maxAttempts,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2676,6 +3157,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
       if (createdAt != null) 'created_at': createdAt,
       if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
       if (attemptCount != null) 'attempt_count': attemptCount,
+      if (errorType != null) 'error_type': errorType,
+      if (lastError != null) 'last_error': lastError,
+      if (maxAttempts != null) 'max_attempts': maxAttempts,
     });
   }
 
@@ -2688,6 +3172,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
     Value<DateTime>? createdAt,
     Value<DateTime>? nextAttemptAt,
     Value<int>? attemptCount,
+    Value<String?>? errorType,
+    Value<String?>? lastError,
+    Value<int>? maxAttempts,
   }) {
     return SyncOutboxCompanion(
       id: id ?? this.id,
@@ -2698,6 +3185,9 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
       createdAt: createdAt ?? this.createdAt,
       nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
       attemptCount: attemptCount ?? this.attemptCount,
+      errorType: errorType ?? this.errorType,
+      lastError: lastError ?? this.lastError,
+      maxAttempts: maxAttempts ?? this.maxAttempts,
     );
   }
 
@@ -2728,6 +3218,15 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
     if (attemptCount.present) {
       map['attempt_count'] = Variable<int>(attemptCount.value);
     }
+    if (errorType.present) {
+      map['error_type'] = Variable<String>(errorType.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = Variable<String>(lastError.value);
+    }
+    if (maxAttempts.present) {
+      map['max_attempts'] = Variable<int>(maxAttempts.value);
+    }
     return map;
   }
 
@@ -2741,7 +3240,10 @@ class SyncOutboxCompanion extends UpdateCompanion<OutboxEntryRow> {
           ..write('payload: $payload, ')
           ..write('createdAt: $createdAt, ')
           ..write('nextAttemptAt: $nextAttemptAt, ')
-          ..write('attemptCount: $attemptCount')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('errorType: $errorType, ')
+          ..write('lastError: $lastError, ')
+          ..write('maxAttempts: $maxAttempts')
           ..write(')'))
         .toString();
   }
@@ -3008,6 +3510,639 @@ class UserStatsCompanion extends UpdateCompanion<UserStatsRow> {
   }
 }
 
+class $RunCheckpointsTable extends RunCheckpoints
+    with TableInfo<$RunCheckpointsTable, RunCheckpointRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RunCheckpointsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _runIdMeta = const VerificationMeta('runId');
+  @override
+  late final GeneratedColumn<String> runId = GeneratedColumn<String>(
+    'run_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _startedAtMeta = const VerificationMeta(
+    'startedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
+    'started_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pointsJsonMeta = const VerificationMeta(
+    'pointsJson',
+  );
+  @override
+  late final GeneratedColumn<String> pointsJson = GeneratedColumn<String>(
+    'points_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _distanceMetersMeta = const VerificationMeta(
+    'distanceMeters',
+  );
+  @override
+  late final GeneratedColumn<double> distanceMeters = GeneratedColumn<double>(
+    'distance_meters',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    runId,
+    startedAt,
+    pointsJson,
+    distanceMeters,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'run_checkpoints';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RunCheckpointRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('run_id')) {
+      context.handle(
+        _runIdMeta,
+        runId.isAcceptableOrUnknown(data['run_id']!, _runIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_runIdMeta);
+    }
+    if (data.containsKey('started_at')) {
+      context.handle(
+        _startedAtMeta,
+        startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_startedAtMeta);
+    }
+    if (data.containsKey('points_json')) {
+      context.handle(
+        _pointsJsonMeta,
+        pointsJson.isAcceptableOrUnknown(data['points_json']!, _pointsJsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pointsJsonMeta);
+    }
+    if (data.containsKey('distance_meters')) {
+      context.handle(
+        _distanceMetersMeta,
+        distanceMeters.isAcceptableOrUnknown(
+          data['distance_meters']!,
+          _distanceMetersMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_distanceMetersMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RunCheckpointRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RunCheckpointRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      runId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}run_id'],
+      )!,
+      startedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}started_at'],
+      )!,
+      pointsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}points_json'],
+      )!,
+      distanceMeters: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}distance_meters'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $RunCheckpointsTable createAlias(String alias) {
+    return $RunCheckpointsTable(attachedDatabase, alias);
+  }
+}
+
+class RunCheckpointRow extends DataClass
+    implements Insertable<RunCheckpointRow> {
+  final int id;
+  final String runId;
+  final DateTime startedAt;
+
+  /// JSON-encoded `List<TrackPoint>` — see `TrackPoint.toJson`.
+  final String pointsJson;
+  final double distanceMeters;
+  final DateTime updatedAt;
+  const RunCheckpointRow({
+    required this.id,
+    required this.runId,
+    required this.startedAt,
+    required this.pointsJson,
+    required this.distanceMeters,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['run_id'] = Variable<String>(runId);
+    map['started_at'] = Variable<DateTime>(startedAt);
+    map['points_json'] = Variable<String>(pointsJson);
+    map['distance_meters'] = Variable<double>(distanceMeters);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  RunCheckpointsCompanion toCompanion(bool nullToAbsent) {
+    return RunCheckpointsCompanion(
+      id: Value(id),
+      runId: Value(runId),
+      startedAt: Value(startedAt),
+      pointsJson: Value(pointsJson),
+      distanceMeters: Value(distanceMeters),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory RunCheckpointRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RunCheckpointRow(
+      id: serializer.fromJson<int>(json['id']),
+      runId: serializer.fromJson<String>(json['runId']),
+      startedAt: serializer.fromJson<DateTime>(json['startedAt']),
+      pointsJson: serializer.fromJson<String>(json['pointsJson']),
+      distanceMeters: serializer.fromJson<double>(json['distanceMeters']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'runId': serializer.toJson<String>(runId),
+      'startedAt': serializer.toJson<DateTime>(startedAt),
+      'pointsJson': serializer.toJson<String>(pointsJson),
+      'distanceMeters': serializer.toJson<double>(distanceMeters),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  RunCheckpointRow copyWith({
+    int? id,
+    String? runId,
+    DateTime? startedAt,
+    String? pointsJson,
+    double? distanceMeters,
+    DateTime? updatedAt,
+  }) => RunCheckpointRow(
+    id: id ?? this.id,
+    runId: runId ?? this.runId,
+    startedAt: startedAt ?? this.startedAt,
+    pointsJson: pointsJson ?? this.pointsJson,
+    distanceMeters: distanceMeters ?? this.distanceMeters,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  RunCheckpointRow copyWithCompanion(RunCheckpointsCompanion data) {
+    return RunCheckpointRow(
+      id: data.id.present ? data.id.value : this.id,
+      runId: data.runId.present ? data.runId.value : this.runId,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+      pointsJson: data.pointsJson.present
+          ? data.pointsJson.value
+          : this.pointsJson,
+      distanceMeters: data.distanceMeters.present
+          ? data.distanceMeters.value
+          : this.distanceMeters,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunCheckpointRow(')
+          ..write('id: $id, ')
+          ..write('runId: $runId, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('pointsJson: $pointsJson, ')
+          ..write('distanceMeters: $distanceMeters, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, runId, startedAt, pointsJson, distanceMeters, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RunCheckpointRow &&
+          other.id == this.id &&
+          other.runId == this.runId &&
+          other.startedAt == this.startedAt &&
+          other.pointsJson == this.pointsJson &&
+          other.distanceMeters == this.distanceMeters &&
+          other.updatedAt == this.updatedAt);
+}
+
+class RunCheckpointsCompanion extends UpdateCompanion<RunCheckpointRow> {
+  final Value<int> id;
+  final Value<String> runId;
+  final Value<DateTime> startedAt;
+  final Value<String> pointsJson;
+  final Value<double> distanceMeters;
+  final Value<DateTime> updatedAt;
+  const RunCheckpointsCompanion({
+    this.id = const Value.absent(),
+    this.runId = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.pointsJson = const Value.absent(),
+    this.distanceMeters = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  RunCheckpointsCompanion.insert({
+    this.id = const Value.absent(),
+    required String runId,
+    required DateTime startedAt,
+    required String pointsJson,
+    required double distanceMeters,
+    required DateTime updatedAt,
+  }) : runId = Value(runId),
+       startedAt = Value(startedAt),
+       pointsJson = Value(pointsJson),
+       distanceMeters = Value(distanceMeters),
+       updatedAt = Value(updatedAt);
+  static Insertable<RunCheckpointRow> custom({
+    Expression<int>? id,
+    Expression<String>? runId,
+    Expression<DateTime>? startedAt,
+    Expression<String>? pointsJson,
+    Expression<double>? distanceMeters,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (runId != null) 'run_id': runId,
+      if (startedAt != null) 'started_at': startedAt,
+      if (pointsJson != null) 'points_json': pointsJson,
+      if (distanceMeters != null) 'distance_meters': distanceMeters,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  RunCheckpointsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? runId,
+    Value<DateTime>? startedAt,
+    Value<String>? pointsJson,
+    Value<double>? distanceMeters,
+    Value<DateTime>? updatedAt,
+  }) {
+    return RunCheckpointsCompanion(
+      id: id ?? this.id,
+      runId: runId ?? this.runId,
+      startedAt: startedAt ?? this.startedAt,
+      pointsJson: pointsJson ?? this.pointsJson,
+      distanceMeters: distanceMeters ?? this.distanceMeters,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (runId.present) {
+      map['run_id'] = Variable<String>(runId.value);
+    }
+    if (startedAt.present) {
+      map['started_at'] = Variable<DateTime>(startedAt.value);
+    }
+    if (pointsJson.present) {
+      map['points_json'] = Variable<String>(pointsJson.value);
+    }
+    if (distanceMeters.present) {
+      map['distance_meters'] = Variable<double>(distanceMeters.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunCheckpointsCompanion(')
+          ..write('id: $id, ')
+          ..write('runId: $runId, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('pointsJson: $pointsJson, ')
+          ..write('distanceMeters: $distanceMeters, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SyncMetaTable extends SyncMeta
+    with TableInfo<$SyncMetaTable, SyncMetaRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncMetaTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _entityTableMeta = const VerificationMeta(
+    'entityTable',
+  );
+  @override
+  late final GeneratedColumn<String> entityTable = GeneratedColumn<String>(
+    'entity_table',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastPulledAtMeta = const VerificationMeta(
+    'lastPulledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastPulledAt = GeneratedColumn<DateTime>(
+    'last_pulled_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [entityTable, lastPulledAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_meta';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncMetaRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('entity_table')) {
+      context.handle(
+        _entityTableMeta,
+        entityTable.isAcceptableOrUnknown(
+          data['entity_table']!,
+          _entityTableMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_entityTableMeta);
+    }
+    if (data.containsKey('last_pulled_at')) {
+      context.handle(
+        _lastPulledAtMeta,
+        lastPulledAt.isAcceptableOrUnknown(
+          data['last_pulled_at']!,
+          _lastPulledAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_lastPulledAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {entityTable};
+  @override
+  SyncMetaRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncMetaRow(
+      entityTable: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_table'],
+      )!,
+      lastPulledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_pulled_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncMetaTable createAlias(String alias) {
+    return $SyncMetaTable(attachedDatabase, alias);
+  }
+}
+
+class SyncMetaRow extends DataClass implements Insertable<SyncMetaRow> {
+  final String entityTable;
+  final DateTime lastPulledAt;
+  const SyncMetaRow({required this.entityTable, required this.lastPulledAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['entity_table'] = Variable<String>(entityTable);
+    map['last_pulled_at'] = Variable<DateTime>(lastPulledAt);
+    return map;
+  }
+
+  SyncMetaCompanion toCompanion(bool nullToAbsent) {
+    return SyncMetaCompanion(
+      entityTable: Value(entityTable),
+      lastPulledAt: Value(lastPulledAt),
+    );
+  }
+
+  factory SyncMetaRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncMetaRow(
+      entityTable: serializer.fromJson<String>(json['entityTable']),
+      lastPulledAt: serializer.fromJson<DateTime>(json['lastPulledAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'entityTable': serializer.toJson<String>(entityTable),
+      'lastPulledAt': serializer.toJson<DateTime>(lastPulledAt),
+    };
+  }
+
+  SyncMetaRow copyWith({String? entityTable, DateTime? lastPulledAt}) =>
+      SyncMetaRow(
+        entityTable: entityTable ?? this.entityTable,
+        lastPulledAt: lastPulledAt ?? this.lastPulledAt,
+      );
+  SyncMetaRow copyWithCompanion(SyncMetaCompanion data) {
+    return SyncMetaRow(
+      entityTable: data.entityTable.present
+          ? data.entityTable.value
+          : this.entityTable,
+      lastPulledAt: data.lastPulledAt.present
+          ? data.lastPulledAt.value
+          : this.lastPulledAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncMetaRow(')
+          ..write('entityTable: $entityTable, ')
+          ..write('lastPulledAt: $lastPulledAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(entityTable, lastPulledAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncMetaRow &&
+          other.entityTable == this.entityTable &&
+          other.lastPulledAt == this.lastPulledAt);
+}
+
+class SyncMetaCompanion extends UpdateCompanion<SyncMetaRow> {
+  final Value<String> entityTable;
+  final Value<DateTime> lastPulledAt;
+  final Value<int> rowid;
+  const SyncMetaCompanion({
+    this.entityTable = const Value.absent(),
+    this.lastPulledAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncMetaCompanion.insert({
+    required String entityTable,
+    required DateTime lastPulledAt,
+    this.rowid = const Value.absent(),
+  }) : entityTable = Value(entityTable),
+       lastPulledAt = Value(lastPulledAt);
+  static Insertable<SyncMetaRow> custom({
+    Expression<String>? entityTable,
+    Expression<DateTime>? lastPulledAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (entityTable != null) 'entity_table': entityTable,
+      if (lastPulledAt != null) 'last_pulled_at': lastPulledAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncMetaCompanion copyWith({
+    Value<String>? entityTable,
+    Value<DateTime>? lastPulledAt,
+    Value<int>? rowid,
+  }) {
+    return SyncMetaCompanion(
+      entityTable: entityTable ?? this.entityTable,
+      lastPulledAt: lastPulledAt ?? this.lastPulledAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (entityTable.present) {
+      map['entity_table'] = Variable<String>(entityTable.value);
+    }
+    if (lastPulledAt.present) {
+      map['last_pulled_at'] = Variable<DateTime>(lastPulledAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncMetaCompanion(')
+          ..write('entityTable: $entityTable, ')
+          ..write('lastPulledAt: $lastPulledAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3017,6 +4152,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TerritoriesTable territories = $TerritoriesTable(this);
   late final $SyncOutboxTable syncOutbox = $SyncOutboxTable(this);
   late final $UserStatsTable userStats = $UserStatsTable(this);
+  late final $RunCheckpointsTable runCheckpoints = $RunCheckpointsTable(this);
+  late final $SyncMetaTable syncMeta = $SyncMetaTable(this);
+  late final Index syncOutboxNextAttemptAtIdx = Index(
+    'sync_outbox_next_attempt_at_idx',
+    'CREATE INDEX sync_outbox_next_attempt_at_idx ON sync_outbox (next_attempt_at)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3028,12 +4169,16 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     territories,
     syncOutbox,
     userStats,
+    runCheckpoints,
+    syncMeta,
+    syncOutboxNextAttemptAtIdx,
   ];
 }
 
 typedef $$AlarmsTableCreateCompanionBuilder =
     AlarmsCompanion Function({
       required String id,
+      Value<int?> nativeId,
       required DateTime scheduledTime,
       required String exerciseMode,
       required int requiredReps,
@@ -3047,6 +4192,7 @@ typedef $$AlarmsTableCreateCompanionBuilder =
 typedef $$AlarmsTableUpdateCompanionBuilder =
     AlarmsCompanion Function({
       Value<String> id,
+      Value<int?> nativeId,
       Value<DateTime> scheduledTime,
       Value<String> exerciseMode,
       Value<int> requiredReps,
@@ -3069,6 +4215,11 @@ class $$AlarmsTableFilterComposer
   });
   ColumnFilters<String> get id => $composableBuilder(
     column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get nativeId => $composableBuilder(
+    column: $table.nativeId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3127,6 +4278,11 @@ class $$AlarmsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get nativeId => $composableBuilder(
+    column: $table.nativeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get scheduledTime => $composableBuilder(
     column: $table.scheduledTime,
     builder: (column) => ColumnOrderings(column),
@@ -3179,6 +4335,9 @@ class $$AlarmsTableAnnotationComposer
   });
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get nativeId =>
+      $composableBuilder(column: $table.nativeId, builder: (column) => column);
 
   GeneratedColumn<DateTime> get scheduledTime => $composableBuilder(
     column: $table.scheduledTime,
@@ -3244,6 +4403,7 @@ class $$AlarmsTableTableManager
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
+                Value<int?> nativeId = const Value.absent(),
                 Value<DateTime> scheduledTime = const Value.absent(),
                 Value<String> exerciseMode = const Value.absent(),
                 Value<int> requiredReps = const Value.absent(),
@@ -3255,6 +4415,7 @@ class $$AlarmsTableTableManager
                 Value<int> rowid = const Value.absent(),
               }) => AlarmsCompanion(
                 id: id,
+                nativeId: nativeId,
                 scheduledTime: scheduledTime,
                 exerciseMode: exerciseMode,
                 requiredReps: requiredReps,
@@ -3268,6 +4429,7 @@ class $$AlarmsTableTableManager
           createCompanionCallback:
               ({
                 required String id,
+                Value<int?> nativeId = const Value.absent(),
                 required DateTime scheduledTime,
                 required String exerciseMode,
                 required int requiredReps,
@@ -3279,6 +4441,7 @@ class $$AlarmsTableTableManager
                 Value<int> rowid = const Value.absent(),
               }) => AlarmsCompanion.insert(
                 id: id,
+                nativeId: nativeId,
                 scheduledTime: scheduledTime,
                 exerciseMode: exerciseMode,
                 requiredReps: requiredReps,
@@ -3578,9 +4741,12 @@ typedef $$RunsTableCreateCompanionBuilder =
       Value<DateTime?> endedAt,
       required int pointCount,
       required String pathGeoJson,
+      Value<String?> pointTimestampsJson,
       Value<bool> isClosedLoop,
       Value<double?> capturedAreaSqm,
       Value<double?> areaSqm,
+      Value<double?> bonusAreaSqm,
+      Value<double?> bountyMultiplier,
       Value<String?> integrityVerdict,
       Value<String?> rejectedReason,
       required DateTime updatedAt,
@@ -3594,9 +4760,12 @@ typedef $$RunsTableUpdateCompanionBuilder =
       Value<DateTime?> endedAt,
       Value<int> pointCount,
       Value<String> pathGeoJson,
+      Value<String?> pointTimestampsJson,
       Value<bool> isClosedLoop,
       Value<double?> capturedAreaSqm,
       Value<double?> areaSqm,
+      Value<double?> bonusAreaSqm,
+      Value<double?> bountyMultiplier,
       Value<String?> integrityVerdict,
       Value<String?> rejectedReason,
       Value<DateTime> updatedAt,
@@ -3637,6 +4806,11 @@ class $$RunsTableFilterComposer extends Composer<_$AppDatabase, $RunsTable> {
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get pointTimestampsJson => $composableBuilder(
+    column: $table.pointTimestampsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<bool> get isClosedLoop => $composableBuilder(
     column: $table.isClosedLoop,
     builder: (column) => ColumnFilters(column),
@@ -3649,6 +4823,16 @@ class $$RunsTableFilterComposer extends Composer<_$AppDatabase, $RunsTable> {
 
   ColumnFilters<double> get areaSqm => $composableBuilder(
     column: $table.areaSqm,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get bonusAreaSqm => $composableBuilder(
+    column: $table.bonusAreaSqm,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get bountyMultiplier => $composableBuilder(
+    column: $table.bountyMultiplier,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3706,6 +4890,11 @@ class $$RunsTableOrderingComposer extends Composer<_$AppDatabase, $RunsTable> {
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get pointTimestampsJson => $composableBuilder(
+    column: $table.pointTimestampsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isClosedLoop => $composableBuilder(
     column: $table.isClosedLoop,
     builder: (column) => ColumnOrderings(column),
@@ -3718,6 +4907,16 @@ class $$RunsTableOrderingComposer extends Composer<_$AppDatabase, $RunsTable> {
 
   ColumnOrderings<double> get areaSqm => $composableBuilder(
     column: $table.areaSqm,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get bonusAreaSqm => $composableBuilder(
+    column: $table.bonusAreaSqm,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get bountyMultiplier => $composableBuilder(
+    column: $table.bountyMultiplier,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -3770,6 +4969,11 @@ class $$RunsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get pointTimestampsJson => $composableBuilder(
+    column: $table.pointTimestampsJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get isClosedLoop => $composableBuilder(
     column: $table.isClosedLoop,
     builder: (column) => column,
@@ -3782,6 +4986,16 @@ class $$RunsTableAnnotationComposer
 
   GeneratedColumn<double> get areaSqm =>
       $composableBuilder(column: $table.areaSqm, builder: (column) => column);
+
+  GeneratedColumn<double> get bonusAreaSqm => $composableBuilder(
+    column: $table.bonusAreaSqm,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get bountyMultiplier => $composableBuilder(
+    column: $table.bountyMultiplier,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get integrityVerdict => $composableBuilder(
     column: $table.integrityVerdict,
@@ -3833,9 +5047,12 @@ class $$RunsTableTableManager
                 Value<DateTime?> endedAt = const Value.absent(),
                 Value<int> pointCount = const Value.absent(),
                 Value<String> pathGeoJson = const Value.absent(),
+                Value<String?> pointTimestampsJson = const Value.absent(),
                 Value<bool> isClosedLoop = const Value.absent(),
                 Value<double?> capturedAreaSqm = const Value.absent(),
                 Value<double?> areaSqm = const Value.absent(),
+                Value<double?> bonusAreaSqm = const Value.absent(),
+                Value<double?> bountyMultiplier = const Value.absent(),
                 Value<String?> integrityVerdict = const Value.absent(),
                 Value<String?> rejectedReason = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -3847,9 +5064,12 @@ class $$RunsTableTableManager
                 endedAt: endedAt,
                 pointCount: pointCount,
                 pathGeoJson: pathGeoJson,
+                pointTimestampsJson: pointTimestampsJson,
                 isClosedLoop: isClosedLoop,
                 capturedAreaSqm: capturedAreaSqm,
                 areaSqm: areaSqm,
+                bonusAreaSqm: bonusAreaSqm,
+                bountyMultiplier: bountyMultiplier,
                 integrityVerdict: integrityVerdict,
                 rejectedReason: rejectedReason,
                 updatedAt: updatedAt,
@@ -3863,9 +5083,12 @@ class $$RunsTableTableManager
                 Value<DateTime?> endedAt = const Value.absent(),
                 required int pointCount,
                 required String pathGeoJson,
+                Value<String?> pointTimestampsJson = const Value.absent(),
                 Value<bool> isClosedLoop = const Value.absent(),
                 Value<double?> capturedAreaSqm = const Value.absent(),
                 Value<double?> areaSqm = const Value.absent(),
+                Value<double?> bonusAreaSqm = const Value.absent(),
+                Value<double?> bountyMultiplier = const Value.absent(),
                 Value<String?> integrityVerdict = const Value.absent(),
                 Value<String?> rejectedReason = const Value.absent(),
                 required DateTime updatedAt,
@@ -3877,9 +5100,12 @@ class $$RunsTableTableManager
                 endedAt: endedAt,
                 pointCount: pointCount,
                 pathGeoJson: pathGeoJson,
+                pointTimestampsJson: pointTimestampsJson,
                 isClosedLoop: isClosedLoop,
                 capturedAreaSqm: capturedAreaSqm,
                 areaSqm: areaSqm,
+                bonusAreaSqm: bonusAreaSqm,
+                bountyMultiplier: bountyMultiplier,
                 integrityVerdict: integrityVerdict,
                 rejectedReason: rejectedReason,
                 updatedAt: updatedAt,
@@ -3915,6 +5141,8 @@ typedef $$TerritoriesTableCreateCompanionBuilder =
       required String geoJson,
       required double areaSqm,
       required DateTime updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int?> health,
       Value<int> rowid,
     });
 typedef $$TerritoriesTableUpdateCompanionBuilder =
@@ -3924,6 +5152,8 @@ typedef $$TerritoriesTableUpdateCompanionBuilder =
       Value<String> geoJson,
       Value<double> areaSqm,
       Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<int?> health,
       Value<int> rowid,
     });
 
@@ -3958,6 +5188,16 @@ class $$TerritoriesTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get health => $composableBuilder(
+    column: $table.health,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3995,6 +5235,16 @@ class $$TerritoriesTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get health => $composableBuilder(
+    column: $table.health,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$TerritoriesTableAnnotationComposer
@@ -4020,6 +5270,12 @@ class $$TerritoriesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get health =>
+      $composableBuilder(column: $table.health, builder: (column) => column);
 }
 
 class $$TerritoriesTableTableManager
@@ -4058,6 +5314,8 @@ class $$TerritoriesTableTableManager
                 Value<String> geoJson = const Value.absent(),
                 Value<double> areaSqm = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int?> health = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TerritoriesCompanion(
                 id: id,
@@ -4065,6 +5323,8 @@ class $$TerritoriesTableTableManager
                 geoJson: geoJson,
                 areaSqm: areaSqm,
                 updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                health: health,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -4074,6 +5334,8 @@ class $$TerritoriesTableTableManager
                 required String geoJson,
                 required double areaSqm,
                 required DateTime updatedAt,
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int?> health = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TerritoriesCompanion.insert(
                 id: id,
@@ -4081,6 +5343,8 @@ class $$TerritoriesTableTableManager
                 geoJson: geoJson,
                 areaSqm: areaSqm,
                 updatedAt: updatedAt,
+                deletedAt: deletedAt,
+                health: health,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -4118,6 +5382,9 @@ typedef $$SyncOutboxTableCreateCompanionBuilder =
       required DateTime createdAt,
       required DateTime nextAttemptAt,
       Value<int> attemptCount,
+      Value<String?> errorType,
+      Value<String?> lastError,
+      Value<int> maxAttempts,
     });
 typedef $$SyncOutboxTableUpdateCompanionBuilder =
     SyncOutboxCompanion Function({
@@ -4129,6 +5396,9 @@ typedef $$SyncOutboxTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> nextAttemptAt,
       Value<int> attemptCount,
+      Value<String?> errorType,
+      Value<String?> lastError,
+      Value<int> maxAttempts,
     });
 
 class $$SyncOutboxTableFilterComposer
@@ -4177,6 +5447,21 @@ class $$SyncOutboxTableFilterComposer
 
   ColumnFilters<int> get attemptCount => $composableBuilder(
     column: $table.attemptCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get errorType => $composableBuilder(
+    column: $table.errorType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get maxAttempts => $composableBuilder(
+    column: $table.maxAttempts,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4229,6 +5514,21 @@ class $$SyncOutboxTableOrderingComposer
     column: $table.attemptCount,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get errorType => $composableBuilder(
+    column: $table.errorType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get maxAttempts => $composableBuilder(
+    column: $table.maxAttempts,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncOutboxTableAnnotationComposer
@@ -4267,6 +5567,17 @@ class $$SyncOutboxTableAnnotationComposer
 
   GeneratedColumn<int> get attemptCount => $composableBuilder(
     column: $table.attemptCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get errorType =>
+      $composableBuilder(column: $table.errorType, builder: (column) => column);
+
+  GeneratedColumn<String> get lastError =>
+      $composableBuilder(column: $table.lastError, builder: (column) => column);
+
+  GeneratedColumn<int> get maxAttempts => $composableBuilder(
+    column: $table.maxAttempts,
     builder: (column) => column,
   );
 }
@@ -4310,6 +5621,9 @@ class $$SyncOutboxTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> nextAttemptAt = const Value.absent(),
                 Value<int> attemptCount = const Value.absent(),
+                Value<String?> errorType = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
+                Value<int> maxAttempts = const Value.absent(),
               }) => SyncOutboxCompanion(
                 id: id,
                 entityTable: entityTable,
@@ -4319,6 +5633,9 @@ class $$SyncOutboxTableTableManager
                 createdAt: createdAt,
                 nextAttemptAt: nextAttemptAt,
                 attemptCount: attemptCount,
+                errorType: errorType,
+                lastError: lastError,
+                maxAttempts: maxAttempts,
               ),
           createCompanionCallback:
               ({
@@ -4330,6 +5647,9 @@ class $$SyncOutboxTableTableManager
                 required DateTime createdAt,
                 required DateTime nextAttemptAt,
                 Value<int> attemptCount = const Value.absent(),
+                Value<String?> errorType = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
+                Value<int> maxAttempts = const Value.absent(),
               }) => SyncOutboxCompanion.insert(
                 id: id,
                 entityTable: entityTable,
@@ -4339,6 +5659,9 @@ class $$SyncOutboxTableTableManager
                 createdAt: createdAt,
                 nextAttemptAt: nextAttemptAt,
                 attemptCount: attemptCount,
+                errorType: errorType,
+                lastError: lastError,
+                maxAttempts: maxAttempts,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -4523,6 +5846,373 @@ typedef $$UserStatsTableProcessedTableManager =
       UserStatsRow,
       PrefetchHooks Function()
     >;
+typedef $$RunCheckpointsTableCreateCompanionBuilder =
+    RunCheckpointsCompanion Function({
+      Value<int> id,
+      required String runId,
+      required DateTime startedAt,
+      required String pointsJson,
+      required double distanceMeters,
+      required DateTime updatedAt,
+    });
+typedef $$RunCheckpointsTableUpdateCompanionBuilder =
+    RunCheckpointsCompanion Function({
+      Value<int> id,
+      Value<String> runId,
+      Value<DateTime> startedAt,
+      Value<String> pointsJson,
+      Value<double> distanceMeters,
+      Value<DateTime> updatedAt,
+    });
+
+class $$RunCheckpointsTableFilterComposer
+    extends Composer<_$AppDatabase, $RunCheckpointsTable> {
+  $$RunCheckpointsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get runId => $composableBuilder(
+    column: $table.runId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pointsJson => $composableBuilder(
+    column: $table.pointsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get distanceMeters => $composableBuilder(
+    column: $table.distanceMeters,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RunCheckpointsTableOrderingComposer
+    extends Composer<_$AppDatabase, $RunCheckpointsTable> {
+  $$RunCheckpointsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get runId => $composableBuilder(
+    column: $table.runId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pointsJson => $composableBuilder(
+    column: $table.pointsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get distanceMeters => $composableBuilder(
+    column: $table.distanceMeters,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RunCheckpointsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RunCheckpointsTable> {
+  $$RunCheckpointsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get runId =>
+      $composableBuilder(column: $table.runId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get pointsJson => $composableBuilder(
+    column: $table.pointsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get distanceMeters => $composableBuilder(
+    column: $table.distanceMeters,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$RunCheckpointsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RunCheckpointsTable,
+          RunCheckpointRow,
+          $$RunCheckpointsTableFilterComposer,
+          $$RunCheckpointsTableOrderingComposer,
+          $$RunCheckpointsTableAnnotationComposer,
+          $$RunCheckpointsTableCreateCompanionBuilder,
+          $$RunCheckpointsTableUpdateCompanionBuilder,
+          (
+            RunCheckpointRow,
+            BaseReferences<
+              _$AppDatabase,
+              $RunCheckpointsTable,
+              RunCheckpointRow
+            >,
+          ),
+          RunCheckpointRow,
+          PrefetchHooks Function()
+        > {
+  $$RunCheckpointsTableTableManager(
+    _$AppDatabase db,
+    $RunCheckpointsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RunCheckpointsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RunCheckpointsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RunCheckpointsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> runId = const Value.absent(),
+                Value<DateTime> startedAt = const Value.absent(),
+                Value<String> pointsJson = const Value.absent(),
+                Value<double> distanceMeters = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => RunCheckpointsCompanion(
+                id: id,
+                runId: runId,
+                startedAt: startedAt,
+                pointsJson: pointsJson,
+                distanceMeters: distanceMeters,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String runId,
+                required DateTime startedAt,
+                required String pointsJson,
+                required double distanceMeters,
+                required DateTime updatedAt,
+              }) => RunCheckpointsCompanion.insert(
+                id: id,
+                runId: runId,
+                startedAt: startedAt,
+                pointsJson: pointsJson,
+                distanceMeters: distanceMeters,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RunCheckpointsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RunCheckpointsTable,
+      RunCheckpointRow,
+      $$RunCheckpointsTableFilterComposer,
+      $$RunCheckpointsTableOrderingComposer,
+      $$RunCheckpointsTableAnnotationComposer,
+      $$RunCheckpointsTableCreateCompanionBuilder,
+      $$RunCheckpointsTableUpdateCompanionBuilder,
+      (
+        RunCheckpointRow,
+        BaseReferences<_$AppDatabase, $RunCheckpointsTable, RunCheckpointRow>,
+      ),
+      RunCheckpointRow,
+      PrefetchHooks Function()
+    >;
+typedef $$SyncMetaTableCreateCompanionBuilder =
+    SyncMetaCompanion Function({
+      required String entityTable,
+      required DateTime lastPulledAt,
+      Value<int> rowid,
+    });
+typedef $$SyncMetaTableUpdateCompanionBuilder =
+    SyncMetaCompanion Function({
+      Value<String> entityTable,
+      Value<DateTime> lastPulledAt,
+      Value<int> rowid,
+    });
+
+class $$SyncMetaTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncMetaTable> {
+  $$SyncMetaTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get entityTable => $composableBuilder(
+    column: $table.entityTable,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastPulledAt => $composableBuilder(
+    column: $table.lastPulledAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncMetaTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncMetaTable> {
+  $$SyncMetaTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get entityTable => $composableBuilder(
+    column: $table.entityTable,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastPulledAt => $composableBuilder(
+    column: $table.lastPulledAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncMetaTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncMetaTable> {
+  $$SyncMetaTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get entityTable => $composableBuilder(
+    column: $table.entityTable,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastPulledAt => $composableBuilder(
+    column: $table.lastPulledAt,
+    builder: (column) => column,
+  );
+}
+
+class $$SyncMetaTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncMetaTable,
+          SyncMetaRow,
+          $$SyncMetaTableFilterComposer,
+          $$SyncMetaTableOrderingComposer,
+          $$SyncMetaTableAnnotationComposer,
+          $$SyncMetaTableCreateCompanionBuilder,
+          $$SyncMetaTableUpdateCompanionBuilder,
+          (
+            SyncMetaRow,
+            BaseReferences<_$AppDatabase, $SyncMetaTable, SyncMetaRow>,
+          ),
+          SyncMetaRow,
+          PrefetchHooks Function()
+        > {
+  $$SyncMetaTableTableManager(_$AppDatabase db, $SyncMetaTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncMetaTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncMetaTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncMetaTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> entityTable = const Value.absent(),
+                Value<DateTime> lastPulledAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncMetaCompanion(
+                entityTable: entityTable,
+                lastPulledAt: lastPulledAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String entityTable,
+                required DateTime lastPulledAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SyncMetaCompanion.insert(
+                entityTable: entityTable,
+                lastPulledAt: lastPulledAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncMetaTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncMetaTable,
+      SyncMetaRow,
+      $$SyncMetaTableFilterComposer,
+      $$SyncMetaTableOrderingComposer,
+      $$SyncMetaTableAnnotationComposer,
+      $$SyncMetaTableCreateCompanionBuilder,
+      $$SyncMetaTableUpdateCompanionBuilder,
+      (SyncMetaRow, BaseReferences<_$AppDatabase, $SyncMetaTable, SyncMetaRow>),
+      SyncMetaRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -4538,4 +6228,8 @@ class $AppDatabaseManager {
       $$SyncOutboxTableTableManager(_db, _db.syncOutbox);
   $$UserStatsTableTableManager get userStats =>
       $$UserStatsTableTableManager(_db, _db.userStats);
+  $$RunCheckpointsTableTableManager get runCheckpoints =>
+      $$RunCheckpointsTableTableManager(_db, _db.runCheckpoints);
+  $$SyncMetaTableTableManager get syncMeta =>
+      $$SyncMetaTableTableManager(_db, _db.syncMeta);
 }

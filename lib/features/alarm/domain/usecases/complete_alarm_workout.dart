@@ -10,26 +10,43 @@ class CompleteAlarmWorkoutParams extends Equatable {
     required this.alarm,
     required this.verified,
     required this.repsCompleted,
+    required this.startedAt,
+    this.isPreview = false,
   });
 
   final AlarmSchedule alarm;
   final bool verified;
   final int repsCompleted;
+  final DateTime startedAt;
+
+  /// See `AlarmRepository.completeWorkout`'s doc comment — must be true for
+  /// `AlarmListPage`'s "tap to preview" flow, false for a real ring.
+  final bool isPreview;
 
   @override
-  List<Object?> get props => [alarm, verified, repsCompleted];
+  List<Object?> get props => [
+    alarm,
+    verified,
+    repsCompleted,
+    startedAt,
+    isPreview,
+  ];
 }
 
 @injectable
-class CompleteAlarmWorkout implements UseCase<void, CompleteAlarmWorkoutParams> {
+class CompleteAlarmWorkout
+    implements UseCase<void, CompleteAlarmWorkoutParams> {
   CompleteAlarmWorkout(this._repository);
 
   final AlarmRepository _repository;
 
   @override
-  Future<void> call(CompleteAlarmWorkoutParams params) => _repository.completeWorkout(
+  Future<void> call(CompleteAlarmWorkoutParams params) =>
+      _repository.completeWorkout(
         params.alarm,
         verified: params.verified,
         repsCompleted: params.repsCompleted,
+        startedAt: params.startedAt,
+        isPreview: params.isPreview,
       );
 }

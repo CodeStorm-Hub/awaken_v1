@@ -16,7 +16,10 @@ class AlarmLocalDataSource {
   Stream<List<AlarmSettings>> get ringing =>
       Alarm.ringing.map((set) => set.alarms.toList());
 
-  Future<bool> set(AlarmSettings settings) => Alarm.set(alarmSettings: settings);
+  Future<bool> set(AlarmSettings settings) =>
+      Alarm.set(alarmSettings: settings);
 
   Future<bool> stop(int id) => Alarm.stop(id);
+
+  Future<void> stopAll() => Alarm.stopAll();
 }

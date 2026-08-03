@@ -10,6 +10,10 @@ import 'location_provider_factory.dart';
 class ScriptedLocationProviderFactory implements LocationProviderFactory {
   @override
   LocationProvider create() => ScriptedLocationProvider();
+
+  /// No map-centering needed in scripted E2E builds.
+  @override
+  Future<GeoPosition?> getCurrentPosition() async => null;
 }
 
 /// Replays a bundled JSON fixture of GPS waypoints on a real-world-paced

@@ -10,5 +10,6 @@ class RequestBatteryExemption implements UseCase<void, NoParams> {
   final BatteryExemptionRepository _repository;
 
   @override
-  Future<void> call(NoParams params) => _repository.requestIgnoreBatteryOptimizations();
+  Future<void> call(NoParams params) =>
+      _repository.requestIgnoreBatteryOptimizations();
 }

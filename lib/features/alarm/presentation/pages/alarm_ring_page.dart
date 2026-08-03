@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/router/navigator_key.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/shape_tokens.dart';
 import '../../../verification/domain/entities/verification_result.dart';
 import '../../../verification/presentation/pages/verification_page.dart';
 import '../../domain/entities/alarm_schedule.dart';
@@ -38,6 +40,12 @@ class AlarmRingPage extends StatefulWidget {
 
 class _AlarmRingPageState extends State<AlarmRingPage> {
   bool _workoutStarted = false;
+  // Set synchronously on the very first tap, before the `setState` below —
+  // two taps dispatched in the same frame both reach `_startWorkout` before
+  // either `setState` rebuild lands, so `_workoutStarted` alone can't guard
+  // re-entry. A second tap while this is true would otherwise push a second
+  // `VerificationPage`, giving two camera/ML Kit sessions started at once.
+  bool _startingWorkout = false;
   late DateTime _now;
   Timer? _clock;
 
@@ -57,6 +65,19 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
   }
 
   Future<void> _startWorkout(BuildContext context, int effectiveReps) async {
+    // Guards re-entry from a second tap dispatched before the first
+    // `setState` below has rebuilt the button — see `_startingWorkout`'s doc
+    // comment.
+    if (_startingWorkout) return;
+    _startingWorkout = true;
+
+    final navigatorState = navigatorKey.currentState;
+    if (navigatorState == null) {
+      _startingWorkout = false;
+      return;
+    }
+
+    final startedAt = DateTime.now();
     setState(() {
       _workoutStarted = true;
     });
@@ -74,7 +95,7 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
     // get stuck deferring to a route that never actually appeared.
     cubit.setVerificationInProgress(true);
     try {
-      final result = await navigatorKey.currentState!.push<VerificationResult>(
+      final result = await navigatorState.push<VerificationResult>(
         MaterialPageRoute(
           builder: (_) => VerificationPage(
             exercise: widget.alarm.exerciseMode,
@@ -97,6 +118,8 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
         widget.alarm,
         verified: result.completed,
         repsCompleted: result.repsCompleted,
+        startedAt: startedAt,
+        isPreview: widget.isPreview,
       );
       if (!result.completed) {
         if (mounted) setState(() => _workoutStarted = false);
@@ -107,6 +130,7 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
 
       final navContext = navigatorKey.currentContext;
       if (navContext != null && navContext.mounted) {
+        unawaited(HapticFeedback.mediumImpact());
         await showModalBottomSheet<void>(
           context: navContext,
           isDismissible: false,
@@ -121,6 +145,7 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
       _popIfPreview();
     } finally {
       cubit.setVerificationInProgress(false);
+      _startingWorkout = false;
     }
   }
 
@@ -202,7 +227,10 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
-                      color: scheme.onErrorContainer.withValues(alpha: 0.7),
+                      // Bumped from ~0.7 to 0.9 — legibility in bright light
+                      // (e.g. sunlight through a window at wake-up time)
+                      // suffers at lower contrast against `errorContainer`.
+                      color: scheme.onErrorContainer.withValues(alpha: 0.9),
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
@@ -215,18 +243,38 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
                   children: [
                     _RingingBell(scheme: scheme),
                     const SizedBox(height: 28),
-                    Text(
-                      widget.alarm.exerciseMode == ExerciseMode.squat
-                          ? 'Time to squat!'
-                          : 'Time to push up!',
-                      style: TextStyle(
-                        fontSize: 30,
-                        height: 36 / 30,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: -0.4,
-                        color: scheme.onErrorContainer,
-                      ),
-                      textAlign: TextAlign.center,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Same icon mapping as the exercise chips on
+                        // `alarm_list_page.dart`'s `_AlarmCard` — pairing
+                        // the label with the icon the user already
+                        // associates with this exercise from the alarm
+                        // list, instead of text alone.
+                        Icon(
+                          widget.alarm.exerciseMode == ExerciseMode.squat
+                              ? Icons.accessibility_new
+                              : Icons.sports_gymnastics,
+                          size: 28,
+                          color: scheme.onErrorContainer,
+                        ),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            widget.alarm.exerciseMode == ExerciseMode.squat
+                                ? 'Time to squat!'
+                                : 'Time to push up!',
+                            style: TextStyle(
+                              fontSize: 30,
+                              height: 36 / 30,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: -0.4,
+                              color: scheme.onErrorContainer,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
                     ),
                     Text(
                       '$effectiveReps',
@@ -254,14 +302,33 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
                           horizontal: 16,
                           vertical: 8,
                         ),
-                        color: scheme.error,
-                        child: Text(
-                          'Wake-up tax applied (×${taxMultiplier.toStringAsFixed(1)})',
-                          style: TextStyle(
-                            color: scheme.onError,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
+                        decoration: BoxDecoration(
+                          color: scheme.error,
+                          // Was a flat square-cornered `Container` — every
+                          // other surface on this screen (start-workout
+                          // button, ring segments) is pill-shaped; this
+                          // matches that visual language instead of
+                          // standing out as a mismatched rectangle.
+                          borderRadius: ShapeTokens.pill,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              size: 16,
+                              color: scheme.onError,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Wake-up tax applied (×${taxMultiplier.toStringAsFixed(1)})',
+                              style: TextStyle(
+                                color: scheme.onError,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -302,17 +369,19 @@ class _RingingBellState extends State<_RingingBell>
   late final AnimationController _wiggleController;
   late final Animation<double> _wiggle;
 
+  var _startedAnimating = false;
+
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1600),
-    )..repeat();
+    );
     _wiggleController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
-    )..repeat(reverse: true);
+    );
     _wiggle =
         Tween<double>(
           begin: -8 * (3.14159 / 180),
@@ -320,6 +389,31 @@ class _RingingBellState extends State<_RingingBell>
         ).animate(
           CurvedAnimation(parent: _wiggleController, curve: Curves.easeInOut),
         );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // "Reduce motion" — the ring/wiggle loops are purely decorative flair
+    // on top of the bell icon, which alone already conveys "alarm ringing"
+    // (plus the ringtone/vibration, entirely unaffected by this). Leaving
+    // both controllers at rest (frame 0) skips the continuous motion
+    // without losing the actual alert.
+    //
+    // `MediaQuery.disableAnimationsOf` can't be called from `initState` —
+    // it establishes an inherited-widget dependency, which Flutter requires
+    // to happen no earlier than `didChangeDependencies` (the element isn't
+    // fully mounted into the tree yet during `initState`). Found live: this
+    // crashed every real ring with "dependOnInheritedWidgetOfExactType...
+    // was called before _RingingBellState.initState() completed."
+    // `didChangeDependencies` can re-run later (e.g. the OS setting
+    // toggles while this is on screen), so guard the actual `.repeat()`
+    // call with `_startedAnimating` — it should only ever start once.
+    if (!_startedAnimating && !MediaQuery.disableAnimationsOf(context)) {
+      _startedAnimating = true;
+      _controller.repeat();
+      _wiggleController.repeat(reverse: true);
+    }
   }
 
   @override
@@ -364,17 +458,14 @@ class _RingingBellState extends State<_RingingBell>
   Widget _ringAt(double t, Color color) {
     final scale = 1.0 + t * 0.5;
     final opacity = (1.0 - t).clamp(0.0, 1.0);
-    return Opacity(
-      opacity: opacity,
-      child: Transform.scale(
-        scale: scale,
-        child: Container(
-          width: 128,
-          height: 128,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: color, width: 3),
-          ),
+    return Transform.scale(
+      scale: scale,
+      child: Container(
+        width: 128,
+        height: 128,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: color.withValues(alpha: opacity), width: 3),
         ),
       ),
     );

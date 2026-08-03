@@ -19,6 +19,7 @@ class LocalWriter {
 
   Future<void> upsertAlarm({
     required String id,
+    required int nativeId,
     required DateTime scheduledTime,
     required String exerciseMode,
     required int requiredReps,
@@ -31,6 +32,7 @@ class LocalWriter {
       await _db.into(_db.alarms).insertOnConflictUpdate(
             AlarmsCompanion.insert(
               id: id,
+              nativeId: Value(nativeId),
               scheduledTime: scheduledTime,
               exerciseMode: exerciseMode,
               requiredReps: requiredReps,
@@ -117,6 +119,7 @@ class LocalWriter {
     DateTime? endedAt,
     required int pointCount,
     required String pathGeoJson,
+    String? pointTimestampsJson,
   }) {
     final now = DateTime.now();
     return _db.transaction(() async {
@@ -127,6 +130,7 @@ class LocalWriter {
               endedAt: Value(endedAt),
               pointCount: pointCount,
               pathGeoJson: pathGeoJson,
+              pointTimestampsJson: Value(pointTimestampsJson),
               updatedAt: now,
             ),
           );
@@ -136,10 +140,23 @@ class LocalWriter {
         operation: OutboxOperation.upsert,
         payload: {
           'id': id,
-          'started_at': startedAt.toIso8601String(),
-          'ended_at': endedAt?.toIso8601String(),
+          // `.toUtc()` is load-bearing, not cosmetic: `submit_run()` compares
+          // these against each GPS fix's timestamp (already UTC — geolocator
+          // returns UTC `Position.timestamp`) with only a 5-minute tolerance.
+          // `startedAt` here can originate from a bare `DateTime.now()`
+          // (local time) — serializing that without `.toUtc()` drops the
+          // offset from the ISO string, so Postgres reads it as UTC and every
+          // timestamp is off by the device's UTC offset. For any non-UTC
+          // timezone that's >5 minutes, so the RPC unconditionally threw
+          // "point timestamps outside submitted run window" and no run/
+          // territory was ever persisted server-side — reproduced live: every
+          // closed-loop run submission failed this way regardless of actual
+          // GPS validity.
+          'started_at': startedAt.toUtc().toIso8601String(),
+          'ended_at': endedAt?.toUtc().toIso8601String(),
           'point_count': pointCount,
           'path': pathGeoJson,
+          'point_timestamps': pointTimestampsJson,
           'updated_at': now.toIso8601String(),
         },
       );
@@ -147,10 +164,18 @@ class LocalWriter {
   }
 
   /// Single-row global stat (see `UserStats` table / `WakeUpTaxStore`).
-  /// The remote `user_stats` row is keyed by `user_id`, which `SyncWorker`
-  /// stamps onto every push — this class never needs to know the current
-  /// user's id.
-  Future<void> upsertUserStats({required double currentTaxMultiplier}) {
+  /// [currentTaxMultiplier] is written to the local cache immediately for a
+  /// responsive UI, but is never sent to the server directly — the server
+  /// no longer accepts client-written values for this column (P0 fix: it
+  /// was previously client-authoritative). Instead [action] ('bump' or
+  /// 'reset') tells `SyncWorker` which server-side RPC
+  /// (`bump_wake_up_tax`/`reset_wake_up_tax`) to call; the server
+  /// recomputes the value itself from whatever it currently has stored, and
+  /// `SyncWorker` reconciles the local row with that authoritative result.
+  Future<void> upsertUserStats({
+    required double currentTaxMultiplier,
+    required String action,
+  }) {
     final now = DateTime.now();
     return _db.transaction(() async {
       await _db.into(_db.userStats).insertOnConflictUpdate(
@@ -164,10 +189,7 @@ class LocalWriter {
         table: 'user_stats',
         entityId: 'current', // no local per-user id; remote upserts key on user_id instead
         operation: OutboxOperation.upsert,
-        payload: {
-          'current_tax_multiplier': currentTaxMultiplier,
-          'updated_at': now.toIso8601String(),
-        },
+        payload: {'action': action},
       );
     });
   }

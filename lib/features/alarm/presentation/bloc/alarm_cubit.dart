@@ -63,11 +63,15 @@ class AlarmCubit extends Cubit<AlarmState> {
     AlarmSchedule alarm, {
     required bool verified,
     required int repsCompleted,
+    required DateTime startedAt,
+    bool isPreview = false,
   }) => _completeWorkout(
     CompleteAlarmWorkoutParams(
       alarm: alarm,
       verified: verified,
       repsCompleted: repsCompleted,
+      startedAt: startedAt,
+      isPreview: isPreview,
     ),
   );
 

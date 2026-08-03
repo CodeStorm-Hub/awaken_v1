@@ -21,7 +21,8 @@ class AlarmReliabilityTestPage extends StatefulWidget {
   const AlarmReliabilityTestPage({super.key});
 
   @override
-  State<AlarmReliabilityTestPage> createState() => _AlarmReliabilityTestPageState();
+  State<AlarmReliabilityTestPage> createState() =>
+      _AlarmReliabilityTestPageState();
 }
 
 class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
@@ -34,11 +35,29 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
   Duration? _measuredDelay;
   StreamSubscription<AlarmState>? _sub;
   Timer? _timeoutTimer;
+  AlarmCubit? _cubit;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _cubit = context.read<AlarmCubit>();
+  }
 
   @override
   void dispose() {
     _sub?.cancel();
     _timeoutTimer?.cancel();
+    // A test alarm that never fired (timed out, or the user just navigated
+    // away mid-wait) previously stayed scheduled forever — it rang like any
+    // other alarm the next time its slot came around, demanding a real
+    // camera-verified squat with no context that it was only a diagnostic.
+    // One that *did* fire is left alone: it's a normal one-shot alarm at
+    // that point and gets cleaned up the same way any other completed
+    // one-shot dismissal does.
+    final id = _testAlarmId;
+    if (id != null && _phase == _TestPhase.waiting) {
+      unawaited(_cubit?.cancel(id));
+    }
     super.dispose();
   }
 
@@ -53,14 +72,22 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
       _measuredDelay = null;
     });
 
-    await cubit.schedule(
-      AlarmSchedule(
-        id: id,
-        scheduledTime: scheduledFor,
-        exerciseMode: ExerciseMode.squat,
-        requiredReps: 1,
-      ),
-    );
+    try {
+      await cubit.schedule(
+        AlarmSchedule(
+          id: id,
+          scheduledTime: scheduledFor,
+          exerciseMode: ExerciseMode.squat,
+          requiredReps: 1,
+        ),
+      );
+    } catch (_) {
+      // Previously left the page stuck on "Test running…" until the
+      // timeout grace period elapsed and it reported a misleading FAIL —
+      // a schedule failure is a distinct, immediate outcome.
+      if (mounted) setState(() => _phase = _TestPhase.timedOut);
+      return;
+    }
 
     _sub?.cancel();
     _sub = cubit.stream.listen((state) {
@@ -76,6 +103,7 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
     _timeoutTimer?.cancel();
     _timeoutTimer = Timer(_testDelay + _timeoutGrace, () {
       if (_phase == _TestPhase.waiting && mounted) {
+        unawaited(cubit.cancel(id));
         setState(() => _phase = _TestPhase.timedOut);
       }
     });
@@ -104,7 +132,11 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
                   child: SizedBox(
                     width: 44,
                     height: 44,
-                    child: Icon(Icons.arrow_back, size: 22, color: scheme.onSurface),
+                    child: Icon(
+                      Icons.arrow_back,
+                      size: 22,
+                      color: scheme.onSurface,
+                    ),
                   ),
                 ),
               ),
@@ -132,7 +164,9 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
                       'battery killers, start it, then lock your screen and, '
                       'ideally, swipe Awaken away from the recent-apps list. The '
                       'alarm should still fire.',
-                      style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(height: 22),
                     _StatusContainer(
@@ -152,13 +186,18 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
                 child: FilledButton(
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(56),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
                   ),
-                  onPressed: _phase == _TestPhase.waiting ? null : () => _startTest(cubit),
+                  onPressed: _phase == _TestPhase.waiting
+                      ? null
+                      : () => _startTest(cubit),
                   child: Text(
                     _phase == _TestPhase.waiting
                         ? 'Test running…'
-                        : _phase == _TestPhase.passed || _phase == _TestPhase.timedOut
+                        : _phase == _TestPhase.passed ||
+                              _phase == _TestPhase.timedOut
                         ? 'Run again'
                         : 'Start test',
                   ),
@@ -173,7 +212,11 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
 }
 
 class _StatusContainer extends StatelessWidget {
-  const _StatusContainer({required this.phase, required this.measuredDelay, required this.scheme});
+  const _StatusContainer({
+    required this.phase,
+    required this.measuredDelay,
+    required this.scheme,
+  });
 
   final _TestPhase phase;
   final Duration? measuredDelay;
@@ -192,7 +235,11 @@ class _StatusContainer extends StatelessWidget {
       child: Column(
         children: [
           switch (phase) {
-            _TestPhase.idle => Icon(Icons.bug_report, size: 36, color: scheme.onSurfaceVariant),
+            _TestPhase.idle => Icon(
+              Icons.bug_report,
+              size: 36,
+              color: scheme.onSurfaceVariant,
+            ),
             _TestPhase.waiting => const ExpressiveLoader(),
             _TestPhase.passed => ExpressiveFlower(
               size: 72,
@@ -200,14 +247,23 @@ class _StatusContainer extends StatelessWidget {
               animatePop: true,
               child: Icon(Icons.check, size: 34, color: scheme.onPrimary),
             ),
-            _TestPhase.timedOut => Icon(Icons.error, size: 36, color: scheme.error),
+            _TestPhase.timedOut => Icon(
+              Icons.error,
+              size: 36,
+              color: scheme.error,
+            ),
           },
           const SizedBox(height: 12),
           Text(
             switch (phase) {
               _TestPhase.idle => 'Not started.',
               _TestPhase.waiting => 'Waiting for alarm…',
-              _TestPhase.passed => 'PASS — fired ${measuredDelay!.inSeconds}s after scheduling.',
+              _TestPhase.passed =>
+                // `measuredDelay` is `now - scheduledFor` — the delay past
+                // the *scheduled fire time*, not past when the test was
+                // started ("after scheduling" read as the latter and made
+                // an on-time ~60s-delay test misleadingly report "0s").
+                'PASS — fired ${measuredDelay!.inSeconds}s after the scheduled time.',
               _TestPhase.timedOut =>
                 'FAIL — alarm did not fire within the expected window. Check '
                     'battery-exemption settings and OEM autostart permissions.',
@@ -215,8 +271,12 @@ class _StatusContainer extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              fontWeight: phase == _TestPhase.passed ? FontWeight.w800 : FontWeight.w600,
-              color: passed ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+              fontWeight: phase == _TestPhase.passed
+                  ? FontWeight.w800
+                  : FontWeight.w600,
+              color: passed
+                  ? scheme.onPrimaryContainer
+                  : scheme.onSurfaceVariant,
             ),
           ),
         ],

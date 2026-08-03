@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:camera/camera.dart';
 import 'package:injectable/injectable.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
+import '../../../../core/constants/app_constants.dart';
 import '../../../alarm/domain/entities/alarm_schedule.dart';
 import '../../domain/entities/body_pose.dart';
 import '../../domain/entities/verification_state.dart';
@@ -30,14 +32,77 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
   /// queuing up a backlog.
   bool _processingFrame = false;
 
+  /// Explicit processing-FPS ceiling (`AppConstants.targetPoseProcessingFps`
+  /// — defined since the plan's original design but never actually
+  /// enforced anywhere). `_processingFrame` alone only bounds throughput to
+  /// "as fast as ML Kit inference completes" — on a fast device with quick
+  /// inference, that can still process/emit well past the intended budget,
+  /// driving more `VerificationState` emissions (and therefore widget
+  /// rebuilds) than needed. This adds a real minimum-interval gate on top.
+  static const _minFrameInterval = Duration(
+    milliseconds: 1000 ~/ AppConstants.targetPoseProcessingFps,
+  );
+  DateTime? _lastProcessedAt;
+
+  /// Bumped on every `start()`/`stop()` — a frame captured just before a
+  /// stop/restart can still be mid-flight in `_poseDetector.process()` when
+  /// the next session's `start()` resets `_repCounter`/`_state`; without
+  /// this check, that straggler's result would land on the *new* session
+  /// (e.g. crediting a rep, or resetting calibration) instead of being
+  /// discarded as belonging to a session that no longer exists.
+  int _generation = 0;
+
   @override
   Stream<VerificationState> watchState() => _stateController.stream;
 
   @override
   Future<void> start({required ExerciseMode exercise, required int targetReps}) async {
+    _generation++;
+    _lastProcessedAt = null;
     _repCounter = exercise == ExerciseMode.squat
         ? AngleRepCounter.squat()
         : AngleRepCounter.pushup();
+
+    unawaited(
+      Sentry.addBreadcrumb(
+        Breadcrumb(
+          message: 'Verification session started',
+          category: 'verification',
+          data: {'exercise': exercise.name, 'targetReps': targetReps},
+        ),
+      ),
+    );
+
+    try {
+      await _camera.startFrontCameraStream(_onFrame);
+    } catch (e, st) {
+      unawaited(
+        Sentry.captureException(
+          e,
+          stackTrace: st,
+          withScope: (scope) => scope
+            ..setTag('exercise', exercise.name)
+            ..setTag('targetReps', targetReps.toString()),
+        ),
+      );
+      _emit(
+        VerificationState(
+          status: VerificationStatus.cameraError,
+          exerciseMode: exercise,
+          targetReps: targetReps,
+        ),
+      );
+      return;
+    }
+
+    // Emitted only once the controller is actually initialized — `_CameraView`
+    // (verification_page.dart) is a `StatelessWidget` that reads
+    // `controller.value.isInitialized` once at build time and never rebuilds
+    // on its own; its parent `BlocBuilder` only rebuilds on a `_ViewKind`
+    // change (initializing → camera), which is this emit. Emitting
+    // `calibrating` before the camera finished starting left `_CameraView`
+    // permanently stuck on its inner spinner even after the camera became
+    // ready, since no further status change flips viewKind again.
     _emit(
       VerificationState(
         status: VerificationStatus.calibrating,
@@ -45,12 +110,26 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
         targetReps: targetReps,
       ),
     );
-
-    await _camera.startFrontCameraStream(_onFrame);
   }
 
   @override
   Future<void> stop() async {
+    unawaited(
+      Sentry.addBreadcrumb(
+        Breadcrumb(
+          message: _state.isComplete
+              ? 'Verification session completed'
+              : 'Verification session ended early',
+          category: 'verification',
+          data: {
+            'exercise': _state.exerciseMode.name,
+            'completedReps': _state.completedReps,
+            'targetReps': _state.targetReps,
+          },
+        ),
+      ),
+    );
+    _generation++;
     await _camera.stop();
     _repCounter = null;
     _emit(const VerificationState());
@@ -58,6 +137,11 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
 
   Future<void> _onFrame(CameraImage image) async {
     if (_processingFrame) return;
+    final now = DateTime.now();
+    final lastProcessedAt = _lastProcessedAt;
+    if (lastProcessedAt != null && now.difference(lastProcessedAt) < _minFrameInterval) {
+      return;
+    }
     final controller = _camera.controller;
     if (controller == null) return;
 
@@ -65,8 +149,11 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
     if (inputImage == null) return;
 
     _processingFrame = true;
+    _lastProcessedAt = now;
+    final generation = _generation;
     try {
       final poses = await _poseDetector.process(inputImage);
+      if (generation != _generation) return;
       if (poses.isEmpty) {
         _emit(_state.copyWith(status: VerificationStatus.noPoseDetected, clearPose: true));
         return;

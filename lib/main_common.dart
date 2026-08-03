@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -44,7 +43,9 @@ Map<String, dynamic>? _scrubSensitiveKeys(Map<String, dynamic>? data) {
     if (_sensitiveDataKeys.contains(entry.key.toLowerCase())) {
       scrubbed[entry.key] = '[redacted]';
     } else if (entry.value is Map<String, dynamic>) {
-      scrubbed[entry.key] = _scrubSensitiveKeys(entry.value as Map<String, dynamic>);
+      scrubbed[entry.key] = _scrubSensitiveKeys(
+        entry.value as Map<String, dynamic>,
+      );
     } else {
       scrubbed[entry.key] = entry.value;
     }
@@ -98,11 +99,14 @@ Future<void> bootstrap({
         return breadcrumb;
       };
     },
-    appRunner: () => _bootstrapApp(locationProviderOverride: locationProviderOverride),
+    appRunner: () =>
+        _bootstrapApp(locationProviderOverride: locationProviderOverride),
   );
 }
 
-Future<void> _bootstrapApp({LocationProviderFactory? locationProviderOverride}) async {
+Future<void> _bootstrapApp({
+  LocationProviderFactory? locationProviderOverride,
+}) async {
   await Supabase.initialize(
     url: Env.supabaseUrl,
     publishableKey: Env.supabasePublishableKey,
@@ -116,12 +120,16 @@ Future<void> _bootstrapApp({LocationProviderFactory? locationProviderOverride}) 
     );
   }
 
-  // Android 13+ blocks ALL notifications — including the alarm's
-  // full-screen-intent notification — until POST_NOTIFICATIONS is granted
-  // at runtime; declaring it in the manifest alone does nothing. Requested
-  // bluntly here for now; a proper rationale screen belongs in the
-  // onboarding carousel (plan §5) before the OS dialog fires.
-  await Permission.notification.request();
+  // Notification permission is now requested from the onboarding carousel's
+  // rationale card (plan §5 — "showing rationale before the OS permission
+  // prompt"), not bluntly here with zero explanation. That only covers
+  // first-run installs, though: a *returning* user who denied it (or
+  // upgraded from a version that never asked) has no other prompt path
+  // left in this app today — re-requesting is deliberately not done here,
+  // since a repeated blunt request on every cold start is worse UX than
+  // the original problem. `AlarmReliabilityTestPage` (Profile → "Alarm
+  // reliability") surfaces a failed/blocked alarm delivery for a user who
+  // wants to diagnose it themselves.
 
   // Restores/reschedules any alarms persisted from a previous session —
   // must run before the UI reads Alarm.scheduled/Alarm.ringing.
@@ -148,13 +156,24 @@ Future<void> _bootstrapApp({LocationProviderFactory? locationProviderOverride}) 
     await getIt<RefreshAuthSession>()(const NoParams());
 
     // Reinstall/new-device hydration (plan §6 Phase 6.5) — no-ops if the
-    // local cache is already populated. Re-arms any alarm the pull
-    // hydrated that wasn't previously scheduled natively.
+    // local cache is already populated.
     await getIt<PullDownSync>().run();
-    await getIt<RearmAlarmsFromCache>()(const NoParams());
   } catch (_) {
     // TODO(Phase 3b): offline-first-launch fallback — local placeholder
     // UUID + re-key routine (plan §2.2 H8, kept only as a fallback).
+  }
+
+  // Deliberately outside the try/catch above and never skipped by an
+  // auth/pull failure — P0 fix: this only touches local Drift + the native
+  // alarm package (no network), so it must work identically offline. It
+  // was previously nested inside the same try block, meaning an offline
+  // first launch (or any auth/pull failure) silently skipped local alarm
+  // recovery too.
+  try {
+    await getIt<RearmAlarmsFromCache>()(const NoParams());
+  } catch (_) {
+    // Best-effort self-heal; ReconcileRecurringAlarms above and the next
+    // app launch provide further chances to recover.
   }
 
   // Connectivity-triggered outbox drain (plan §3, ADR-002) — safe to start

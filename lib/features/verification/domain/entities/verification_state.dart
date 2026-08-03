@@ -35,6 +35,27 @@ enum VerificationStatus {
 
   /// Reached the target rep count.
   complete,
+
+  /// Camera failed to start (no hardware, camera busy with another app, a
+  /// plugin/platform error) — distinct from [permissionDenied], which is a
+  /// user choice, not a failure. Never a dead end: same escape hatch as
+  /// every other terminal-looking state, plus a retry.
+  cameraError,
+}
+
+extension VerificationStatusX on VerificationStatus {
+  /// Whether this status implies the camera/pose pipeline is actually
+  /// running — used to decide whether an app-background lifecycle event
+  /// has anything to pause (see `VerificationCubit.pause`).
+  bool get isActiveCameraSession => switch (this) {
+    VerificationStatus.initializing ||
+    VerificationStatus.noPoseDetected ||
+    VerificationStatus.calibrating ||
+    VerificationStatus.counting => true,
+    VerificationStatus.permissionDenied ||
+    VerificationStatus.complete ||
+    VerificationStatus.cameraError => false,
+  };
 }
 
 class VerificationState extends Equatable {

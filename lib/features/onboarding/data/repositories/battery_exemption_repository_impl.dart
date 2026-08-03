@@ -53,7 +53,8 @@ class BatteryExemptionRepositoryImpl implements BatteryExemptionRepository {
   }
 
   @override
-  bool isAggressiveOem(String manufacturer) => _aggressiveOems.contains(manufacturer);
+  bool isAggressiveOem(String manufacturer) =>
+      _aggressiveOems.contains(manufacturer);
 
   @override
   Future<bool> openOemAutostartSettings() {

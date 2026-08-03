@@ -27,12 +27,28 @@ abstract interface class AuthRepository {
   /// `updateUser` on an anonymous session attaches credentials to it rather
   /// than creating a new account). Supabase sends a confirmation email;
   /// the account isn't fully "linked" until the user clicks it.
-  Future<void> linkWithEmail({required String email, required String password});
+  /// [displayName] is required — this is the only sign-up path (email/
+  /// password) that previously had no way to capture a real name at all.
+  Future<void> linkWithEmail({
+    required String email,
+    required String password,
+    required String displayName,
+  });
+
+  /// Updates the signed-in user's display name — the profile editor's
+  /// "add/change your name" action, for accounts (typically email/password
+  /// sign-ups from before this existed) stuck with the generated
+  /// "Runner-XXXXXXXX" placeholder. Throws on a `display_name` uniqueness
+  /// collision so the UI can ask for a different name.
+  Future<void> updateDisplayName(String name);
 
   /// Signs in as a returning linked user, replacing whatever session
   /// (typically anonymous) is currently active. The counterpart to
   /// [linkWithEmail] that was previously missing entirely.
-  Future<void> signInWithPassword({required String email, required String password});
+  Future<void> signInWithPassword({
+    required String email,
+    required String password,
+  });
 
   /// Requests a password-recovery email for an existing linked account.
   Future<void> sendPasswordResetEmail(String email);
@@ -46,9 +62,10 @@ abstract interface class AuthRepository {
   /// previously missing.
   Future<void> signInWithGoogle();
 
-  /// Ends the remote session. Local Drift data is never touched — this
-  /// only signs out of Supabase; the point of the offline-first design is
-  /// that local data survives regardless of auth state.
+  /// Ends the remote session and clears the local Drift cache — the local
+  /// store has no per-user scoping (single-identity cache, not a
+  /// multi-tenant store), so leaving it in place would let the next
+  /// session on this device see the outgoing identity's data.
   Future<void> signOut();
 
   /// Permanently deletes the signed-in user's account and all associated

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy – Awaken</title>
+  <meta name="description" content="Privacy Policy for the Awaken gamified alarm clock and fitness app." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #0f0f14;
+      color: #e2e2e6;
+      line-height: 1.7;
+      padding: 0 1rem;
+    }
+    a { color: #60a5fa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 3rem 0 2rem;
+      border-bottom: 1px solid #2a2a3a;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .logo-circle {
+      width: 52px; height: 52px;
+      background: #22272d;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 1.6rem; font-weight: 700; color: #f0f0f5; }
+    header p { font-size: 0.85rem; color: #888; margin-top: 0.15rem; }
+    main { max-width: 800px; margin: 0 auto; padding: 2.5rem 0 5rem; }
+    .meta {
+      background: #1a1a24;
+      border: 1px solid #2a2a3a;
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 2.5rem;
+      font-size: 0.875rem;
+      color: #888;
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .meta span strong { color: #aaa; }
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #f0f0f5;
+      margin: 2.5rem 0 0.75rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid #2a2a3a;
+    }
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #c0c0cc;
+      margin: 1.5rem 0 0.5rem;
+    }
+    p { margin-bottom: 0.9rem; color: #c8c8d4; font-size: 0.95rem; }
+    ul, ol { margin: 0.5rem 0 0.9rem 1.5rem; color: #c8c8d4; font-size: 0.95rem; }
+    li { margin-bottom: 0.4rem; }
+    strong { color: #e2e2e6; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 1.5rem;
+      font-size: 0.85rem;
+      overflow-x: auto;
+      display: block;
+    }
+    th {
+      background: #1e2028;
+      color: #aaa;
+      text-align: left;
+      padding: 0.6rem 0.8rem;
+      border: 1px solid #2a2a3a;
+    }
+    td {
+      padding: 0.55rem 0.8rem;
+      border: 1px solid #2a2a3a;
+      vertical-align: top;
+      color: #c8c8d4;
+    }
+    tr:nth-child(even) td { background: #14141d; }
+    hr { border: none; border-top: 1px solid #2a2a3a; margin: 2rem 0; }
+    footer {
+      text-align: center;
+      padding: 2rem 0;
+      color: #555;
+      font-size: 0.8rem;
+      border-top: 1px solid #2a2a3a;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo-circle">⏰</div>
+    <div>
+      <h1>Awaken – Privacy Policy</h1>
+      <p>Gamified Alarm &amp; Fitness App</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="meta">
+      <span><strong>Effective Date:</strong> August 1, 2026</span>
+      <span><strong>Last Updated:</strong> August 1, 2026</span>
+    </div>
+
+    <h2>1. Introduction</h2>
+    <p>Welcome to <strong>Awaken</strong> ("we," "our," or "us"). Awaken is a gamified alarm and fitness application that helps users build consistent morning and exercise habits through camera-verified exercise alarm dismissals and GPS-based outdoor territory capture ("Awaken App").</p>
+    <p>This Privacy Policy explains how we collect, use, store, share, and protect your information when you download, access, or use the Awaken mobile application on Android (Google Play Store) and iOS (Apple App Store).</p>
+    <p>By installing or using Awaken, you agree to the collection and use of information in accordance with this Privacy Policy. If you do not agree with the terms of this Privacy Policy, please do not use the application.</p>
+
+    <h2>2. Information We Collect</h2>
+    <p>We collect information to provide, maintain, and improve our services. The types of information we collect include:</p>
+
+    <h3>A. Location Information (Precise &amp; Background Location)</h3>
+    <ul>
+      <li><strong>What We Collect:</strong> Precise GPS coordinates (latitude, longitude, altitude, speed, bearing) collected during outdoor run tracking sessions.</li>
+      <li><strong>Background Location:</strong> If enabled, location data is collected in the background while a run tracking session is active to calculate run metrics, detect closed geographic loops, and map conquered territories.</li>
+      <li><strong>How It Is Collected:</strong> Via device GPS location services (<code>geolocator</code>, <code>flutter_foreground_task</code>).</li>
+    </ul>
+
+    <h3>B. Camera &amp; Motion Verification Data (Processed On-Device Only)</h3>
+    <ul>
+      <li><strong>What We Collect:</strong> Live camera stream feed and body pose landmark points (joints, hips, knees, shoulders, arms).</li>
+      <li><strong>On-Device Only Processing:</strong> Camera imagery and pose detection frames are processed <strong>strictly on-device in real-time memory</strong> using Google ML Kit.</li>
+      <li><strong>Zero Video/Photo Storage:</strong> No camera footage, photos, or video recordings are ever recorded, saved to disk, or transmitted to our servers or any third-party servers.</li>
+    </ul>
+
+    <h3>C. Account &amp; Authentication Data</h3>
+    <ul>
+      <li><strong>Account Creation:</strong> When you register an account, we collect your email address, display name, and unique User ID (via Supabase Auth or Google Sign-In).</li>
+      <li><strong>Guest / Anonymous Accounts:</strong> If you choose to use Awaken as a guest, a temporary anonymous ID is generated on your device.</li>
+    </ul>
+
+    <h3>D. Alarm &amp; Fitness Usage Data</h3>
+    <ul>
+      <li><strong>Alarm Settings:</strong> Alarm times, repetition schedules, selected verification exercises, and wake-up performance history.</li>
+      <li><strong>Territory &amp; Run Data:</strong> Polygons of captured territory, run routes, total distance, run duration, average speed, and squad leaderboard standings.</li>
+    </ul>
+
+    <h3>E. Diagnostic &amp; Performance Data</h3>
+    <ul>
+      <li><strong>Crash Reports &amp; Diagnostics:</strong> We collect crash reports, device performance metrics, OS version, device model, and error stack traces via Sentry to diagnose technical glitches and improve app stability.</li>
+    </ul>
+
+    <h2>3. How We Use Your Information</h2>
+    <ol>
+      <li><strong>Core App Functionality:</strong> Scheduling and ringing alarms, verifying exercise completion via camera pose detection, and tracking runs and territories.</li>
+      <li><strong>Account Management &amp; Data Sync:</strong> Authenticating your identity and synchronizing your alarms, runs, and territory statistics across your devices via Supabase.</li>
+      <li><strong>Community &amp; Leaderboards (Squads):</strong> Displaying public territory polygons on shared maps and showing exercise/territory stats on squad leaderboards.</li>
+      <li><strong>App Improvement &amp; Security:</strong> Identifying crashes, performance bottlenecks, and software bugs.</li>
+    </ol>
+
+    <h2>4. On-Device Storage &amp; Offline-First Architecture</h2>
+    <p>Awaken is designed with an <strong>offline-first architecture</strong>. Your alarms, run history, and territory details are stored locally on your device in an encrypted SQLite database. When internet connectivity is available, changes are securely synchronized with our cloud backend (Supabase).</p>
+
+    <h2>5. Third-Party Services &amp; Data Processors</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Service Provider</th>
+          <th>Purpose</th>
+          <th>Data Processed / Shared</th>
+          <th>Privacy Policy</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Supabase</strong></td>
+          <td>Backend Database, Auth &amp; Storage</td>
+          <td>Email, User ID, Sync Data</td>
+          <td><a href="https://supabase.com/privacy" target="_blank">Link</a></td>
+        </tr>
+        <tr>
+          <td><strong>Google Sign-In</strong></td>
+          <td>OAuth Authentication</td>
+          <td>Google Account Email, Name, Profile Picture</td>
+          <td><a href="https://policies.google.com/privacy" target="_blank">Link</a></td>
+        </tr>
+        <tr>
+          <td><strong>Google ML Kit</strong></td>
+          <td>On-Device Pose Detection</td>
+          <td>Live Camera Frames (Local RAM only, never transmitted)</td>
+          <td><a href="https://developers.google.com/ml-kit/terms" target="_blank">Link</a></td>
+        </tr>
+        <tr>
+          <td><strong>MapLibre / OpenFreeMap</strong></td>
+          <td>Map Vector Tile Rendering</td>
+          <td>Anonymized tile request coordinates</td>
+          <td><a href="https://maplibre.org/" target="_blank">Link</a></td>
+        </tr>
+        <tr>
+          <td><strong>Sentry</strong></td>
+          <td>Crash Reporting &amp; Performance</td>
+          <td>Device Model, OS Version, Crash Traces</td>
+          <td><a href="https://sentry.io/privacy/" target="_blank">Link</a></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>6. Permissions Requested &amp; Justification</h2>
+    <ul>
+      <li><strong>Location (Foreground &amp; Background):</strong> Required to map outdoor run routes and capture territory polygons during active run sessions.</li>
+      <li><strong>Camera:</strong> Required during alarm ringing to verify exercise completion via on-device pose detection.</li>
+      <li><strong>Notifications:</strong> Required to display active alarm alerts and run tracking notifications.</li>
+      <li><strong>Exact Alarm (<code>USE_EXACT_ALARM</code>):</strong> Required on Android to trigger precise wake-up alarms at exact scheduled times.</li>
+      <li><strong>Foreground Service (<code>FOREGROUND_SERVICE</code>):</strong> Required to prevent OS background suspension while ringing alarms or tracking an active outdoor run.</li>
+    </ul>
+
+    <h2>7. Data Sharing and Disclosure</h2>
+    <p>We <strong>do not sell, rent, or trade</strong> your personal information or location history to advertisers, data brokers, or commercial third parties.</p>
+    <p>We may disclose information only under the following limited circumstances:</p>
+    <ol>
+      <li><strong>Public Territory Features:</strong> Territory polygons and display names created during runs are visible on shared maps and squad leaderboards.</li>
+      <li><strong>Legal Compliance:</strong> If required by law, court order, or to protect safety, rights, or property.</li>
+      <li><strong>Business Transfers:</strong> In the event of a merger or acquisition, user data may be transferred as a business asset with notice provided.</li>
+    </ol>
+
+    <h2>8. Data Security, Retention, and Account Deletion</h2>
+    <h3>A. Data Security</h3>
+    <ul>
+      <li>Encryption in transit using HTTPS / TLS 1.3 for all backend communication.</li>
+      <li>Strict PostgreSQL Row-Level Security (RLS) rules ensuring users can only read/modify their own personal records.</li>
+    </ul>
+    <h3>B. Retention Policy</h3>
+    <p>We retain your personal data only for as long as your account remains active or as needed to provide app services.</p>
+    <h3>C. Account &amp; Data Deletion Rights</h3>
+    <p>You have the right to delete your account and all associated personal data at any time. Go to <strong>Profile / Settings → Account → Delete Account</strong> within the Awaken app. Upon deletion, all your personal data will be permanently erased from our primary servers within 30 days.</p>
+
+    <h2>9. Children's Privacy</h2>
+    <p>Awaken is not intended for use by children under the age of 13 (or 16 in the European Union). We do not knowingly collect personal data from children.</p>
+
+    <h2>10. Your Rights (GDPR, CCPA/CPRA, and International Users)</h2>
+    <ul>
+      <li><strong>Access &amp; Portability:</strong> Request a copy of the personal data we hold about you.</li>
+      <li><strong>Correction:</strong> Request correction of inaccurate personal data.</li>
+      <li><strong>Erasure ("Right to be Forgotten"):</strong> Request deletion of your personal data.</li>
+      <li><strong>Withdraw Consent:</strong> Revoke permissions (e.g., location or camera access) at any time in device settings.</li>
+    </ul>
+
+    <h2>11. Changes to This Privacy Policy</h2>
+    <p>We may update our Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Last Updated" date at the top.</p>
+
+    <h2>12. Contact Us</h2>
+    <p>If you have any questions, concerns, or requests regarding this Privacy Policy, please contact us at:</p>
+    <ul>
+      <li><strong>Email:</strong> <a href="mailto:support@awakenfitness.app">support@awakenfitness.app</a></li>
+      <li><strong>App Name:</strong> Awaken – Gamified Alarm &amp; Fitness</li>
+    </ul>
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Awaken. All rights reserved.</p>
+  </footer>
+</body>
+</html>

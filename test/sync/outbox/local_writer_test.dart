@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:awaken/sync/local/database.dart';
 import 'package:awaken/sync/outbox/local_writer.dart';
 import 'package:awaken/sync/outbox/outbox_operation.dart';
@@ -22,6 +24,7 @@ void main() {
     test('upsertAlarm writes the alarm row and enqueues exactly one outbox entry', () async {
       await writer.upsertAlarm(
         id: 'alarm-1',
+        nativeId: 1,
         scheduledTime: DateTime(2026, 7, 19, 7),
         exerciseMode: 'squat',
         requiredReps: 20,
@@ -43,6 +46,7 @@ void main() {
     test('deleteAlarm soft-deletes and enqueues a delete entry', () async {
       await writer.upsertAlarm(
         id: 'alarm-2',
+        nativeId: 2,
         scheduledTime: DateTime(2026, 7, 19, 7),
         exerciseMode: 'pushup',
         requiredReps: 15,
@@ -84,7 +88,7 @@ void main() {
     });
 
     test('upsertUserStats writes the singleton row and enqueues an outbox entry', () async {
-      await writer.upsertUserStats(currentTaxMultiplier: 1.5);
+      await writer.upsertUserStats(currentTaxMultiplier: 1.5, action: 'bump');
 
       final stats = await db.select(db.userStats).get();
       final outbox = await db.select(db.syncOutbox).get();
@@ -93,6 +97,7 @@ void main() {
       expect(stats.single.currentTaxMultiplier, 1.5);
       expect(outbox.single.entityTable, 'user_stats');
       expect(outbox.single.operation, OutboxOperation.upsert.name);
+      expect(jsonDecode(outbox.single.payload), {'action': 'bump'});
     });
 
     test('a failed write leaves no orphaned outbox row (transactional rollback)', () async {

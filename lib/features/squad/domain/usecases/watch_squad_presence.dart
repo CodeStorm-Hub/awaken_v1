@@ -9,5 +9,6 @@ class WatchSquadPresence {
 
   final SquadRepository _repository;
 
-  Stream<List<SquadPresenceMember>> call(String squadId) => _repository.watchPresence(squadId);
+  Stream<List<SquadPresenceMember>> call(String squadId) =>
+      _repository.watchPresence(squadId);
 }

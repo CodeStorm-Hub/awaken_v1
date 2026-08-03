@@ -34,8 +34,26 @@ class AuthRemoteDataSource {
   /// credentials to the *same* user id rather than creating a new account
   /// (plan H8 — no re-keying). Supabase emails a confirmation link; the
   /// identity isn't fully non-anonymous until it's clicked.
-  Future<void> linkWithEmail({required String email, required String password}) async {
-    await _client.auth.updateUser(UserAttributes(email: email, password: password));
+  ///
+  /// [displayName] is folded into the same `updateUser` call's metadata
+  /// (`full_name`) so it lands in the same place Google-linked accounts'
+  /// names already live — `_toAppUser` reads from there, not `profiles`.
+  /// [syncProfileDisplayName] then copies it to `profiles.display_name`,
+  /// the column every cross-user view (leaderboards, squad presence) reads
+  /// instead, since `profiles` RLS is select-own-row-only.
+  Future<void> linkWithEmail({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    await _client.auth.updateUser(
+      UserAttributes(
+        email: email,
+        password: password,
+        data: {'full_name': displayName},
+      ),
+    );
+    await syncProfileDisplayName(displayName);
   }
 
   /// Signs in as a *returning* linked user — deliberately distinct from
@@ -44,8 +62,14 @@ class AuthRemoteDataSource {
   /// same way Supabase's own `signInWithPassword` always behaves. Without
   /// this, a user who links an account and later loses their local session
   /// (sign out, uninstall, new device) had no way back into their own data.
-  Future<void> signInWithPassword({required String email, required String password}) async {
-    final response = await _client.auth.signInWithPassword(email: email, password: password);
+  Future<void> signInWithPassword({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _client.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
     if (response.user == null) {
       throw const AuthDataSourceException('Sign-in returned no user');
     }
@@ -69,15 +93,22 @@ class AuthRemoteDataSource {
   /// web-redirect `getLinkIdentityUrl`/`linkIdentity` pair.
   Future<void> linkWithGoogle() async {
     if (!_googleSignInInitialized) {
-      await GoogleSignIn.instance.initialize(serverClientId: Env.googleOAuthClientId);
+      await GoogleSignIn.instance.initialize(
+        serverClientId: Env.googleOAuthClientId,
+      );
       _googleSignInInitialized = true;
     }
     final account = await GoogleSignIn.instance.authenticate();
     final idToken = account.authentication.idToken;
     if (idToken == null) {
-      throw const AuthDataSourceException('Google sign-in returned no ID token');
+      throw const AuthDataSourceException(
+        'Google sign-in returned no ID token',
+      );
     }
-    await _client.auth.linkIdentityWithIdToken(provider: OAuthProvider.google, idToken: idToken);
+    await _client.auth.linkIdentityWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+    );
   }
 
   /// Signs in as a returning user via Google — the counterpart to
@@ -86,15 +117,22 @@ class AuthRemoteDataSource {
   /// active, same as [signInWithPassword].
   Future<void> signInWithGoogle() async {
     if (!_googleSignInInitialized) {
-      await GoogleSignIn.instance.initialize(serverClientId: Env.googleOAuthClientId);
+      await GoogleSignIn.instance.initialize(
+        serverClientId: Env.googleOAuthClientId,
+      );
       _googleSignInInitialized = true;
     }
     final account = await GoogleSignIn.instance.authenticate();
     final idToken = account.authentication.idToken;
     if (idToken == null) {
-      throw const AuthDataSourceException('Google sign-in returned no ID token');
+      throw const AuthDataSourceException(
+        'Google sign-in returned no ID token',
+      );
     }
-    await _client.auth.signInWithIdToken(provider: OAuthProvider.google, idToken: idToken);
+    await _client.auth.signInWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+    );
   }
 
   /// Forces a token refresh against Supabase. Needed because claims baked
@@ -114,6 +152,54 @@ class AuthRemoteDataSource {
     await _client.auth.refreshSession();
   }
 
+  /// Best-effort sync of `profiles.display_name` to the name a newly-linked
+  /// identity actually carries — `handle_new_user()` only ever populates it
+  /// once, at account creation, so a user who starts anonymous (getting a
+  /// generated "Runner-XXXXXXXX" placeholder) and later links Google would
+  /// otherwise keep that placeholder forever on every leaderboard/squad
+  /// view even though a real name is now available. `display_name` carries
+  /// a UNIQUE constraint, so a collision here is swallowed rather than
+  /// thrown — losing this cosmetic update is preferable to breaking the
+  /// link/sign-in flow that triggered it.
+  Future<void> syncDisplayNameFromMetadata() async {
+    final user = _client.auth.currentUser;
+    final metadata = user?.userMetadata;
+    final name =
+        metadata?['full_name'] as String? ?? metadata?['name'] as String?;
+    if (user == null || name == null || name.trim().isEmpty) return;
+    try {
+      await syncProfileDisplayName(name);
+    } on PostgrestException {
+      // Best-effort — see doc comment above.
+    }
+  }
+
+  /// Writes [name] to `profiles.display_name` only — the column every
+  /// cross-user view (leaderboards, squad presence) reads. Unlike
+  /// [syncDisplayNameFromMetadata]'s best-effort swallow (a cosmetic sync
+  /// riding along an auth flow that must not fail over it), this is called
+  /// from flows where the name *is* the point (sign-up, the profile editor)
+  /// — a `display_name` unique-constraint collision propagates so the
+  /// caller can tell the user to pick another name instead of silently
+  /// losing it.
+  Future<void> syncProfileDisplayName(String name) {
+    final user = _client.auth.currentUser;
+    if (user == null) return Future.value();
+    return _client
+        .from('profiles')
+        .update({'display_name': name})
+        .eq('id', user.id);
+  }
+
+  /// User-initiated name change (the profile editor) — updates both the
+  /// auth metadata `_toAppUser` reads for the signed-in user's own display
+  /// (so the change shows immediately without a full re-auth) and
+  /// `profiles.display_name` for everyone else's view of this user.
+  Future<void> updateDisplayName(String name) async {
+    await _client.auth.updateUser(UserAttributes(data: {'full_name': name}));
+    await syncProfileDisplayName(name);
+  }
+
   Future<void> signOut() => _client.auth.signOut();
 
   /// Calls the `delete-account` Edge Function (deployed server-side with
@@ -123,7 +209,9 @@ class AuthRemoteDataSource {
     final response = await _client.functions.invoke('delete-account');
     final data = response.data;
     if (response.status != 200 || (data is Map && data['error'] != null)) {
-      throw AuthDataSourceException('Account deletion failed: ${response.data}');
+      throw AuthDataSourceException(
+        'Account deletion failed: ${response.data}',
+      );
     }
   }
 }

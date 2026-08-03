@@ -1,7 +1,7 @@
 name: awaken
 description: "Awaken — gamified alarm and fitness app with territory capture."
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.1.0+2
 
 environment:
   sdk: ^3.12.2
@@ -9,22 +9,32 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
 
   # State management
   flutter_bloc: ^9.1.1
   equatable: ^2.0.7
 
+  # Cupertino Icons font
+  cupertino_icons: ^1.0.8
+
   # Dependency injection
-  get_it: ^8.0.0
-  injectable: ^2.5.0
+  get_it: ^9.2.1
+  injectable: ^3.0.0
 
   # Backend / auth / realtime
   supabase_flutter: ^2.16.0
   flutter_dotenv: ^6.0.0
 
   # Offline-first local database (source of truth)
-  drift: ^2.34.0
-  sqlite3_flutter_libs: ^0.5.0
+  drift: ^2.34.3
+  # sqlite3_flutter_libs removed 2026-07-31: it's EOL (0.6.0+eol was its
+  # final release) — native SQLite bundling for Android/iOS moved into
+  # `sqlite3` itself as of its 3.x line (already resolved transitively here
+  # at 3.5.0). Verified on-device (Android emulator) that the local Drift DB
+  # still opens after removal — see CLAUDE.md's sqlite3_flutter_libs note.
   path_provider: ^2.1.0
   path: ^1.9.0
 
@@ -39,9 +49,10 @@ dependencies:
   # Territory / geospatial
   flutter_foreground_task: ^10.0.0
   geolocator: ^14.0.3
-  kalman_dr: ^0.4.4
+  # Pinned exact (no caret) — the plan's stated requirement for this
+  # package specifically, not a general policy for this file.
+  kalman_dr: 0.4.4
   latlong2: ^0.9.1
-  turf: ^0.0.12
   # Vector-tile map rendering (replaces flutter_map's raster TileLayer —
   # OpenFreeMap and most modern free tile hosts serve vector-only tiles, a
   # MapLibre style.json, not raster XYZ).
@@ -52,14 +63,13 @@ dependencies:
   permission_handler: ^12.0.0
   dynamic_color: ^1.7.0
   wakelock_plus: ^1.2.8
-  connectivity_plus: ^6.1.0
+  connectivity_plus: ^7.3.1
   sentry_flutter: ^9.0.0
-  motor: ^1.1.0
 
   # Type (UI/UX plan "Emphatic Typography" — Roboto Flex/Google Sans Flex
   # variable font; Google Sans Flex isn't publicly distributed, so this
   # substitutes Roboto Flex, per the Claude Design handoff's fonts.css).
-  google_fonts: ^6.2.1
+  google_fonts: ^8.2.0
   shared_preferences: ^2.5.5
   google_sign_in: ^7.2.0
 
@@ -69,16 +79,26 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: ^2.4.0
   drift_dev: ^2.34.0
-  injectable_generator: ^2.6.0
+  injectable_generator: ^3.0.2
   bloc_test: ^10.0.0
   mocktail: ^1.0.0
-  patrol: ^3.16.0
-
+  patrol: ^4.8.0
+  # Test-only: swaps WakelockPlus's platform instance for a no-op fake in
+  # run_tracking_repository_impl_test.dart (raw platform-channel calls have
+  # nothing to answer them under plain `flutter test`).
+  wakelock_plus_platform_interface: ^1.6.0
+  flutter_launcher_icons: ^0.13.1
 flutter:
   uses-material-design: true
+  generate: true
   assets:
     - .env.client
     - assets/e2e/scripted_run_fixture.json
+    - assets/map/fallback_style.json
 
-dependency_overrides:
-  flutter_fgbg: 0.7.1
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/app_icon.jpg"
+  adaptive_icon_background: "#22272d" # Exact dark background color from the logo
+  adaptive_icon_foreground: "assets/icon/app_icon_adaptive_fg.png"

@@ -9,7 +9,6 @@ abstract final class AppConstants {
   // Alarm / wake-up tax (plan §2.3 — bounded, not unbounded exponential)
   static const double penaltyMultiplierStep = 1.5;
   static const double penaltyMultiplierCap = 4.0;
-  static const Duration penaltyGraceWindow = Duration(hours: 2);
 
   // Verification pipeline (plan §6 Phase 2 exit criterion)
   static const int targetPoseProcessingFps = 12; // 10-15 fps budget
@@ -18,6 +17,11 @@ abstract final class AppConstants {
   // Sync engine (plan §6 Phase 3)
   static const Duration syncInitialBackoff = Duration(minutes: 2);
   static const Duration syncMaxBackoff = Duration(minutes: 30);
+
+  // Squad networking (`SquadRepositoryImpl`'s one-shot Supabase reads)
+  static const Duration squadNetworkReadTimeout = Duration(seconds: 10);
+  static const Duration squadBroadcastThrottle = Duration(seconds: 3);
+  static const Duration squadLeaderboardPollInterval = Duration(seconds: 20);
 
   // Squad streak tiers (plan §6 Phase 6) — mirrored in the
   // `recompute_streak_tier()` Postgres trigger (migration

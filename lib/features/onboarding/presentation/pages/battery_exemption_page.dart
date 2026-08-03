@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/semantic_colors.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../domain/entities/battery_exemption_status.dart';
 import '../../domain/usecases/check_battery_exemption_status.dart';
@@ -14,16 +17,25 @@ import '../../domain/usecases/request_battery_exemption.dart';
 /// stock Android — offers a best-effort deep link into their vendor
 /// autostart/protected-apps screen too.
 class BatteryExemptionPage extends StatefulWidget {
-  const BatteryExemptionPage({this.onContinue, super.key});
+  const BatteryExemptionPage({this.onContinue, this.onBack, super.key});
 
   final VoidCallback? onContinue;
+
+  /// Only supplied when this page is reached as an onboarding step (see
+  /// `onboarding_page.dart`) — lets the user step back to the notification-
+  /// rationale step instead of onboarding being one-way forward only.
+  /// `null` when opened standalone from Profile, where there's no previous
+  /// onboarding step to return to.
+  final VoidCallback? onBack;
 
   @override
   State<BatteryExemptionPage> createState() => _BatteryExemptionPageState();
 }
 
-class _BatteryExemptionPageState extends State<BatteryExemptionPage> with WidgetsBindingObserver {
+class _BatteryExemptionPageState extends State<BatteryExemptionPage>
+    with WidgetsBindingObserver {
   BatteryExemptionStatus? _status;
+  bool _requestingExemption = false;
 
   @override
   void initState() {
@@ -50,14 +62,34 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
     if (mounted) setState(() => _status = status);
   }
 
-  String _capitalize(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+  Future<void> _requestExemption() async {
+    setState(() => _requestingExemption = true);
+    try {
+      await getIt<RequestBatteryExemption>()(const NoParams());
+      await _refreshStatus();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't open battery settings — please try again."),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _requestingExemption = false);
+    }
+  }
+
+  String _capitalize(String s) =>
+      s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
   @override
   Widget build(BuildContext context) {
     final status = _status;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final showOemStep = status != null && status.isAggressiveOem && !status.isExempt;
+    final showOemStep =
+        status != null && status.isAggressiveOem && !status.isExempt;
 
     return Scaffold(
       backgroundColor: scheme.surface,
@@ -65,14 +97,32 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (widget.onBack != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 8, 20, 0),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  tooltip: 'Back',
+                  onPressed: widget.onBack,
+                ),
+              ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 6),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                widget.onBack != null ? 6 : 22,
+                20,
+                6,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ExpressiveFlower(
                     size: 64,
                     color: scheme.secondaryContainer,
+                    // See `alarm_list_page.dart`'s identical fix — light
+                    // theme's `secondaryContainer` is nearly invisible
+                    // against the page surface without a border.
+                    borderColor: scheme.outline,
                     child: Icon(
                       Icons.battery_charging_full,
                       size: 30,
@@ -100,12 +150,26 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Android can silently stop apps in the background to save '
-                      'power. If that happens to Awaken, your alarm may not ring. '
-                      'Allowing unrestricted battery usage keeps it reliable.',
-                      style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+                      // The battery-optimization/OEM-autostart-killer problem
+                      // this whole page addresses (plan H4) is Android-only —
+                      // see `BatteryExemptionRepositoryImpl`'s doc comment on
+                      // `getManufacturer()`. The generic body text previously
+                      // said "Android can silently stop apps..." even when
+                      // this page was reached on iOS via Profile, which is
+                      // simply false there.
+                      Platform.isAndroid
+                          ? 'Android can silently stop apps in the background to save '
+                                'power. If that happens to Awaken, your alarm may not ring. '
+                                'Allowing unrestricted battery usage keeps it reliable.'
+                          : "iOS doesn't have this battery-optimization concept — "
+                                "there's nothing to configure here.",
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
-                    if (status == null)
+                    if (!Platform.isAndroid)
+                      const SizedBox.shrink()
+                    else if (status == null)
                       const Padding(
                         padding: EdgeInsets.only(top: 36),
                         child: Center(child: ExpressiveLoader()),
@@ -122,20 +186,26 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
                                       bottom: Radius.circular(8),
                                     )
                                   : BorderRadius.circular(20),
-                              bg: status.isExempt ? scheme.primaryContainer : const Color(0xFFFFE08C),
-                              fg: status.isExempt ? scheme.onPrimaryContainer : const Color(0xFF2A1F00),
-                              icon: status.isExempt ? Icons.check_circle : Icons.warning,
-                              title: status.isExempt ? 'Exemption granted' : 'Still restricted',
+                              bg: status.isExempt
+                                  ? scheme.primaryContainer
+                                  : context.semanticColors.warningContainer,
+                              fg: status.isExempt
+                                  ? scheme.onPrimaryContainer
+                                  : context.semanticColors.onWarningContainer,
+                              icon: status.isExempt
+                                  ? Icons.check_circle
+                                  : Icons.warning,
+                              title: status.isExempt
+                                  ? 'Exemption granted'
+                                  : 'Still restricted',
                               subtitle: status.isExempt
                                   ? 'Battery optimization exemption granted.'
                                   : 'Battery optimization is still restricting Awaken.',
                               actionLabel: status.isExempt ? null : 'Allow',
                               onAction: status.isExempt
                                   ? null
-                                  : () async {
-                                      await getIt<RequestBatteryExemption>()(const NoParams());
-                                      await _refreshStatus();
-                                    },
+                                  : _requestExemption,
+                              busy: _requestingExemption,
                             ),
                             if (showOemStep) ...[
                               const SizedBox(height: 3),
@@ -148,13 +218,32 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
                                 fg: scheme.onSurface,
                                 icon: Icons.settings,
                                 iconColor: scheme.onSurfaceVariant,
-                                title: '${_capitalize(status.manufacturer)} extra step',
+                                title:
+                                    '${_capitalize(status.manufacturer)} extra step',
                                 subtitle:
                                     '${_capitalize(status.manufacturer)} devices often need an '
                                     'extra step: allow Awaken to auto-start in the background.',
                                 actionLabel: 'Open',
                                 outlined: true,
-                                onAction: () => getIt<OpenOemAutostartSettings>()(const NoParams()),
+                                onAction: () =>
+                                    getIt<OpenOemAutostartSettings>()(
+                                      const NoParams(),
+                                    ),
+                              ),
+                            ],
+                            if (!status.isExempt) ...[
+                              const SizedBox(height: 10),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                child: Text(
+                                  'You can enable this later in Settings → '
+                                  'Battery.',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
                               ),
                             ],
                           ],
@@ -171,10 +260,22 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage> with Widget
                 child: FilledButton(
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(56),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
                   ),
-                  onPressed: widget.onContinue,
-                  child: const Text('Continue'),
+                  // `onContinue` is only ever supplied by the onboarding
+                  // carousel, which owns advancing to the next step itself.
+                  // Opened from Profile (`ProfilePage`'s "Battery & location"
+                  // settings row), there's no next step — the button was
+                  // simply disabled (`null` callback) with no way to leave
+                  // the page except the system back gesture. Falling back to
+                  // popping the route makes it a working "Done" instead of a
+                  // dead end.
+                  onPressed:
+                      widget.onContinue ??
+                      () => Navigator.of(context).maybePop(),
+                  child: Text(widget.onContinue != null ? 'Continue' : 'Done'),
                 ),
               ),
             ),
@@ -197,6 +298,7 @@ class _StatusRow extends StatelessWidget {
     this.actionLabel,
     this.onAction,
     this.outlined = false,
+    this.busy = false,
   });
 
   final BorderRadius radius;
@@ -209,6 +311,7 @@ class _StatusRow extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
   final bool outlined;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -224,23 +327,49 @@ class _StatusRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: fg)),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: fg,
+                  ),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: TextStyle(fontSize: 13, color: fg.withValues(alpha: 0.85)),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: fg.withValues(alpha: 0.85),
+                  ),
                 ),
               ],
             ),
           ),
           if (actionLabel != null)
-            outlined
-                ? OutlinedButton(onPressed: onAction, child: Text(actionLabel!))
-                : FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: fg, foregroundColor: bg),
-                    onPressed: onAction,
-                    child: Text(actionLabel!),
-                  ),
+            if (busy)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: fg),
+                ),
+              )
+            else
+              outlined
+                  ? OutlinedButton(
+                      onPressed: onAction,
+                      child: Text(actionLabel!),
+                    )
+                  : FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: fg,
+                        foregroundColor: bg,
+                      ),
+                      onPressed: onAction,
+                      child: Text(actionLabel!),
+                    ),
         ],
       ),
     );

@@ -20,14 +20,17 @@ class CurrentUserAvatarButton extends StatelessWidget {
       builder: (context, snapshot) {
         final user = snapshot.data;
         final isAnonymous = user?.isAnonymous ?? true;
-        final label = user?.displayName ?? user?.email;
-        final initial = isAnonymous ? 'G' : (label ?? 'A')[0].toUpperCase();
+        final initial = avatarInitial(
+          isAnonymous: isAnonymous,
+          displayName: user?.displayName,
+          email: user?.email,
+        );
         return ProfileAvatarButton(
           initial: initial,
           avatarUrl: isAnonymous ? null : user?.avatarUrl,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ProfilePage()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ProfilePage())),
         );
       },
     );

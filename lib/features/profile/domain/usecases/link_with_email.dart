@@ -8,6 +8,13 @@ class LinkWithEmail {
 
   final AuthRepository _repository;
 
-  Future<void> call({required String email, required String password}) =>
-      _repository.linkWithEmail(email: email, password: password);
+  Future<void> call({
+    required String email,
+    required String password,
+    required String displayName,
+  }) => _repository.linkWithEmail(
+    email: email,
+    password: password,
+    displayName: displayName,
+  );
 }
