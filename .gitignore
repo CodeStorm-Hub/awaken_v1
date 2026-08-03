@@ -62,3 +62,4 @@ app.*.map.json
 # infra/tile-worker/generate_basemap.sh instead of committing it.
 /infra/tile-worker/generated/*.pmtiles
 /infra/tile-worker/dist
+.env.client
