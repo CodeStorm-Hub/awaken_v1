@@ -2,9 +2,25 @@ name: Build Flutter iOS (Unsigned)
 
 on:
   workflow_dispatch: # Manual trigger only from the GitHub Actions UI
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/build_ios.yml'
+  pull_request:
+    paths:
+      - 'ios/**'
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/build_ios.yml'
 
 env:
   FLUTTER_VERSION: "3.44.4"
+  LANG: "en_US.UTF-8"
+  LC_ALL: "en_US.UTF-8"
+  LANGUAGE: "en_US.UTF-8"
 
 jobs:
   build:
@@ -36,6 +52,24 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # Caching CocoaPods dependencies speeds up the build. We use a key based on pubspec.lock,
+      # ios/Podfile, and ios/Podfile.lock to ensure the cache invalidates correctly.
+      - name: Cache CocoaPods
+        id: cache-pods
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('pubspec.lock', 'ios/Podfile', 'ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      # If the CocoaPods cache was not found, perform a pod install with repo update.
+      - name: Install Pods
+        if: steps.cache-pods.outputs.cache-hit != 'true'
+        run: |
+          cd ios
+          pod install --repo-update
+
       # Generate drift tables and dependency injection configurations
       - name: Generate code (drift, injectable)
         run: dart run build_runner build --delete-conflicting-outputs
@@ -46,12 +80,13 @@ jobs:
 
       # AltStore and SideStore require a .ipa package (which is just a zipped Payload/ containing the .app bundle).
       # Since --no-codesign skips direct IPA packaging, we bundle it manually.
+      # We use ditto to preserve symlinks and metadata, and zip -ry to preserve symlinks in the ZIP.
       - name: Package IPA
         run: |
           mkdir -p build/ios/ipa/Payload
-          cp -R build/ios/iphoneos/Runner.app build/ios/ipa/Payload
+          ditto build/ios/iphoneos/Runner.app build/ios/ipa/Payload/Runner.app
           cd build/ios/ipa
-          zip -r Runner.ipa Payload
+          zip -ry Runner.ipa Payload
 
       - name: Upload Unsigned IPA Artifact
         uses: actions/upload-artifact@v4

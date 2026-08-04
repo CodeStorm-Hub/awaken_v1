@@ -1,7 +1,7 @@
 name: awaken
 description: "Awaken — gamified alarm and fitness app with territory capture."
 publish_to: 'none'
-version: 0.1.0+2
+version: 0.1.0+5
 
 environment:
   sdk: ^3.12.2
@@ -72,6 +72,7 @@ dependencies:
   google_fonts: ^8.2.0
   shared_preferences: ^2.5.5
   google_sign_in: ^7.2.0
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
@@ -99,6 +100,8 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icon/app_icon.jpg"
-  adaptive_icon_background: "#22272d" # Exact dark background color from the logo
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#12140F" # Motion Burst mark's paired dark background
   adaptive_icon_foreground: "assets/icon/app_icon_adaptive_fg.png"
+  adaptive_icon_monochrome: "assets/icon/app_icon_monochrome.png" # Android 13+ Material You themed-icon layer
+  remove_alpha_ios: true # app_icon.png is fully opaque but still RGBA; App Store rejects any alpha channel

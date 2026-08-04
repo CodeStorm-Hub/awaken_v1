@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/constants/app_constants.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../../../core/theme/gamification_widgets.dart';
@@ -326,8 +328,34 @@ class ProfilePage extends StatelessWidget {
                                 SettingsRow(
                                   icon: Icons.palette_outlined,
                                   label: 'Appearance',
-                                  isLast: true,
                                   onTap: () => _showAppearanceDialog(context),
+                                ),
+                                Divider(
+                                  height: 1,
+                                  indent: 52,
+                                  color: scheme.outline,
+                                ),
+                                SettingsRow(
+                                  icon: Icons.privacy_tip_outlined,
+                                  label: 'Privacy Policy',
+                                  onTap: () => _openLegalUrl(
+                                    context,
+                                    AppConstants.privacyPolicyUrl,
+                                  ),
+                                ),
+                                Divider(
+                                  height: 1,
+                                  indent: 52,
+                                  color: scheme.outline,
+                                ),
+                                SettingsRow(
+                                  icon: Icons.gavel_outlined,
+                                  label: 'Terms & Conditions',
+                                  isLast: true,
+                                  onTap: () => _openLegalUrl(
+                                    context,
+                                    AppConstants.termsAndConditionsUrl,
+                                  ),
                                 ),
                               ],
                             ),
@@ -344,6 +372,16 @@ class ProfilePage extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+Future<void> _openLegalUrl(BuildContext context, String url) async {
+  final uri = Uri.parse(url);
+  final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+  if (!launched && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Could not open the link.')),
     );
   }
 }

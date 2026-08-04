@@ -7,17 +7,25 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:230513820686:android:812ee00dff00fc69d0285f",
+        "mobilesdk_app_id": "1:230513820686:android:cdd8108fd2138610d0285f",
         "android_client_info": {
-          "package_name": "com.awaken.awaken"
+          "package_name": "com.awaken.alarm.v1"
         }
       },
       "oauth_client": [
         {
-          "client_id": "230513820686-ms0fv6pcfa3frpacrvnv8k58itc71at5.apps.googleusercontent.com",
+          "client_id": "230513820686-gjseeonimtrnedesehnpb1g5ul5h21on.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.awaken.awaken",
+            "package_name": "com.awaken.alarm.v1",
+            "certificate_hash": "2affba83f6a1f4fcea066443a370807b8df8a306"
+          }
+        },
+        {
+          "client_id": "230513820686-lc3c2u61vg3mf8oqe94tasm9l5j04nep.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.awaken.alarm.v1",
             "certificate_hash": "1441a3dee9bfd8f926414d626855d7c9bd3239b1"
           }
         },
@@ -39,7 +47,7 @@
               "client_type": 3
             },
             {
-              "client_id": "230513820686-6ot9m4lqb58nlgp574lb8qkivmhp2cp2.apps.googleusercontent.com",
+              "client_id": "230513820686-640n9b4ieo9aaraqpj9gs1ajs4e5bp97.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
                 "bundle_id": "com.awaken.awaken"
@@ -51,17 +59,25 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:230513820686:android:cb1b8de549b2fc6ed0285f",
+        "mobilesdk_app_id": "1:230513820686:android:fcfeb53d47ea313fd0285f",
         "android_client_info": {
-          "package_name": "com.awaken.awaken.dev"
+          "package_name": "com.awaken.alarm.v1.dev"
         }
       },
       "oauth_client": [
         {
-          "client_id": "230513820686-1mrijlbf9686g2k12hcpcgho9315t0s0.apps.googleusercontent.com",
+          "client_id": "230513820686-ljtecmir12e1ncedjsk5vfetfrc3u2k6.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.awaken.awaken.dev",
+            "package_name": "com.awaken.alarm.v1.dev",
+            "certificate_hash": "2affba83f6a1f4fcea066443a370807b8df8a306"
+          }
+        },
+        {
+          "client_id": "230513820686-vp9s90osdr3rl4n7gg5nrv270vkjle5f.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.awaken.alarm.v1.dev",
             "certificate_hash": "1441a3dee9bfd8f926414d626855d7c9bd3239b1"
           }
         },
@@ -83,7 +99,7 @@
               "client_type": 3
             },
             {
-              "client_id": "230513820686-6ot9m4lqb58nlgp574lb8qkivmhp2cp2.apps.googleusercontent.com",
+              "client_id": "230513820686-640n9b4ieo9aaraqpj9gs1ajs4e5bp97.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
                 "bundle_id": "com.awaken.awaken"

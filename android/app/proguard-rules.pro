@@ -5,14 +5,33 @@
 # crashes with a ClassNotFoundException/NoSuchMethodError that a debug build
 # doesn't, that's the signal to add a targeted `-keep` here rather than
 # widening these broadly.
-#
-# Verified 2026-07-30 via a real `flutter build apk --release --flavor prod`
-# + inspecting build/app/outputs/mapping/prodRelease/{seeds,usage}.txt:
-# flutter_foreground_task's Service/Receiver/Plugin entry points and
-# geolocator's plugin/enum classes survive R8 (kept automatically as
-# manifest-declared components / via their own consumer rules) — no
-# additional -keep needed for either. Re-verify the same way after bumping
-# either plugin's major version.
+
+# ===========================================================================
+# FIX: "Failed to create an instance of androidx.work.impl.WorkDatabase"
+# WorkManager (used by the `alarm` package and flutter_foreground_task)
+# uses Room under the hood. R8 strips the auto-generated RoomDatabase
+# implementation classes and their no-arg constructors when minification
+# is enabled. The WorkManager AAR ships consumer rules but they are
+# insufficient when isShrinkResources=true is combined with full R8 mode.
+# ===========================================================================
+-keep class androidx.work.** { *; }
+-keep class androidx.work.impl.** { *; }
+-dontwarn androidx.work.**
+
+# Room Database — keeps generated _Impl classes that R8 can't trace via
+# reflection. WorkManager's WorkDatabase is a Room DB internally.
+-keep class * extends androidx.room.RoomDatabase { *; }
+-keep @androidx.room.Database class * { *; }
+-keepclassmembers class * extends androidx.room.RoomDatabase {
+    public static ** INSTANCE;
+    public static ** Companion;
+}
+-dontwarn androidx.room.**
+
+# Drift (moor) — the local app database also uses code generation.
+-keep class **.drift.** { *; }
+-keep class **.moor.** { *; }
+-dontwarn **.drift.**
 
 # ML Kit pose detection loads some classes via reflection for its
 # on-device model loader.
@@ -31,3 +50,33 @@
 -keep class * implements com.google.gson.TypeAdapterFactory
 -keep class * implements com.google.gson.JsonSerializer
 -keep class * implements com.google.gson.JsonDeserializer
+
+# Sentry — crash reporting SDK uses reflection to read app metadata.
+-keep class io.sentry.** { *; }
+-dontwarn io.sentry.**
+
+# Supabase / Ktor / OkHttp — network layer used for backend sync.
+-keep class io.ktor.** { *; }
+-dontwarn io.ktor.**
+-keep class okhttp3.** { *; }
+-dontwarn okhttp3.**
+-keep class okio.** { *; }
+-dontwarn okio.**
+
+# Kotlin serialization used by Supabase client.
+-keepattributes *Annotation*, InnerClasses
+-dontnote kotlinx.serialization.AnnotationsKt
+-keep class kotlinx.serialization.** { *; }
+-dontwarn kotlinx.serialization.**
+-keepclassmembers class * {
+    @kotlinx.serialization.SerialName <fields>;
+}
+
+# Flutter plugin registrant — always keep so the plugin registry survives shrink.
+-keep class io.flutter.app.** { *; }
+-keep class io.flutter.plugin.**  { *; }
+-keep class io.flutter.util.**  { *; }
+-keep class io.flutter.view.**  { *; }
+-keep class io.flutter.**  { *; }
+-keep class io.flutter.plugins.**  { *; }
+-dontwarn io.flutter.embedding.**
