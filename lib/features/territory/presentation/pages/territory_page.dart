@@ -318,6 +318,7 @@ class _TerritoryPageState extends State<TerritoryPage>
   void initState() {
     super.initState();
     _isMapActive = widget.isActive.value;
+    _mapHasBeenOpened = _isMapActive;
     widget.isActive.addListener(_handleActiveChanged);
     // Data loading (location, rival/decay status, squad membership) starts
     // regardless of `_isMapActive` — cheap, and keeps state fresh for
@@ -351,12 +352,16 @@ class _TerritoryPageState extends State<TerritoryPage>
   /// generically, so re-activating needs no special-cased setup beyond that
   /// already-correct path.
   late bool _isMapActive;
+  var _mapHasBeenOpened = false;
 
   void _handleActiveChanged() {
     if (!mounted) return;
     final active = widget.isActive.value;
     setState(() {
       _isMapActive = active;
+      if (active) {
+        _mapHasBeenOpened = true;
+      }
       if (!active) {
         _pulseTimer?.cancel();
         _pulseTimer = null;
@@ -1884,8 +1889,10 @@ class _TerritoryPageState extends State<TerritoryPage>
                 enabled: _isMapActive,
                 child: Offstage(
                   offstage: !_isMapActive,
-                  child: RepaintBoundary(
-                    child: MapLibreMap(
+                  child: !_mapHasBeenOpened
+                      ? const SizedBox.shrink()
+                      : RepaintBoundary(
+                          child: MapLibreMap(
                       key: _styleLoader.styleKey,
                       styleString: _styleLoader.styleString,
                       // Tilted from the very first frame (§5.3: 3D is the default
