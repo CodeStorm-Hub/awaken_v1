@@ -127,7 +127,7 @@
     <h3>A. Location Information (Precise &amp; Background Location)</h3>
     <ul>
       <li><strong>What We Collect:</strong> Precise GPS coordinates (latitude, longitude, altitude, speed, bearing) collected during outdoor run tracking sessions.</li>
-      <li><strong>Background Location:</strong> If enabled, location data is collected in the background while a run tracking session is active to calculate run metrics, detect closed geographic loops, and map conquered territories.</li>
+      <li><strong>Foreground-Only Collection:</strong> Location data is collected only while a run tracking session is actively open in the foreground (backed by a visible foreground-service notification), to calculate run metrics, detect closed geographic loops, and map conquered territories. Awaken does <strong>not</strong> request or collect location in the background — location access stops when you close or leave the active run screen.</li>
       <li><strong>How It Is Collected:</strong> Via device GPS location services (<code>geolocator</code>, <code>flutter_foreground_task</code>).</li>
     </ul>
 
@@ -212,7 +212,7 @@
 
     <h2>6. Permissions Requested &amp; Justification</h2>
     <ul>
-      <li><strong>Location (Foreground &amp; Background):</strong> Required to map outdoor run routes and capture territory polygons during active run sessions.</li>
+      <li><strong>Location (Foreground Only):</strong> Required to map outdoor run routes and capture territory polygons during active run sessions. Not collected in the background.</li>
       <li><strong>Camera:</strong> Required during alarm ringing to verify exercise completion via on-device pose detection.</li>
       <li><strong>Notifications:</strong> Required to display active alarm alerts and run tracking notifications.</li>
       <li><strong>Exact Alarm (<code>USE_EXACT_ALARM</code>):</strong> Required on Android to trigger precise wake-up alarms at exact scheduled times.</li>

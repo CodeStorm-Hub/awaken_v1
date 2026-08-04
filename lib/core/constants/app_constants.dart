@@ -29,4 +29,14 @@ abstract final class AppConstants {
   static const int bronzeStreakTierThreshold = 3;
   static const int silverStreakTierThreshold = 7;
   static const int goldStreakTierThreshold = 14;
+
+  // Legal — hosted via GitHub Pages from docs/ (see docs/index.html's
+  // redirect and the "chore: add privacy policy page for GitHub Pages"
+  // commit). Confirm Settings → Pages is enabled for this repo before
+  // relying on these in a Play Store submission — a 404 here is a Play
+  // Console rejection reason, not just a broken in-app link.
+  static const String privacyPolicyUrl =
+      'https://codestorm-hub.github.io/awaken_v1/privacy-policy.html';
+  static const String termsAndConditionsUrl =
+      'https://codestorm-hub.github.io/awaken_v1/terms.html';
 }
