@@ -65,3 +65,10 @@ app.*.map.json
 .env.client
 certificates.zip
 upload_cert.der
+
+# Android release signing — the upload keystore and its passwords. Losing
+# these means losing the ability to publish updates under the existing Play
+# listing; never commit them. See android/app/build.gradle.kts.
+/android/key.properties
+*.jks
+*.keystore
