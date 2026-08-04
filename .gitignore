@@ -63,3 +63,4 @@ app.*.map.json
 /infra/tile-worker/generated/*.pmtiles
 /infra/tile-worker/dist
 .env.client
+certificates.zip
