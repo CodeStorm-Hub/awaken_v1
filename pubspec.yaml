@@ -88,7 +88,7 @@ dev_dependencies:
   # run_tracking_repository_impl_test.dart (raw platform-channel calls have
   # nothing to answer them under plain `flutter test`).
   wakelock_plus_platform_interface: ^1.6.0
-  flutter_launcher_icons: ^0.13.1
+  flutter_launcher_icons: ^0.14.4
 flutter:
   uses-material-design: true
   generate: true
@@ -104,4 +104,5 @@ flutter_launcher_icons:
   adaptive_icon_background: "#12140F" # Motion Burst mark's paired dark background
   adaptive_icon_foreground: "assets/icon/app_icon_adaptive_fg.png"
   adaptive_icon_monochrome: "assets/icon/app_icon_monochrome.png" # Android 13+ Material You themed-icon layer
+  adaptive_icon_foreground_inset: 0 # source PNGs already bake in the safe-zone padding; v0.14+'s 16% default would double it
   remove_alpha_ios: true # app_icon.png is fully opaque but still RGBA; App Store rejects any alpha channel
