@@ -72,3 +72,7 @@ upload_cert.der
 /android/key.properties
 *.jks
 *.keystore
+/certificates
+/certificates_extracted
+deployment_cert.der
+new_upload_cert.der
