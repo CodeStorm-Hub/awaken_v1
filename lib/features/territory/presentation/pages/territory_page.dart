@@ -737,6 +737,22 @@ class _TerritoryPageState extends State<TerritoryPage>
       ],
     };
 
+    try {
+      await _drawBountyMarkersOnController(controller, collection, goldHex);
+    } on PlatformException {
+      // See `_tickPulse`'s catch clause — a style-tier swap can tear down
+      // the native view between this method starting and its
+      // add/set-source calls reaching the platform channel.
+    } on MissingPluginException {
+      // Same race, native platform view already disposed.
+    }
+  }
+
+  Future<void> _drawBountyMarkersOnController(
+    MapLibreMapController controller,
+    Map<String, dynamic> collection,
+    String goldHex,
+  ) async {
     if (!_bountyMarkersLayerReady) {
       await controller.addSource(
         _bountyMarkersSourceId,
@@ -930,6 +946,35 @@ class _TerritoryPageState extends State<TerritoryPage>
 
     if (!mounted || _controller == null) return;
 
+    try {
+      await _redrawFillsOnController(controller, payload, semantic);
+    } on PlatformException {
+      // See `_tickPulse`'s catch clause — a style-tier swap can tear down
+      // the native view mid-redraw (this runs right after every style load
+      // and on every tab-reactivation, exactly when that race is most
+      // likely).
+      return;
+    } on MissingPluginException {
+      // Same race, native platform view already disposed.
+      return;
+    }
+
+    _lastFillsFingerprint = fingerprint;
+
+    _updatePulseTimer(payload.hasAtRisk || payload.hasContested);
+    _updateAntPathTimer(payload.hasRival);
+
+    unawaited(_redrawFlagsWithCollection(payload.flagsCollection));
+
+    if (newlyCaptured.isNotEmpty) {
+      unawaited(_animateCaptureGrowIn(newlyCaptured));
+    }
+  }
+
+  Future<void> _redrawFillsOnController(
+    MapLibreMapController controller,
+    TerritoryGeoJsonPayload payload,
+  ) async {
     if (!_territoryLayersReady) {
       await controller.addGeoJsonSource(_territorySourceId, payload.mainCollection);
       await controller.addFillLayer(
@@ -1059,16 +1104,6 @@ class _TerritoryPageState extends State<TerritoryPage>
     } else {
       await controller.setGeoJsonSource(_territorySourceId, payload.mainCollection);
       await controller.setGeoJsonSource(_territoryWallSourceId, payload.wallCollection);
-    }
-    _lastFillsFingerprint = fingerprint;
-
-    _updatePulseTimer(payload.hasAtRisk || payload.hasContested);
-    _updateAntPathTimer(payload.hasRival);
-
-    unawaited(_redrawFlagsWithCollection(payload.flagsCollection));
-
-    if (newlyCaptured.isNotEmpty) {
-      unawaited(_animateCaptureGrowIn(newlyCaptured));
     }
   }
 
