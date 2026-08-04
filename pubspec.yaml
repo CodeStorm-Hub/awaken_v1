@@ -100,6 +100,7 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icon/app_icon.jpg"
-  adaptive_icon_background: "#22272d" # Exact dark background color from the logo
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#12140F" # Motion Burst mark's paired dark background
   adaptive_icon_foreground: "assets/icon/app_icon_adaptive_fg.png"
+  remove_alpha_ios: true # app_icon.png is fully opaque but still RGBA; App Store rejects any alpha channel
