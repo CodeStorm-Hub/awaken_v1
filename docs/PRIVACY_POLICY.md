@@ -119,7 +119,7 @@ We retain your personal data only for as long as your account remains active or 
 You have the right to delete your account and all associated personal data at any time.
 
 * **In-App Deletion:** Go to **Profile / Settings → Account → Delete Account** within the Awaken app.
-* **Web Request / Manual Deletion:** If you cannot access the app, you can request account deletion by emailing us at **support@your-domain.com** (replace with your support email) with the subject line "Account Deletion Request".
+* **Web Request / Manual Deletion:** If you cannot access the app, you can request account deletion by emailing us at **salman.reza.2026@gmail.com** with the subject line "Account Deletion Request".
 
 Upon deletion, all your personal data, run history, and account credentials will be permanently erased from our primary servers within 30 days.
 
@@ -139,7 +139,7 @@ Depending on your location, you may have the following rights regarding your per
 * **Erasure ("Right to be Forgotten"):** Request deletion of your personal data.
 * **Withdraw Consent:** Revoke permissions (e.g., location or camera access) at any time in device settings.
 
-To exercise any of these rights, please contact us at **support@your-domain.com**.
+To exercise any of these rights, please contact us at **salman.reza.2026@gmail.com**.
 
 ---
 
@@ -153,7 +153,7 @@ We may update our Privacy Policy from time to time. We will notify you of any ch
 
 If you have any questions, concerns, or requests regarding this Privacy Policy, please contact us at:
 
-* **Email:** support@your-domain.com
+* **Email:** salman.reza.2026@gmail.com
 * **Developer/Company Name:** [Your Name or Company Name]
 * **Address:** [Your Business Address / Country]
 

@@ -158,6 +158,6 @@ We reserve the right, at our sole discretion, to modify or replace these Terms a
 
 If you have any questions or concerns regarding these Terms and Conditions, please contact us at:
 
-* **Email:** support@your-domain.com
+* **Email:** salman.reza.2026@gmail.com
 * **Company / Developer Name:** [Your Name or Company Name]
 * **Address:** [Your Business Address]
