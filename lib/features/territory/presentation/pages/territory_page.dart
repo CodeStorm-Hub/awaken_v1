@@ -973,7 +973,8 @@ class _TerritoryPageState extends State<TerritoryPage>
 
   Future<void> _redrawFillsOnController(
     MapLibreMapController controller,
-    TerritoryGeoJsonPayload payload,
+    TerritoryGeoJsonResult payload,
+    AppSemanticColors semantic,
   ) async {
     if (!_territoryLayersReady) {
       await controller.addGeoJsonSource(_territorySourceId, payload.mainCollection);
@@ -1111,33 +1112,40 @@ class _TerritoryPageState extends State<TerritoryPage>
     final controller = _controller;
     if (controller == null || !mounted || !_flagIconRegistered) return;
 
-    if (!_flagsLayerReady) {
-      await controller.addGeoJsonSource(_flagsSourceId, collection);
-      await controller.addSymbolLayer(
-        _flagsSourceId,
-        _flagsSymbolLayerId,
-        const SymbolLayerProperties(
-          iconImage: TerritoryMapStyle.flagIconName,
-          iconColor: ['get', 'flagColor'],
-          iconSize: [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            12,
-            0.22,
-            16,
-            0.45,
-            19,
-            0.7,
-          ],
-          iconAllowOverlap: true,
-          iconIgnorePlacement: true,
-          iconAnchor: 'bottom',
-        ),
-      );
-      _flagsLayerReady = true;
-    } else {
-      await controller.setGeoJsonSource(_flagsSourceId, collection);
+    try {
+      if (!_flagsLayerReady) {
+        await controller.addGeoJsonSource(_flagsSourceId, collection);
+        await controller.addSymbolLayer(
+          _flagsSourceId,
+          _flagsSymbolLayerId,
+          const SymbolLayerProperties(
+            iconImage: TerritoryMapStyle.flagIconName,
+            iconColor: ['get', 'flagColor'],
+            iconSize: [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              12,
+              0.22,
+              16,
+              0.45,
+              19,
+              0.7,
+            ],
+            iconAllowOverlap: true,
+            iconIgnorePlacement: true,
+            iconAnchor: 'bottom',
+          ),
+        );
+        _flagsLayerReady = true;
+      } else {
+        await controller.setGeoJsonSource(_flagsSourceId, collection);
+      }
+    } on PlatformException {
+      // See `_tickPulse`'s catch clause — a style-tier swap can tear down
+      // the native view mid-call.
+    } on MissingPluginException {
+      // Same race, native platform view already disposed.
     }
   }
 
@@ -1342,40 +1350,47 @@ class _TerritoryPageState extends State<TerritoryPage>
     final semantic = context.semanticColors;
     final tint = Color.lerp(semantic.territoryOwned, Colors.white, 0.15)!;
 
-    if (!_squadHeatmapLayerReady) {
-      await controller.addGeoJsonSource(_squadHeatmapSourceId, const {
-        'type': 'FeatureCollection',
-        'features': <Map<String, dynamic>>[],
-      });
-      await controller.addFillLayer(
-        _squadHeatmapSourceId,
+    try {
+      if (!_squadHeatmapLayerReady) {
+        await controller.addGeoJsonSource(_squadHeatmapSourceId, const {
+          'type': 'FeatureCollection',
+          'features': <Map<String, dynamic>>[],
+        });
+        await controller.addFillLayer(
+          _squadHeatmapSourceId,
+          _squadHeatmapFillLayerId,
+          FillLayerProperties(fillColor: _colorToHex(tint), fillOpacity: 0.22),
+          belowLayerId: _territoryLayersReady ? _territoryFillLayerId : null,
+        );
+        _squadHeatmapLayerReady = true;
+      }
+
+      await controller.setLayerVisibility(
         _squadHeatmapFillLayerId,
-        FillLayerProperties(fillColor: _colorToHex(tint), fillOpacity: 0.22),
-        belowLayerId: _territoryLayersReady ? _territoryFillLayerId : null,
+        _showSquadHeatmap,
       );
-      _squadHeatmapLayerReady = true;
+
+      if (!_showSquadHeatmap) return;
+
+      final features = [
+        for (final territory in _lastTerritories)
+          if (territory.isMine || _squadMemberIds.contains(territory.ownerId))
+            TerritoryMapStyle.territoryToGeoJsonFeature(territory, const {}),
+      ];
+      await controller.setGeoJsonSource(_squadHeatmapSourceId, {
+        'type': 'FeatureCollection',
+        'features': features,
+      });
+      await controller.setLayerVisibility(
+        _squadHeatmapFillLayerId,
+        _showSquadHeatmap,
+      );
+    } on PlatformException {
+      // See `_tickPulse`'s catch clause — a style-tier swap can tear down
+      // the native view mid-call.
+    } on MissingPluginException {
+      // Same race, native platform view already disposed.
     }
-
-    await controller.setLayerVisibility(
-      _squadHeatmapFillLayerId,
-      _showSquadHeatmap,
-    );
-
-    if (!_showSquadHeatmap) return;
-
-    final features = [
-      for (final territory in _lastTerritories)
-        if (territory.isMine || _squadMemberIds.contains(territory.ownerId))
-          TerritoryMapStyle.territoryToGeoJsonFeature(territory, const {}),
-    ];
-    await controller.setGeoJsonSource(_squadHeatmapSourceId, {
-      'type': 'FeatureCollection',
-      'features': features,
-    });
-    await controller.setLayerVisibility(
-      _squadHeatmapFillLayerId,
-      _showSquadHeatmap,
-    );
   }
 
   /// Capture-density heatmap (item 4) — a `HeatmapLayerProperties` layer
@@ -1390,39 +1405,48 @@ class _TerritoryPageState extends State<TerritoryPage>
     if (controller == null || !mounted || !_styleReady) return;
     if (!_showCaptureHeatmap && !_captureHeatmapLayerReady) return;
 
-    if (!_captureHeatmapLayerReady) {
-      await controller.addGeoJsonSource(_captureHeatmapSourceId, const {
-        'type': 'FeatureCollection',
-        'features': <Map<String, dynamic>>[],
-      });
-      await controller.addHeatmapLayer(
-        _captureHeatmapSourceId,
-        _captureHeatmapLayerId,
-        const HeatmapLayerProperties(
-          heatmapRadius: 28,
-          heatmapWeight: [
-            'interpolate',
-            ['linear'],
-            ['get', 'areaSqm'],
-            0,
-            0.2,
-            2500,
-            0.6,
-            20000,
-            1.0,
-          ],
-          heatmapIntensity: 1,
-          heatmapOpacity: 0.6,
-        ),
-        belowLayerId: _territoryLayersReady ? _territoryFillLayerId : null,
-      );
-      _captureHeatmapLayerReady = true;
-    }
+    try {
+      if (!_captureHeatmapLayerReady) {
+        await controller.addGeoJsonSource(_captureHeatmapSourceId, const {
+          'type': 'FeatureCollection',
+          'features': <Map<String, dynamic>>[],
+        });
+        await controller.addHeatmapLayer(
+          _captureHeatmapSourceId,
+          _captureHeatmapLayerId,
+          const HeatmapLayerProperties(
+            heatmapRadius: 28,
+            heatmapWeight: [
+              'interpolate',
+              ['linear'],
+              ['get', 'areaSqm'],
+              0,
+              0.2,
+              2500,
+              0.6,
+              20000,
+              1.0,
+            ],
+            heatmapIntensity: 1,
+            heatmapOpacity: 0.6,
+          ),
+          belowLayerId: _territoryLayersReady ? _territoryFillLayerId : null,
+        );
+        _captureHeatmapLayerReady = true;
+      }
 
-    await controller.setLayerVisibility(
-      _captureHeatmapLayerId,
-      _showCaptureHeatmap,
-    );
+      await controller.setLayerVisibility(
+        _captureHeatmapLayerId,
+        _showCaptureHeatmap,
+      );
+    } on PlatformException {
+      // See `_tickPulse`'s catch clause — a style-tier swap can tear down
+      // the native view mid-call.
+      return;
+    } on MissingPluginException {
+      // Same race, native platform view already disposed.
+      return;
+    }
 
     if (!_showCaptureHeatmap) return;
 
@@ -1448,14 +1472,21 @@ class _TerritoryPageState extends State<TerritoryPage>
             },
           },
     ];
-    await controller.setGeoJsonSource(_captureHeatmapSourceId, {
-      'type': 'FeatureCollection',
-      'features': features,
-    });
-    await controller.setLayerVisibility(
-      _captureHeatmapLayerId,
-      _showCaptureHeatmap,
-    );
+    try {
+      await controller.setGeoJsonSource(_captureHeatmapSourceId, {
+        'type': 'FeatureCollection',
+        'features': features,
+      });
+      await controller.setLayerVisibility(
+        _captureHeatmapLayerId,
+        _showCaptureHeatmap,
+      );
+    } on PlatformException {
+      // See `_tickPulse`'s catch clause — a style-tier swap can tear down
+      // the native view mid-call.
+    } on MissingPluginException {
+      // Same race, native platform view already disposed.
+    }
   }
 
   /// Clustered squad-member location markers (item 5) — same clustered
@@ -1492,63 +1523,70 @@ class _TerritoryPageState extends State<TerritoryPage>
       ],
     };
 
-    if (!_squadMemberMarkersLayerReady) {
-      await controller.addSource(
-        _squadMemberMarkersSourceId,
-        GeojsonSourceProperties(
-          data: collection,
-          cluster: true,
-          clusterRadius: 50,
-          clusterMaxZoom: 14,
-        ),
-      );
-      await controller.addCircleLayer(
-        _squadMemberMarkersSourceId,
-        _squadMemberUnclusteredLayerId,
-        CircleLayerProperties(
-          circleRadius: 8,
-          circleColor: blueHex,
-          circleStrokeWidth: 2,
-          circleStrokeColor: '#FFFFFF',
-        ),
-        filter: [
-          '!',
-          ['has', 'point_count'],
-        ],
-      );
-      await controller.addCircleLayer(
-        _squadMemberMarkersSourceId,
-        _squadMemberClusterCircleLayerId,
-        CircleLayerProperties(
-          circleRadius: 16,
-          circleColor: blueHex,
-          circleOpacity: 0.85,
-          circleStrokeWidth: 2,
-          circleStrokeColor: '#FFFFFF',
-        ),
-        filter: ['has', 'point_count'],
-      );
-      await controller.addSymbolLayer(
-        _squadMemberMarkersSourceId,
-        _squadMemberClusterCountLayerId,
-        const SymbolLayerProperties(
-          textField: ['get', 'point_count_abbreviated'],
-          textSize: 12,
-          textColor: '#FFFFFF',
-          textAllowOverlap: true,
-          textIgnorePlacement: true,
-          // See the bounty cluster-count layer's identical comment above —
-          // same fix, same reason (OpenFreeMap only hosts Noto Sans).
-          textFont: ['Noto Sans Regular'],
-        ),
-        filter: ['has', 'point_count'],
-      );
-      _squadMemberMarkersLayerReady = true;
-    } else {
-      await controller.setGeoJsonSource(
-        _squadMemberMarkersSourceId,
-        collection,
-      );
+    try {
+      if (!_squadMemberMarkersLayerReady) {
+        await controller.addSource(
+          _squadMemberMarkersSourceId,
+          GeojsonSourceProperties(
+            data: collection,
+            cluster: true,
+            clusterRadius: 50,
+            clusterMaxZoom: 14,
+          ),
+        );
+        await controller.addCircleLayer(
+          _squadMemberMarkersSourceId,
+          _squadMemberUnclusteredLayerId,
+          CircleLayerProperties(
+            circleRadius: 8,
+            circleColor: blueHex,
+            circleStrokeWidth: 2,
+            circleStrokeColor: '#FFFFFF',
+          ),
+          filter: [
+            '!',
+            ['has', 'point_count'],
+          ],
+        );
+        await controller.addCircleLayer(
+          _squadMemberMarkersSourceId,
+          _squadMemberClusterCircleLayerId,
+          CircleLayerProperties(
+            circleRadius: 16,
+            circleColor: blueHex,
+            circleOpacity: 0.85,
+            circleStrokeWidth: 2,
+            circleStrokeColor: '#FFFFFF',
+          ),
+          filter: ['has', 'point_count'],
+        );
+        await controller.addSymbolLayer(
+          _squadMemberMarkersSourceId,
+          _squadMemberClusterCountLayerId,
+          const SymbolLayerProperties(
+            textField: ['get', 'point_count_abbreviated'],
+            textSize: 12,
+            textColor: '#FFFFFF',
+            textAllowOverlap: true,
+            textIgnorePlacement: true,
+            // See the bounty cluster-count layer's identical comment above —
+            // same fix, same reason (OpenFreeMap only hosts Noto Sans).
+            textFont: ['Noto Sans Regular'],
+          ),
+          filter: ['has', 'point_count'],
+        );
+        _squadMemberMarkersLayerReady = true;
+      } else {
+        await controller.setGeoJsonSource(
+          _squadMemberMarkersSourceId,
+          collection,
+        );
+      }
+    } on PlatformException {
+      // See `_tickPulse`'s catch clause — a style-tier swap can tear down
+      // the native view mid-call.
+    } on MissingPluginException {
+      // Same race, native platform view already disposed.
     }
   }
 
