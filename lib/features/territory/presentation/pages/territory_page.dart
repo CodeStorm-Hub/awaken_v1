@@ -597,11 +597,11 @@ class _TerritoryPageState extends State<TerritoryPage>
   Future<void> _onStyleLoaded() async {
     _styleLoader.onStyleLoaded();
     _styleReady = true;
-    // The squad-membership stream (`_loadSquadInfo`) is independent of the
-    // map's own lifecycle and may have already tried (and silently failed
-    // to run any layer calls) while the style was still loading — replay it
-    // once now that it's safe.
+    // Replay redraw operations now that the map style is fully loaded and
+    // it's safe to add sources and layers to the native view.
+    unawaited(_redrawFills());
     unawaited(_redrawSquadHeatmap());
+    unawaited(_redrawSquadMemberMarkers());
     final controller = _controller;
     if (controller != null) {
       // Pokémon-GO-inspired basemap recolor (item — see
@@ -872,7 +872,7 @@ class _TerritoryPageState extends State<TerritoryPage>
 
   Future<void> _redrawFills() async {
     final controller = _controller;
-    if (controller == null || !mounted) return;
+    if (controller == null || !mounted || !_styleReady) return;
     final semantic = context.semanticColors;
     final atRiskById = {for (final t in _atRisk) t.id: t};
 
