@@ -64,3 +64,4 @@ app.*.map.json
 /infra/tile-worker/dist
 .env.client
 certificates.zip
+upload_cert.der
