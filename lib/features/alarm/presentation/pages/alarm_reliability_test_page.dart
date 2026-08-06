@@ -20,6 +20,15 @@ enum _TestPhase { idle, waiting, passed, timedOut }
 class AlarmReliabilityTestPage extends StatefulWidget {
   const AlarmReliabilityTestPage({super.key});
 
+  /// Canonical navigation entry point — reachable from the alarm list's
+  /// self-test button and from profile settings; both should push through
+  /// here rather than each constructing their own `MaterialPageRoute`.
+  static void push(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AlarmReliabilityTestPage()),
+    );
+  }
+
   @override
   State<AlarmReliabilityTestPage> createState() =>
       _AlarmReliabilityTestPageState();

@@ -1,0 +1,64 @@
+graph TD
+  subgraph Bootstrap
+    App[App shell & bootstrap<br/>main_common.dart / app.dart]
+  end
+
+  subgraph CoreInfra[Core Infra]
+    DI[core/di]
+    Env[core/config/env.dart]
+    Theme[core/theme]
+  end
+
+  subgraph PlatformBridge[Platform Bridge - Android only]
+    SysCap[core/platform/system_capabilities.dart]
+    MainActivity[android MainActivity.kt]
+  end
+
+  subgraph SyncEngine[Sync Engine]
+    LocalWriter[sync/outbox/local_writer.dart]
+    SyncWorker[sync/outbox/sync_worker.dart]
+    Pull[sync/pull/pull_down_sync.dart]
+    Drift[sync/local/database.dart]
+  end
+
+  subgraph Features
+    Alarm[features/alarm]
+    Verification[features/verification]
+    Territory[features/territory]
+    Squad[features/squad]
+    Profile[features/profile]
+    Onboarding[features/onboarding]
+    Home[features/home]
+  end
+
+  App --> Alarm
+  App --> Onboarding
+  App --> Profile
+  App --> SyncWorker
+  App --> Pull
+  App --> DI
+
+  Alarm --> LocalWriter
+  Alarm --> SysCap
+  Alarm --> Verification
+  LocalWriter --> Drift
+  SyncWorker --> Drift
+  SyncWorker -->|SupabaseClient| Supabase[(Supabase: alarms/sessions/runs/user_stats)]
+
+  Territory -->|SupabaseClient RPC submit_run| Supabase
+  Territory --> Verification
+  Squad -->|SupabaseClient RPCs| Supabase
+  Profile -->|SupabaseClient auth| Supabase
+
+  Onboarding --> SysCap
+  SysCap -->|MethodChannel| MainActivity
+  MainActivity -.no iOS equivalent.-> AppDelegate[ios AppDelegate.swift]
+
+  Territory --> RunForegroundService[territory/data/datasources/run_foreground_service.dart]
+  RunForegroundService -->|Android: real foreground service| AndroidManifest[android/app/.../AndroidManifest.xml service decl]
+  RunForegroundService -.iOS: notification-only shim, unconditionally called.-> IOSNotif[flutter_foreground_task iOS path]
+
+  Home --> Drift
+
+  App --> Theme
+  DI --> Env

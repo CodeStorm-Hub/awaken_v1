@@ -1,6 +1,18 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+// Logs the real Postgres error server-side (visible in function logs for
+// operator debugging) and returns a generic message to the client -- raw
+// error text can leak schema/constraint names, which a mobile client has no
+// use for and shouldn't be trusted with (CWE-209).
+function serverErrorResponse(stage: string, error: { message: string }): Response {
+  console.error(`delete-account failed at "${stage}":`, error.message);
+  return new Response(
+    JSON.stringify({ error: "Account deletion failed, please contact support." }),
+    { status: 500, headers: { "Content-Type": "application/json" } },
+  );
+}
+
 // Store/app-policy account-deletion requirement (Google Play User Data
 // policy + Apple Guideline 5.1.1): self-service in-app deletion of the
 // account AND its data, not just deactivation. Runs server-side with the
@@ -53,10 +65,7 @@ Deno.serve(async (req: Request) => {
   for (const table of tables) {
     const { error } = await adminClient.from(table).delete().eq("user_id", userId);
     if (error) {
-      return new Response(JSON.stringify({ error: `Failed deleting ${table}: ${error.message}` }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
+      return serverErrorResponse(`deleting ${table}`, error);
     }
   }
 
@@ -77,10 +86,7 @@ Deno.serve(async (req: Request) => {
     .delete()
     .or(`reporter_id.eq.${userId},reported_user_id.eq.${userId}`);
   if (ownReportsError) {
-    return new Response(
-      JSON.stringify({ error: `Failed deleting this user's squad reports: ${ownReportsError.message}` }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    );
+    return serverErrorResponse("deleting this user's squad reports", ownReportsError);
   }
 
   // 2. Squads this user owns.
@@ -89,10 +95,7 @@ Deno.serve(async (req: Request) => {
     .select("id")
     .eq("owner_id", userId);
   if (ownedSquadsFetchError) {
-    return new Response(
-      JSON.stringify({ error: `Failed listing owned squads: ${ownedSquadsFetchError.message}` }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    );
+    return serverErrorResponse("listing owned squads", ownedSquadsFetchError);
   }
   const ownedSquadIds = (ownedSquads ?? []).map((s: { id: string }) => s.id);
 
@@ -105,10 +108,7 @@ Deno.serve(async (req: Request) => {
       .delete()
       .in("squad_id", ownedSquadIds);
     if (squadReportsError) {
-      return new Response(
-        JSON.stringify({ error: `Failed deleting reports for owned squads: ${squadReportsError.message}` }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
-      );
+      return serverErrorResponse("deleting reports for owned squads", squadReportsError);
     }
 
     // 2b. Detach every member from a squad this user owns before deleting
@@ -119,36 +119,24 @@ Deno.serve(async (req: Request) => {
       .update({ squad_id: null })
       .in("squad_id", ownedSquadIds);
     if (detachMembersError) {
-      return new Response(
-        JSON.stringify({ error: `Failed detaching squad members: ${detachMembersError.message}` }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
-      );
+      return serverErrorResponse("detaching squad members", detachMembersError);
     }
 
     // 2c. Now safe to delete the squads themselves.
     const { error: squadError } = await adminClient.from("squads").delete().in("id", ownedSquadIds);
     if (squadError) {
-      return new Response(JSON.stringify({ error: `Failed deleting owned squads: ${squadError.message}` }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
+      return serverErrorResponse("deleting owned squads", squadError);
     }
   }
 
   const { error: profileError } = await adminClient.from("profiles").delete().eq("id", userId);
   if (profileError) {
-    return new Response(JSON.stringify({ error: `Failed deleting profile: ${profileError.message}` }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return serverErrorResponse("deleting profile", profileError);
   }
 
   const { error: authError } = await adminClient.auth.admin.deleteUser(userId);
   if (authError) {
-    return new Response(JSON.stringify({ error: `Failed deleting auth user: ${authError.message}` }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return serverErrorResponse("deleting auth user", authError);
   }
 
   return new Response(JSON.stringify({ success: true }), {

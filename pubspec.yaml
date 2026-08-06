@@ -88,6 +88,10 @@ dev_dependencies:
   # run_tracking_repository_impl_test.dart (raw platform-channel calls have
   # nothing to answer them under plain `flutter test`).
   wakelock_plus_platform_interface: ^1.6.0
+  # Test-only: swaps permission_handler's platform instance for a mock in
+  # verification_cubit_test.dart, same reasoning as wakelock_plus above.
+  permission_handler_platform_interface: ^4.4.0
+  plugin_platform_interface: ^2.1.8
   flutter_launcher_icons: ^0.14.4
 flutter:
   uses-material-design: true

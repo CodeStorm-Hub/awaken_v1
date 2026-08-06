@@ -132,12 +132,10 @@ class _AlarmListPageState extends State<AlarmListPage> {
                                     shape: const CircleBorder(),
                                     child: InkWell(
                                       customBorder: const CircleBorder(),
-                                      onTap: () => Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const AlarmReliabilityTestPage(),
-                                        ),
-                                      ),
+                                      onTap: () =>
+                                          AlarmReliabilityTestPage.push(
+                                            context,
+                                          ),
                                       // Was 36x36 — below WCAG 2.5.5's
                                       // 44x44 minimum; icon stays the same
                                       // visual size.

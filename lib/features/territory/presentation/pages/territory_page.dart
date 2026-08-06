@@ -36,6 +36,9 @@ import '../widgets/map_style_loader.dart';
 import '../widgets/map_style_overlays.dart';
 import '../widgets/osm_attribution.dart';
 import '../widgets/territory_hud_widgets.dart';
+import '../widgets/territory_inspect_sheet.dart';
+import '../widgets/territory_layers_sheet.dart';
+import '../widgets/territory_map_math.dart';
 import '../widgets/territory_map_style.dart';
 import 'active_run_page.dart';
 
@@ -696,13 +699,13 @@ class _TerritoryPageState extends State<TerritoryPage>
     final semantic = context.semanticColors;
 
     for (final zone in zones) {
-      final ring = _circlePolygon(zone.centerLat, zone.centerLng, zone.radiusM);
+      final ring = circlePolygon(zone.centerLat, zone.centerLng, zone.radiusM);
       final fill = await controller.addFill(
         FillOptions(
           geometry: [ring],
-          fillColor: _colorToHex(semantic.bountyGold),
+          fillColor: colorToHex(semantic.bountyGold),
           fillOpacity: 0.25,
-          fillOutlineColor: _colorToHex(semantic.bountyGold),
+          fillOutlineColor: colorToHex(semantic.bountyGold),
         ),
       );
       _bountyFillsByZoneId[zone.id] = [fill];
@@ -720,7 +723,7 @@ class _TerritoryPageState extends State<TerritoryPage>
     final controller = _controller;
     if (controller == null || !mounted) return;
     final semantic = context.semanticColors;
-    final goldHex = _colorToHex(semantic.bountyGold);
+    final goldHex = colorToHex(semantic.bountyGold);
 
     final collection = {
       'type': 'FeatureCollection',
@@ -832,58 +835,10 @@ class _TerritoryPageState extends State<TerritoryPage>
     }
   }
 
-  /// A 32-point polygon approximating a [radiusMeters] circle around
-  /// (lat, lng) — MapLibre's `CircleOptions.circleRadius` is in screen
-  /// pixels, not meters, so it can't represent a real-world-sized zone that
-  /// stays accurate across zoom levels; a `Fill` polygon (same primitive
-  /// territories already use) does.
-  static List<LatLng> _circlePolygon(
-    double lat,
-    double lng,
-    double radiusMeters,
-  ) {
-    const points = 32;
-    const earthRadiusM = 6371000.0;
-    final latRad = lat * (math.pi / 180);
-    final ring = <LatLng>[];
-    for (var i = 0; i <= points; i++) {
-      final angle = 2 * math.pi * i / points;
-      final dLat =
-          (radiusMeters * math.cos(angle)) / earthRadiusM * (180 / math.pi);
-      final dLng =
-          (radiusMeters * math.sin(angle)) /
-          (earthRadiusM * math.cos(latRad)) *
-          (180 / math.pi);
-      ring.add(LatLng(lat + dLat, lng + dLng));
-    }
-    return ring;
-  }
-
   void _onTerritoriesChanged(List<Territory> territories) {
     _lastTerritories = territories;
     unawaited(_redrawFills());
     unawaited(_redrawSquadHeatmap());
-  }
-
-  /// Fallback health (0-100) for an owned territory, derived from
-  /// `TerritoryAtRisk.lastDefendedAt`/`expiresAt` — used only when
-  /// `Territory.health` is null (a row cached before `territories_in_bbox()`
-  /// started returning the real server-computed `health` column, i.e. a
-  /// cache-migration safety net, not the normal path anymore). A territory
-  /// absent from the at-risk list is outside the decay warning window
-  /// entirely, i.e. full health.
-  double _healthOf(
-    String territoryId,
-    Map<String, TerritoryAtRisk> atRiskById,
-  ) {
-    final risk = atRiskById[territoryId];
-    if (risk == null) return 100;
-    final totalWindowSec = risk.expiresAt
-        .difference(risk.lastDefendedAt)
-        .inSeconds;
-    if (totalWindowSec <= 0) return 0;
-    final remainingSec = risk.expiresAt.difference(DateTime.now()).inSeconds;
-    return (remainingSec / totalWindowSec * 100).clamp(0, 100).toDouble();
   }
 
   Future<void> _redrawFills() async {
@@ -920,7 +875,7 @@ class _TerritoryPageState extends State<TerritoryPage>
     final healthMap = <String, double>{
       for (final t in visible)
         if (t.isMine && t.health == null)
-          t.id: _healthOf(t.id, atRiskById),
+          t.id: healthOfTerritory(t.id, atRiskById),
     };
 
     final params = TerritoryGeoJsonParams(
@@ -928,14 +883,14 @@ class _TerritoryPageState extends State<TerritoryPage>
       atRiskIds: atRiskById.keys.toSet(),
       healthOfMap: healthMap,
       squadMemberIds: _squadMemberIds,
-      ownedFillHex: _colorToHex(semantic.territoryOwnedFill),
-      squadmateFillHex: _colorToHex(semantic.territorySquadmate),
-      rivalFillHex: _colorToHex(semantic.territoryRivalFill),
-      ownedOutlineHex: _colorToHex(semantic.territoryOwned),
-      rivalOutlineHex: _colorToHex(semantic.territoryRival),
-      ownedExtrusionHex: _colorToHex(semantic.territoryOwnedExtrusion),
-      squadmateExtrusionHex: _colorToHex(semantic.territorySquadmateExtrusion),
-      rivalExtrusionHex: _colorToHex(semantic.territoryRivalExtrusion),
+      ownedFillHex: colorToHex(semantic.territoryOwnedFill),
+      squadmateFillHex: colorToHex(semantic.territorySquadmate),
+      rivalFillHex: colorToHex(semantic.territoryRivalFill),
+      ownedOutlineHex: colorToHex(semantic.territoryOwned),
+      rivalOutlineHex: colorToHex(semantic.territoryRival),
+      ownedExtrusionHex: colorToHex(semantic.territoryOwnedExtrusion),
+      squadmateExtrusionHex: colorToHex(semantic.territorySquadmateExtrusion),
+      rivalExtrusionHex: colorToHex(semantic.territoryRivalExtrusion),
       contestedRadiusM: _contestedRadiusM,
     );
 
@@ -1077,7 +1032,7 @@ class _TerritoryPageState extends State<TerritoryPage>
         _territorySourceId,
         _territoryAtRiskOutlineLayerId,
         LineLayerProperties(
-          lineColor: _colorToHex(semantic.territoryAtRisk),
+          lineColor: colorToHex(semantic.territoryAtRisk),
           lineWidth: 3,
           lineOpacity: 1.0,
         ),
@@ -1091,7 +1046,7 @@ class _TerritoryPageState extends State<TerritoryPage>
         _territorySourceId,
         _territoryContestedOutlineLayerId,
         LineLayerProperties(
-          lineColor: _colorToHex(semantic.territoryContested),
+          lineColor: colorToHex(semantic.territoryContested),
           lineWidth: 3,
           lineOpacity: 1.0,
         ),
@@ -1359,7 +1314,7 @@ class _TerritoryPageState extends State<TerritoryPage>
         await controller.addFillLayer(
           _squadHeatmapSourceId,
           _squadHeatmapFillLayerId,
-          FillLayerProperties(fillColor: _colorToHex(tint), fillOpacity: 0.22),
+          FillLayerProperties(fillColor: colorToHex(tint), fillOpacity: 0.22),
           belowLayerId: _territoryLayersReady ? _territoryFillLayerId : null,
         );
         _squadHeatmapLayerReady = true;
@@ -1500,7 +1455,7 @@ class _TerritoryPageState extends State<TerritoryPage>
     final controller = _controller;
     if (controller == null || !mounted || !_styleReady) return;
     final scheme = Theme.of(context).colorScheme;
-    final blueHex = _colorToHex(scheme.secondary);
+    final blueHex = colorToHex(scheme.secondary);
 
     final located = _squadPresenceMembers.where(
       (m) => m.lat != null && m.lng != null,
@@ -1703,7 +1658,6 @@ class _TerritoryPageState extends State<TerritoryPage>
   }
 
   Future<void> _showTerritoryInspectSheet(Territory territory) async {
-    final scheme = Theme.of(context).colorScheme;
     final semantic = context.semanticColors;
     final isSquadmate =
         !territory.isMine && _squadMemberIds.contains(territory.ownerId);
@@ -1728,7 +1682,7 @@ class _TerritoryPageState extends State<TerritoryPage>
     final areaLabel = '${(territory.areaSqm / 1000000).toStringAsFixed(3)} km²';
     final atRiskById = {for (final t in _atRisk) t.id: t};
     final health = territory.isMine
-        ? (territory.health?.toDouble() ?? _healthOf(territory.id, atRiskById))
+        ? (territory.health?.toDouble() ?? healthOfTerritory(territory.id, atRiskById))
         : null;
     final centroid = TerritoryMapStyle.territoryCentroid(territory);
     final canStealBack = !territory.isMine && !isSquadmate;
@@ -1736,134 +1690,25 @@ class _TerritoryPageState extends State<TerritoryPage>
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return Container(
-          decoration: BoxDecoration(
-            color: scheme.brightness == Brightness.dark
-                ? const Color(0xFF1C1C1E)
-                : Colors.white,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(28),
-            ),
-          ),
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 36,
-                          height: 5,
-                          margin: const EdgeInsets.only(bottom: 18),
-                          decoration: BoxDecoration(
-                            color: scheme.onSurfaceVariant.withValues(
-                              alpha: 0.3,
-                            ),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: ownerColor,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            ownerLabel,
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: scheme.onSurface,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        areaLabel,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                      if (health != null) ...[
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.shield_outlined,
-                              size: 16,
-                              color: scheme.onSurfaceVariant,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              '${health.round()}% defended',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: scheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(999),
-                          child: LinearProgressIndicator(
-                            value: (health / 100).clamp(0, 1),
-                            minHeight: 6,
-                            backgroundColor: scheme.surfaceContainerHighest,
-                            color: health < 30
-                                ? semantic.territoryAtRisk
-                                : semantic.territoryOwned,
-                          ),
-                        ),
-                      ],
-                      if (canStealBack) ...[
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: semantic.territoryRival,
-                              minimumSize: const Size(0, 48),
-                            ),
-                            onPressed: () {
-                              Navigator.of(sheetContext).pop();
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => ActiveRunPage(
-                                    focusLocation: LatLng(
-                                      centroid.latitude,
-                                      centroid.longitude,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.directions_run),
-                            label: const Text('Steal back'),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+      builder: (sheetContext) => TerritoryInspectSheet(
+        ownerLabel: ownerLabel,
+        ownerColor: ownerColor,
+        areaLabel: areaLabel,
+        health: health,
+        canStealBack: canStealBack,
+        onStealBack: () {
+          Navigator.of(sheetContext).pop();
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => ActiveRunPage(
+                focusLocation: LatLng(centroid.latitude, centroid.longitude),
               ),
-            );
-          },
-        );
-      }
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   Future<void> _zoomIn() async {
     final controller = _controller;
@@ -2203,163 +2048,27 @@ class _TerritoryPageState extends State<TerritoryPage>
   }
 
   Future<void> _showLayersSheet(BuildContext context) async {
-    final scheme = Theme.of(context).colorScheme;
-    final isDark = scheme.brightness == Brightness.dark;
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (sheetContext, setSheetState) {
-            return Container(
-              decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xFF1C1C1E)
-                    : Colors.white,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.12)
-                      : Colors.black.withValues(alpha: 0.08),
-                  width: 0.5,
-                ),
-              ),
-                  child: SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Center(
-                            child: Container(
-                              width: 36,
-                              height: 5,
-                              margin: const EdgeInsets.only(bottom: 18),
-                              decoration: BoxDecoration(
-                                color: scheme.onSurfaceVariant.withValues(
-                                  alpha: 0.3,
-                                ),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                            ),
-                          ),
-                          Text(
-                            'Map layers',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: scheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          // `SwitchListTile` paints its background/ink
-                          // splashes on the nearest `Material` ancestor —
-                          // without this, the enclosing glass `Container`'s
-                          // `DecoratedBox` swallows them and taps show no
-                          // visual feedback at all.
-                          Material(
-                            type: MaterialType.transparency,
-                            child: SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text(
-                                'Show rival territory',
-                                style: TextStyle(fontWeight: FontWeight.w600),
-                              ),
-                              subtitle: Text(
-                                "Hide other players' captured land",
-                                style: TextStyle(
-                                  color: secondaryLabelColor(sheetContext),
-                                ),
-                              ),
-                              value: _showRivalTerritory,
-                              onChanged: (value) {
-                                setSheetState(
-                                  () => _showRivalTerritory = value,
-                                );
-                                setState(() => _showRivalTerritory = value);
-                                unawaited(_redrawFills());
-                              },
-                            ),
-                          ),
-                          // Squad territory heatmap (item 11) — an
-                          // aggregated overlay of every squad member's
-                          // owned territory. Disabled with an explanatory
-                          // subtitle rather than hidden entirely when the
-                          // caller isn't in a squad, so the layer's
-                          // existence isn't a surprise once they join one.
-                          Material(
-                            type: MaterialType.transparency,
-                            child: SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text(
-                                'Squad territory heatmap',
-                                style: TextStyle(fontWeight: FontWeight.w600),
-                              ),
-                              subtitle: Text(
-                                _mySquad == null
-                                    ? 'Join a squad to highlight its combined turf'
-                                    : "Highlight your squad's combined turf",
-                                style: TextStyle(
-                                  color: secondaryLabelColor(sheetContext),
-                                ),
-                              ),
-                              value: _showSquadHeatmap,
-                              onChanged: _mySquad == null
-                                  ? null
-                                  : (value) {
-                                      setSheetState(
-                                        () => _showSquadHeatmap = value,
-                                      );
-                                      setState(() => _showSquadHeatmap = value);
-                                      unawaited(_redrawSquadHeatmap());
-                                    },
-                            ),
-                          ),
-                          // Capture-density heatmap (item 4) — recent
-                          // captures across all users, not just this
-                          // caller's squad, so (unlike the squad heatmap
-                          // above) it's never gated on squad membership.
-                          Material(
-                            type: MaterialType.transparency,
-                            child: SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text(
-                                'Capture activity heatmap',
-                                style: TextStyle(fontWeight: FontWeight.w600),
-                              ),
-                              subtitle: Text(
-                                'Highlight where territory is changing hands',
-                                style: TextStyle(
-                                  color: secondaryLabelColor(sheetContext),
-                                ),
-                              ),
-                              value: _showCaptureHeatmap,
-                              onChanged: (value) {
-                                setSheetState(
-                                  () => _showCaptureHeatmap = value,
-                                );
-                                setState(() => _showCaptureHeatmap = value);
-                                unawaited(_redrawCaptureHeatmap());
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            );
-          },
-        );
-      }
-}
-
-String _colorToHex(Color color) {
-  final argb = color.toARGB32().toRadixString(16).padLeft(8, '0');
-  return '#${argb.substring(2)}';
+      builder: (sheetContext) => TerritoryLayersSheet(
+        showRivalTerritory: _showRivalTerritory,
+        onShowRivalTerritoryChanged: (value) {
+          setState(() => _showRivalTerritory = value);
+          unawaited(_redrawFills());
+        },
+        showSquadHeatmap: _showSquadHeatmap,
+        onShowSquadHeatmapChanged: (value) {
+          setState(() => _showSquadHeatmap = value);
+          unawaited(_redrawSquadHeatmap());
+        },
+        hasSquad: _mySquad != null,
+        showCaptureHeatmap: _showCaptureHeatmap,
+        onShowCaptureHeatmapChanged: (value) {
+          setState(() => _showCaptureHeatmap = value);
+          unawaited(_redrawCaptureHeatmap());
+        },
+      ),
+    );
+  }
 }

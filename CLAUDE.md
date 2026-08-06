@@ -19,8 +19,13 @@ without verification — several real gaps were found and partly fixed in the 20
 session (see below): `SystemCapabilities`' MethodChannel has no iOS implementation (now
 platform-gated rather than crashing), pose detection was feeding ML Kit an Android-only image
 format on both platforms (fixed), and `flutter_foreground_task`'s run-tracking approach doesn't
-carry over to iOS as-is (still open — iOS needs its own code path via `geolocator`'s background
-location support, not flutter_foreground_task).
+carry over to iOS as-is — a real background-location code path via `geolocator` is still
+unbuilt, but as of the 2026-08-07 modernization pass `RunForegroundService.start()`/`stop()`
+(`features/territory/data/datasources/run_foreground_service.dart`) is now explicitly
+`Platform.isAndroid`-gated rather than being called unconditionally into an iOS shim that did
+nothing. `ios/Runner/Info.plist`'s Always-location usage strings and `UIBackgroundModes:
+location` were also removed in that pass, since the app doesn't request background location on
+either platform yet — re-add them only alongside the real iOS background-tracking feature.
 
 **Read `docs/awaken_app_refined_plan.md` before making architectural changes.** It is the
 authoritative build plan — corrected package versions, the phased roadmap (§6, with per-phase
@@ -153,7 +158,21 @@ planned.
 - **`.env`** — tooling-only (Supabase management-API PAT for MCP/CLI use). Never referenced by
   app code, never added to `pubspec.yaml` assets.
 
-Both are gitignored; `.env.client.example` / `.env.example` document the expected shape.
+`.env` is gitignored (real secret). **`.env.client` is deliberately force-tracked in git**
+(`.gitignore` ignores `.env.*` then un-ignores `.env.client`/`.env.client.example`) — its
+contents ship inside the APK anyway, so there's no confidentiality gained by keeping it out of
+version control, and tracking it means `flutter pub get` on a fresh clone doesn't need a manual
+copy step. Don't "fix" this by re-gitignoring `.env.client`; do keep the file's own contents to
+genuinely client-safe values, since anything in it is public by construction.
+`.env.client.example` / `.env.example` document the expected shape.
+
+**Sentry DSN is currently unset.** `main_common.dart` wires up `Sentry.init` and several
+repositories (`squad_repository_impl.dart`, `run_tracking_repository_impl.dart`, etc.) call
+`Sentry.captureException`/`addBreadcrumb` on error paths so failures are visible in production —
+but `.env.client`'s `SENTRY_DSN` is empty, so none of that currently reaches a real Sentry
+project in a build cut from this checkout. Provision a Sentry project and set the DSN before
+relying on this for production error visibility; don't assume errors are being reported anywhere
+just because the logging code exists.
 
 ### The alarm feature (`features/alarm/`) — read before touching alarm code
 
@@ -258,7 +277,7 @@ summary of the load-bearing parts:
   broadcast (throttled internally) run from `RunTrackingCubit`/`VerificationCubit`, not from
   squad's own code. Weekly leaderboard rollover is detected via a `SharedPreferences`-backed
   last-seen-week check (`WeeklyResetLocalDataSource`), same pattern as onboarding's local
-  datasource. **No test coverage yet** (`test/features/` has no `squad/` dir).
+  datasource. Repository and cubit tests exist under `test/features/squad/`.
 
 ### Manifest permissions
 

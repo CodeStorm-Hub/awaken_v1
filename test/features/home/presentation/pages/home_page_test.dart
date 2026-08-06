@@ -91,10 +91,10 @@ void main() {
 
       // `debugOnRebuildDirtyWidget` is a documented Flutter Widget Inspector
       // hook: the framework calls it for every element it rebuilds. Used
-      // here instead of instrumenting `HomePage`'s private widgets directly,
-      // since `_AchievementsRow`/`_RecentActivitySection` aren't visible
-      // outside home_page.dart's library — the element's `widget.
-      // runtimeType` still reports the real (if private) class name.
+      // here instead of instrumenting `AchievementsRow`/`RecentActivitySection`
+      // directly, since they now live in their own widget files (extracted
+      // from home_page.dart) and this test cares about *whether* they
+      // rebuild, not about importing and wiring them up individually.
       final rebuiltTypeNames = <String>{};
       addTearDown(() => debugOnRebuildDirtyWidget = null);
       debugOnRebuildDirtyWidget = (element, builtOnce) {
@@ -132,11 +132,11 @@ void main() {
 
       expect(
         rebuiltTypeNames,
-        isNot(contains('_AchievementsRow')),
+        isNot(contains('AchievementsRow')),
         reason:
             'AlarmCubit emission must not rebuild the HomeState-only subtree',
       );
-      expect(rebuiltTypeNames, isNot(contains('_RecentActivitySection')));
+      expect(rebuiltTypeNames, isNot(contains('RecentActivitySection')));
       // The HomeCubit-scoped BlocBuilder itself must not have rebuilt either
       // — if it had, its whole HomeState-driven subtree would be dirty too.
       expect(

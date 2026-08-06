@@ -298,12 +298,8 @@ class ProfilePage extends StatelessWidget {
                                   icon: Icons.bug_report_outlined,
                                   label: 'Alarm reliability',
                                   isFirst: true,
-                                  onTap: () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const AlarmReliabilityTestPage(),
-                                    ),
-                                  ),
+                                  onTap: () =>
+                                      AlarmReliabilityTestPage.push(context),
                                 ),
                                 Divider(
                                   height: 1,

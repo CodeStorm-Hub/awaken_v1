@@ -368,7 +368,15 @@ class SquadRepositoryImpl implements SquadRepository {
     ({double latitude, double longitude})? position;
     try {
       position = await getIt<GetCurrentPosition>()(const NoParams());
-    } catch (_) {
+    } catch (e) {
+      Sentry.addBreadcrumb(
+        Breadcrumb(
+          message: 'Presence location fetch failed, continuing without it',
+          category: 'squad.presence',
+          level: SentryLevel.info,
+          data: {'error': e.toString()},
+        ),
+      );
       position = null;
     }
     await _remote.trackPresence(squad.id, {

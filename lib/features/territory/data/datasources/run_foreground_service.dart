@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:injectable/injectable.dart';
 
@@ -28,6 +30,13 @@ class _RunTrackingTaskHandler extends TaskHandler {
 /// 5) — a location-type foreground service + persistent notification is
 /// required for Android to keep GPS alive while the app is backgrounded
 /// during a run, without requesting background-location permission (H3).
+///
+/// Android-only: on iOS `flutter_foreground_task` is a notification-only
+/// shim that grants no real background execution context, so `start()`/
+/// `stop()` are no-ops there rather than calling into a plugin path that
+/// wouldn't do anything useful. iOS run tracking is foreground-only until
+/// its own background-location code path (via geolocator) is built — see
+/// the scope note in CLAUDE.md.
 @lazySingleton
 class RunForegroundService {
   bool _initialized = false;
@@ -53,6 +62,7 @@ class RunForegroundService {
   }
 
   Future<void> start() async {
+    if (!Platform.isAndroid) return;
     _ensureInitialized();
     if (await FlutterForegroundTask.isRunningService) return;
     await FlutterForegroundTask.startService(
@@ -64,6 +74,7 @@ class RunForegroundService {
   }
 
   Future<void> stop() async {
+    if (!Platform.isAndroid) return;
     if (!await FlutterForegroundTask.isRunningService) return;
     await FlutterForegroundTask.stopService();
   }
