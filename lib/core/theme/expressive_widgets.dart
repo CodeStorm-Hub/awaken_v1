@@ -41,9 +41,29 @@ String avatarInitial({
   return (label != null && label.isNotEmpty) ? label[0].toUpperCase() : 'A';
 }
 
-/// A high-performance modern surface container widget supporting both Light
-/// and Dark iOS appearances. Replaces legacy GPU-heavy BackdropFilter glass blur
-/// with fast, modern solid surface cards, crisp borders, and subtle drop shadows.
+/// A solid, no-blur surface card — the app's default "raised panel" look
+/// (used for the floating headers/docks over the Home/Territory/ActiveRun
+/// screens, list rows, etc). Originally a real iOS-style `BackdropFilter`
+/// glass blur; replaced with a solid surface because blurring a live
+/// `MapLibreMap` platform view underneath is one of the most expensive
+/// things Flutter can composite on Android (a full-region snapshot +
+/// Gaussian blur, every frame it's on screen — cost independent of
+/// `setState`/rebuild avoidance, see `TerritoryPage`'s presence-throttling
+/// comments for the related rebuild-side fix).
+///
+/// Styled entirely from `ColorScheme` (Material 3 tonal-elevation roles:
+/// `surfaceContainerHigh` for the panel, `outlineVariant` for its border,
+/// `shadow` for the drop shadow) rather than hardcoded hex colors — this is
+/// what actually makes a "raised surface" read correctly in both
+/// light/dark and under a custom seed color, without needing a manual
+/// `isDark` branch: `ColorScheme.fromSeed` already computes the right tone
+/// for either brightness. Flutter's `material`/`cupertino` libraries don't
+/// ship Material 3 Expressive natively as of this Flutter release (tracked
+/// upstream, flutter/flutter#168813) — the M3-Expressive-*styled* shape/
+/// motion tokens this app uses (`ShapeTokens`, `MotionTokens`) are
+/// hand-rolled for that reason, but the surface *color* logic below is
+/// plain, current-generation M3 (`ColorScheme` surface-container roles),
+/// no compatibility gap there.
 class AppleGlassContainer extends StatelessWidget {
   const AppleGlassContainer({
     required this.child,
@@ -62,7 +82,8 @@ class AppleGlassContainer extends StatelessWidget {
   final EdgeInsetsGeometry? margin;
   final BorderRadius? borderRadius;
 
-  /// Retained for backwards compatibility. Blur filters are bypassed for optimal GPU performance.
+  /// Retained for backwards compatibility. No blur filter is applied — see
+  /// the class doc comment.
   final double blurAmount;
   final Color? borderColor;
   final double borderWidth;
@@ -71,55 +92,48 @@ class AppleGlassContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final isDark = scheme.brightness == Brightness.dark;
     final effectiveRadius = borderRadius ?? ShapeTokens.mediumLarge;
 
-    // Fast, modern solid surface container styling (zero BackdropFilter GPU pass)
-    final surfaceColor = isDark
-        ? const Color(0xFF1E1E24)
-        : Colors.white;
-
     final surfaceBorder =
-        borderColor ??
-        (isDark
-            ? Colors.white.withValues(alpha: 0.12)
-            : Colors.black.withValues(alpha: 0.08));
+        borderColor ?? scheme.outlineVariant.withValues(alpha: 0.4);
 
-    final surfaceShadow = isDark
-        ? [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 16,
-              spreadRadius: 0,
-              offset: const Offset(0, 4),
+    // `Material` + `InkWell` only when actually tappable, so a future
+    // `onTap` caller gets standard ripple/press feedback instead of a
+    // silent tap — but the far more common non-tappable case (every
+    // current call site) stays exactly as cheap as a plain `Container`,
+    // no `Material`/`InkWell` participating in hit-testing for nothing.
+    final body = onTap != null
+        ? Material(
+            type: MaterialType.transparency,
+            borderRadius: effectiveRadius,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
             ),
-          ]
-        : [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              spreadRadius: 0,
-              offset: const Offset(0, 3),
-            ),
-          ];
+          )
+        : Padding(padding: padding ?? EdgeInsets.zero, child: child);
 
-    Widget content = Container(
-      padding: padding,
+    Widget content = DecoratedBox(
       decoration: BoxDecoration(
-        color: surfaceColor,
+        color: scheme.surfaceContainerHigh,
         borderRadius: effectiveRadius,
         border: Border.all(color: surfaceBorder, width: borderWidth),
-        boxShadow: surfaceShadow,
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow.withValues(
+              alpha: scheme.brightness == Brightness.dark ? 0.35 : 0.06,
+            ),
+            blurRadius: scheme.brightness == Brightness.dark ? 16 : 12,
+            offset: Offset(0, scheme.brightness == Brightness.dark ? 4 : 3),
+          ),
+        ],
       ),
-      child: child,
+      child: body,
     );
 
     if (margin != null) {
       content = Padding(padding: margin!, child: content);
-    }
-
-    if (onTap != null) {
-      return GestureDetector(onTap: onTap, child: content);
     }
 
     return content;
