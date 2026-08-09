@@ -52,6 +52,24 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # Generate code before analyze/test — several tests/analyzer targets
+      # import the generated Drift tables and injection.config.dart.
+      - name: Generate code (drift, injectable)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      # The main `ci.yaml` job only ever analyzes/tests on Linux — nothing
+      # previously ran `flutter analyze`/`flutter test` in a macOS/iOS
+      # environment, so an iOS-only code path (e.g. a `Platform.isIOS`
+      # branch) with a real bug had no automated signal on this platform at
+      # all, PR build or otherwise. This doesn't duplicate the Android job's
+      # coverage — it's the same test suite running under a different host
+      # OS, which is exactly what's missing.
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
       # Caching CocoaPods dependencies speeds up the build. We use a key based on pubspec.lock,
       # ios/Podfile, and ios/Podfile.lock to ensure the cache invalidates correctly.
       - name: Cache CocoaPods
@@ -69,10 +87,6 @@ jobs:
         run: |
           cd ios
           pod install --repo-update
-
-      # Generate drift tables and dependency injection configurations
-      - name: Generate code (drift, injectable)
-        run: dart run build_runner build --delete-conflicting-outputs
 
       # Compile the app bundle (.app) with codesigning disabled.
       - name: Build iOS App (.app)

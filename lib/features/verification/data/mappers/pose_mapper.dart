@@ -4,7 +4,8 @@ import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart' show DeviceOrientation;
 import 'package:google_mlkit_commons/google_mlkit_commons.dart';
-import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart' as mlkit;
+import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart'
+    as mlkit;
 
 import '../../domain/entities/body_pose.dart';
 
@@ -39,14 +40,19 @@ InputImageFormat? mlkitFormatFor(ImageFormatGroup group) => switch (group) {
 /// Converts a raw camera frame into the `InputImage` ML Kit's pose detector
 /// expects, front-camera rotation-compensated (rotation is ignored on iOS
 /// by `google_mlkit_commons` itself — nothing to compensate for there).
-InputImage? cameraImageToInputImage(CameraImage image, CameraController controller) {
+InputImage? cameraImageToInputImage(
+  CameraImage image,
+  CameraController controller,
+) {
   final format = mlkitFormatFor(image.format.group);
   if (format == null) return null;
 
   final sensorOrientation = controller.description.sensorOrientation;
-  final deviceOrientationDegrees = _orientationDegrees[controller.value.deviceOrientation] ?? 0;
+  final deviceOrientationDegrees =
+      _orientationDegrees[controller.value.deviceOrientation] ?? 0;
 
-  final rotationCompensation = controller.description.lensDirection == CameraLensDirection.front
+  final rotationCompensation =
+      controller.description.lensDirection == CameraLensDirection.front
       ? (sensorOrientation + deviceOrientationDegrees) % 360
       : (sensorOrientation - deviceOrientationDegrees + 360) % 360;
   final rotation = InputImageRotationValue.fromRawValue(rotationCompensation);

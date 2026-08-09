@@ -119,6 +119,7 @@ class _AlarmRingPageState extends State<AlarmRingPage> {
         verified: result.completed,
         repsCompleted: result.repsCompleted,
         startedAt: startedAt,
+        repTrace: result.repTrace,
         isPreview: widget.isPreview,
       );
       if (!result.completed) {
@@ -503,7 +504,7 @@ class _StartWorkoutButtonState extends State<_StartWorkoutButton> {
           height: 64,
           decoration: BoxDecoration(
             color: scheme.onErrorContainer,
-            borderRadius: BorderRadius.circular(_pressed ? 24 : 999),
+            borderRadius: _pressed ? ShapeTokens.r24 : ShapeTokens.pill,
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.2),

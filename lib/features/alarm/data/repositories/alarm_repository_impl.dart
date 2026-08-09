@@ -11,6 +11,7 @@ import '../../../../core/error/failures.dart';
 import '../../../../core/platform/system_capabilities.dart';
 import '../../../../sync/local/database.dart';
 import '../../../../sync/outbox/local_writer.dart';
+import '../../../verification/domain/entities/rep_evidence.dart';
 import '../../domain/entities/alarm_schedule.dart';
 import '../../domain/repositories/alarm_repository.dart';
 import '../datasources/alarm_local_datasource.dart';
@@ -311,11 +312,6 @@ class AlarmRepositoryImpl implements AlarmRepository {
   }
 
   @override
-  Future<void> dismissAlarm(String id) async {
-    await _stopNative(await _nativeIdFor(id));
-  }
-
-  @override
   Future<void> cancelAllAlarms() => _local.stopAll();
 
   @override
@@ -349,6 +345,7 @@ class AlarmRepositoryImpl implements AlarmRepository {
     required bool verified,
     required int repsCompleted,
     required DateTime startedAt,
+    List<RepEvidence> repTrace = const [],
     bool isPreview = false,
   }) async {
     // P0 fix ("destructive preview"): a preview must not touch the native
@@ -366,19 +363,35 @@ class AlarmRepositoryImpl implements AlarmRepository {
     // but must not block the rest of this method.
     await _stopNativeBestEffort(await _nativeIdFor(alarm.id));
 
+    final sessionId = const Uuid().v4();
     await _localWriter.insertSession(
-      id: const Uuid().v4(),
+      id: sessionId,
       alarmId: alarm.id,
       exerciseMode: alarm.exerciseMode.name,
       repsCompleted: repsCompleted,
       startedAt: startedAt,
       completedAt: verified ? now : null,
+      // Offsets are relative to `startedAt` (not each rep's own absolute
+      // timestamp) — see `complete_workout_session`'s server-side check
+      // and `RepEvidence`'s doc comment.
+      repTrace: [
+        for (final rep in repTrace)
+          {
+            'offset_ms': rep.confirmedAt.difference(startedAt).inMilliseconds,
+            'angle_deg': rep.angleDeg,
+          },
+      ],
     );
 
     // Global wake-up tax (plan discussion) — reset on a verified
-    // completion, step up on a skip.
+    // completion, step up on a skip. The reset is only actually granted
+    // server-side if `sessionId`'s rep_trace validates as 'trusted' (see
+    // `reset_wake_up_tax`'s doc comment) — this locally-optimistic call
+    // still fires unconditionally for a responsive UI, same as the
+    // existing local-then-reconciled pattern `WakeUpTaxStore.bump()`
+    // documents.
     if (verified) {
-      await _taxStore.reset();
+      await _taxStore.reset(sessionId: sessionId);
     } else {
       await _taxStore.bump();
     }

@@ -197,6 +197,14 @@ class SyncWorker {
       await _pushUserStats(entry);
       return;
     }
+    if (entry.entityTable == 'sessions' && entry.operation == OutboxOperation.upsert.name) {
+      // Same reasoning as `runs`/`user_stats` above: the client submits raw
+      // rep-trace evidence, the server computes `integrity_verdict` via
+      // `complete_workout_session()` instead of accepting a raw upsert; see
+      // that RPC's doc comment.
+      await _pushSession(entry);
+      return;
+    }
     final table = _supabase.from(entry.entityTable);
     if (entry.operation == OutboxOperation.delete.name) {
       await table.update({'deleted_at': DateTime.now().toIso8601String()}).eq('id', entry.entityId);
@@ -238,10 +246,38 @@ class SyncWorker {
     );
   }
 
+  Future<void> _pushSession(OutboxEntryRow entry) async {
+    final payload = jsonDecode(entry.payload) as Map<String, Object?>;
+    final result = await _supabase.rpc<Object?>(
+      'complete_workout_session',
+      params: {
+        'p_session_id': payload['id'],
+        'p_alarm_id': payload['alarm_id'],
+        'p_exercise_mode': payload['exercise_mode'],
+        'p_reps_completed': payload['reps_completed'],
+        'p_started_at': payload['started_at'],
+        'p_completed_at': payload['completed_at'],
+        'p_rep_trace': payload['rep_trace'],
+      },
+    );
+    final response = Map<String, Object?>.from(result! as Map);
+    await (_db.update(_db.sessions)..where((t) => t.id.equals(payload['id'] as String))).write(
+      SessionsCompanion(
+        integrityVerdict: Value(response['verdict'] as String?),
+        rejectedReason: Value(response['reason'] as String?),
+      ),
+    );
+  }
+
   Future<void> _pushUserStats(OutboxEntryRow entry) async {
     final payload = jsonDecode(entry.payload) as Map<String, Object?>;
     final rpc = payload['action'] == 'reset' ? 'reset_wake_up_tax' : 'bump_wake_up_tax';
-    final result = await _supabase.rpc<Object?>(rpc);
+    final result = await _supabase.rpc<Object?>(
+      rpc,
+      params: payload['session_id'] != null
+          ? {'p_session_id': payload['session_id']}
+          : {},
+    );
     final authoritative = (result as num).toDouble();
     // Reconcile the local cache with the server's authoritative value —
     // this can legitimately differ from what was locally computed if

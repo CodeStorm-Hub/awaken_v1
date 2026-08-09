@@ -6,7 +6,10 @@ import '../../../alarm/domain/entities/alarm_schedule.dart';
 import '../repositories/pose_verification_repository.dart';
 
 class StartVerificationParams extends Equatable {
-  const StartVerificationParams({required this.exercise, required this.targetReps});
+  const StartVerificationParams({
+    required this.exercise,
+    required this.targetReps,
+  });
 
   final ExerciseMode exercise;
   final int targetReps;
@@ -16,12 +19,15 @@ class StartVerificationParams extends Equatable {
 }
 
 @injectable
-class StartVerificationSession implements UseCase<void, StartVerificationParams> {
+class StartVerificationSession
+    implements UseCase<void, StartVerificationParams> {
   StartVerificationSession(this._repository);
 
   final PoseVerificationRepository _repository;
 
   @override
-  Future<void> call(StartVerificationParams params) =>
-      _repository.start(exercise: params.exercise, targetReps: params.targetReps);
+  Future<void> call(StartVerificationParams params) => _repository.start(
+    exercise: params.exercise,
+    targetReps: params.targetReps,
+  );
 }

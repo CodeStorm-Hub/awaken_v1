@@ -235,6 +235,34 @@ void main() {
       }
       expect(reps, 2);
     });
+
+    test(
+      'lastConfirmedAngleDegrees is null before any rep, then holds the '
+      'confirming frame\'s angle after each rep — evidence for the '
+      'server-side rep-trace plausibility check',
+      () {
+        final counter = AngleRepCounter.squat();
+        expect(counter.lastConfirmedAngleDegrees, isNull);
+
+        for (final hint in [1, 1, 0, 0]) {
+          counter.update(_squatPose(kneeAngleHint: hint.toDouble()));
+        }
+        expect(counter.lastConfirmedAngleDegrees, isNotNull);
+        expect(counter.lastConfirmedAngleDegrees!, greaterThan(counter.upThresholdDegrees));
+      },
+    );
+
+    test('reset() clears lastConfirmedAngleDegrees back to null', () {
+      final counter = AngleRepCounter.squat();
+      for (final hint in [1, 1, 0, 0]) {
+        counter.update(_squatPose(kneeAngleHint: hint.toDouble()));
+      }
+      expect(counter.lastConfirmedAngleDegrees, isNotNull);
+
+      counter.reset();
+
+      expect(counter.lastConfirmedAngleDegrees, isNull);
+    });
   });
 
   group('AngleRepCounter.pushup', () {

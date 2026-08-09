@@ -4,6 +4,7 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../domain/entities/alarm_schedule.dart';
 import '../../domain/usecases/watch_current_streak.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// The "hero moment" after a verified dismissal (plan §6 Phase 4 / Claude
 /// Design handoff "CelebrationSheet").
@@ -45,7 +46,7 @@ class WorkoutCelebrationSheet extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
                   color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: ShapeTokens.pill,
                 ),
               ),
               ExpressiveFlower(
@@ -118,7 +119,7 @@ class WorkoutCelebrationSheet extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(56),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: ShapeTokens.pill,
                     ),
                   ),
                   onPressed: () => Navigator.of(context).pop(),

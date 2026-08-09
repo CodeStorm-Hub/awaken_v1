@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class IosDayToggle extends StatelessWidget {
   const IosDayToggle({
@@ -38,7 +39,7 @@ class IosDayToggle extends StatelessWidget {
           height: 48,
           decoration: BoxDecoration(
             color: selected ? accentColor : unselectedBg,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: ShapeTokens.r10,
           ),
           child: Center(
             child: Text(

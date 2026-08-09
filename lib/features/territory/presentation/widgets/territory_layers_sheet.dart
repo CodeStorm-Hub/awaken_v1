@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// "Map layers" bottom sheet — toggles for rival-territory visibility, the
 /// squad heatmap, and the capture-activity heatmap. Owns its own local
@@ -67,7 +68,7 @@ class _TerritoryLayersSheetState extends State<TerritoryLayersSheet> {
                   margin: const EdgeInsets.only(bottom: 18),
                   decoration: BoxDecoration(
                     color: scheme.onSurfaceVariant.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: ShapeTokens.pill,
                   ),
                 ),
               ),

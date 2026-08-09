@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/semantic_colors.dart';
 import '../../domain/entities/gps_quality.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class GpsQualityChip extends StatelessWidget {
   const GpsQualityChip({super.key, required this.quality});
@@ -24,7 +25,11 @@ class GpsQualityChip extends StatelessWidget {
         scheme.onSurfaceVariant,
       ),
       GpsQuality.good => ('GPS good', Icons.gps_fixed, semantic.gpsGood),
-      GpsQuality.degraded => ('GPS fair', Icons.gps_not_fixed, semantic.gpsWeak),
+      GpsQuality.degraded => (
+        'GPS fair',
+        Icons.gps_not_fixed,
+        semantic.gpsWeak,
+      ),
       GpsQuality.poor => ('GPS weak', Icons.gps_off, semantic.gpsWeak),
     };
     return Container(
@@ -36,7 +41,7 @@ class GpsQualityChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: ShapeTokens.pill,
         border: Border.all(color: color.withValues(alpha: 0.45)),
       ),
       child: Row(

@@ -720,6 +720,39 @@ class $SessionsTable extends Sessions
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _repTraceJsonMeta = const VerificationMeta(
+    'repTraceJson',
+  );
+  @override
+  late final GeneratedColumn<String> repTraceJson = GeneratedColumn<String>(
+    'rep_trace_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _integrityVerdictMeta = const VerificationMeta(
+    'integrityVerdict',
+  );
+  @override
+  late final GeneratedColumn<String> integrityVerdict = GeneratedColumn<String>(
+    'integrity_verdict',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _rejectedReasonMeta = const VerificationMeta(
+    'rejectedReason',
+  );
+  @override
+  late final GeneratedColumn<String> rejectedReason = GeneratedColumn<String>(
+    'rejected_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -750,6 +783,9 @@ class $SessionsTable extends Sessions
     repsCompleted,
     startedAt,
     completedAt,
+    repTraceJson,
+    integrityVerdict,
+    rejectedReason,
     updatedAt,
     deletedAt,
   ];
@@ -815,6 +851,33 @@ class $SessionsTable extends Sessions
         ),
       );
     }
+    if (data.containsKey('rep_trace_json')) {
+      context.handle(
+        _repTraceJsonMeta,
+        repTraceJson.isAcceptableOrUnknown(
+          data['rep_trace_json']!,
+          _repTraceJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('integrity_verdict')) {
+      context.handle(
+        _integrityVerdictMeta,
+        integrityVerdict.isAcceptableOrUnknown(
+          data['integrity_verdict']!,
+          _integrityVerdictMeta,
+        ),
+      );
+    }
+    if (data.containsKey('rejected_reason')) {
+      context.handle(
+        _rejectedReasonMeta,
+        rejectedReason.isAcceptableOrUnknown(
+          data['rejected_reason']!,
+          _rejectedReasonMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -862,6 +925,18 @@ class $SessionsTable extends Sessions
         DriftSqlType.dateTime,
         data['${effectivePrefix}completed_at'],
       ),
+      repTraceJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rep_trace_json'],
+      ),
+      integrityVerdict: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}integrity_verdict'],
+      ),
+      rejectedReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rejected_reason'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -886,6 +961,9 @@ class SessionRow extends DataClass implements Insertable<SessionRow> {
   final int repsCompleted;
   final DateTime startedAt;
   final DateTime? completedAt;
+  final String? repTraceJson;
+  final String? integrityVerdict;
+  final String? rejectedReason;
   final DateTime updatedAt;
   final DateTime? deletedAt;
   const SessionRow({
@@ -895,6 +973,9 @@ class SessionRow extends DataClass implements Insertable<SessionRow> {
     required this.repsCompleted,
     required this.startedAt,
     this.completedAt,
+    this.repTraceJson,
+    this.integrityVerdict,
+    this.rejectedReason,
     required this.updatedAt,
     this.deletedAt,
   });
@@ -910,6 +991,15 @@ class SessionRow extends DataClass implements Insertable<SessionRow> {
     map['started_at'] = Variable<DateTime>(startedAt);
     if (!nullToAbsent || completedAt != null) {
       map['completed_at'] = Variable<DateTime>(completedAt);
+    }
+    if (!nullToAbsent || repTraceJson != null) {
+      map['rep_trace_json'] = Variable<String>(repTraceJson);
+    }
+    if (!nullToAbsent || integrityVerdict != null) {
+      map['integrity_verdict'] = Variable<String>(integrityVerdict);
+    }
+    if (!nullToAbsent || rejectedReason != null) {
+      map['rejected_reason'] = Variable<String>(rejectedReason);
     }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -930,6 +1020,15 @@ class SessionRow extends DataClass implements Insertable<SessionRow> {
       completedAt: completedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(completedAt),
+      repTraceJson: repTraceJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(repTraceJson),
+      integrityVerdict: integrityVerdict == null && nullToAbsent
+          ? const Value.absent()
+          : Value(integrityVerdict),
+      rejectedReason: rejectedReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rejectedReason),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
@@ -949,6 +1048,9 @@ class SessionRow extends DataClass implements Insertable<SessionRow> {
       repsCompleted: serializer.fromJson<int>(json['repsCompleted']),
       startedAt: serializer.fromJson<DateTime>(json['startedAt']),
       completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
+      repTraceJson: serializer.fromJson<String?>(json['repTraceJson']),
+      integrityVerdict: serializer.fromJson<String?>(json['integrityVerdict']),
+      rejectedReason: serializer.fromJson<String?>(json['rejectedReason']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
@@ -963,6 +1065,9 @@ class SessionRow extends DataClass implements Insertable<SessionRow> {
       'repsCompleted': serializer.toJson<int>(repsCompleted),
       'startedAt': serializer.toJson<DateTime>(startedAt),
       'completedAt': serializer.toJson<DateTime?>(completedAt),
+      'repTraceJson': serializer.toJson<String?>(repTraceJson),
+      'integrityVerdict': serializer.toJson<String?>(integrityVerdict),
+      'rejectedReason': serializer.toJson<String?>(rejectedReason),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
@@ -975,6 +1080,9 @@ class SessionRow extends DataClass implements Insertable<SessionRow> {
     int? repsCompleted,
     DateTime? startedAt,
     Value<DateTime?> completedAt = const Value.absent(),
+    Value<String?> repTraceJson = const Value.absent(),
+    Value<String?> integrityVerdict = const Value.absent(),
+    Value<String?> rejectedReason = const Value.absent(),
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => SessionRow(
@@ -984,6 +1092,13 @@ class SessionRow extends DataClass implements Insertable<SessionRow> {
     repsCompleted: repsCompleted ?? this.repsCompleted,
     startedAt: startedAt ?? this.startedAt,
     completedAt: completedAt.present ? completedAt.value : this.completedAt,
+    repTraceJson: repTraceJson.present ? repTraceJson.value : this.repTraceJson,
+    integrityVerdict: integrityVerdict.present
+        ? integrityVerdict.value
+        : this.integrityVerdict,
+    rejectedReason: rejectedReason.present
+        ? rejectedReason.value
+        : this.rejectedReason,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
@@ -1001,6 +1116,15 @@ class SessionRow extends DataClass implements Insertable<SessionRow> {
       completedAt: data.completedAt.present
           ? data.completedAt.value
           : this.completedAt,
+      repTraceJson: data.repTraceJson.present
+          ? data.repTraceJson.value
+          : this.repTraceJson,
+      integrityVerdict: data.integrityVerdict.present
+          ? data.integrityVerdict.value
+          : this.integrityVerdict,
+      rejectedReason: data.rejectedReason.present
+          ? data.rejectedReason.value
+          : this.rejectedReason,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
@@ -1015,6 +1139,9 @@ class SessionRow extends DataClass implements Insertable<SessionRow> {
           ..write('repsCompleted: $repsCompleted, ')
           ..write('startedAt: $startedAt, ')
           ..write('completedAt: $completedAt, ')
+          ..write('repTraceJson: $repTraceJson, ')
+          ..write('integrityVerdict: $integrityVerdict, ')
+          ..write('rejectedReason: $rejectedReason, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
           ..write(')'))
@@ -1029,6 +1156,9 @@ class SessionRow extends DataClass implements Insertable<SessionRow> {
     repsCompleted,
     startedAt,
     completedAt,
+    repTraceJson,
+    integrityVerdict,
+    rejectedReason,
     updatedAt,
     deletedAt,
   );
@@ -1042,6 +1172,9 @@ class SessionRow extends DataClass implements Insertable<SessionRow> {
           other.repsCompleted == this.repsCompleted &&
           other.startedAt == this.startedAt &&
           other.completedAt == this.completedAt &&
+          other.repTraceJson == this.repTraceJson &&
+          other.integrityVerdict == this.integrityVerdict &&
+          other.rejectedReason == this.rejectedReason &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
 }
@@ -1053,6 +1186,9 @@ class SessionsCompanion extends UpdateCompanion<SessionRow> {
   final Value<int> repsCompleted;
   final Value<DateTime> startedAt;
   final Value<DateTime?> completedAt;
+  final Value<String?> repTraceJson;
+  final Value<String?> integrityVerdict;
+  final Value<String?> rejectedReason;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
   final Value<int> rowid;
@@ -1063,6 +1199,9 @@ class SessionsCompanion extends UpdateCompanion<SessionRow> {
     this.repsCompleted = const Value.absent(),
     this.startedAt = const Value.absent(),
     this.completedAt = const Value.absent(),
+    this.repTraceJson = const Value.absent(),
+    this.integrityVerdict = const Value.absent(),
+    this.rejectedReason = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1074,6 +1213,9 @@ class SessionsCompanion extends UpdateCompanion<SessionRow> {
     required int repsCompleted,
     required DateTime startedAt,
     this.completedAt = const Value.absent(),
+    this.repTraceJson = const Value.absent(),
+    this.integrityVerdict = const Value.absent(),
+    this.rejectedReason = const Value.absent(),
     required DateTime updatedAt,
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1089,6 +1231,9 @@ class SessionsCompanion extends UpdateCompanion<SessionRow> {
     Expression<int>? repsCompleted,
     Expression<DateTime>? startedAt,
     Expression<DateTime>? completedAt,
+    Expression<String>? repTraceJson,
+    Expression<String>? integrityVerdict,
+    Expression<String>? rejectedReason,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
@@ -1100,6 +1245,9 @@ class SessionsCompanion extends UpdateCompanion<SessionRow> {
       if (repsCompleted != null) 'reps_completed': repsCompleted,
       if (startedAt != null) 'started_at': startedAt,
       if (completedAt != null) 'completed_at': completedAt,
+      if (repTraceJson != null) 'rep_trace_json': repTraceJson,
+      if (integrityVerdict != null) 'integrity_verdict': integrityVerdict,
+      if (rejectedReason != null) 'rejected_reason': rejectedReason,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
@@ -1113,6 +1261,9 @@ class SessionsCompanion extends UpdateCompanion<SessionRow> {
     Value<int>? repsCompleted,
     Value<DateTime>? startedAt,
     Value<DateTime?>? completedAt,
+    Value<String?>? repTraceJson,
+    Value<String?>? integrityVerdict,
+    Value<String?>? rejectedReason,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
     Value<int>? rowid,
@@ -1124,6 +1275,9 @@ class SessionsCompanion extends UpdateCompanion<SessionRow> {
       repsCompleted: repsCompleted ?? this.repsCompleted,
       startedAt: startedAt ?? this.startedAt,
       completedAt: completedAt ?? this.completedAt,
+      repTraceJson: repTraceJson ?? this.repTraceJson,
+      integrityVerdict: integrityVerdict ?? this.integrityVerdict,
+      rejectedReason: rejectedReason ?? this.rejectedReason,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
@@ -1151,6 +1305,15 @@ class SessionsCompanion extends UpdateCompanion<SessionRow> {
     if (completedAt.present) {
       map['completed_at'] = Variable<DateTime>(completedAt.value);
     }
+    if (repTraceJson.present) {
+      map['rep_trace_json'] = Variable<String>(repTraceJson.value);
+    }
+    if (integrityVerdict.present) {
+      map['integrity_verdict'] = Variable<String>(integrityVerdict.value);
+    }
+    if (rejectedReason.present) {
+      map['rejected_reason'] = Variable<String>(rejectedReason.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -1172,6 +1335,9 @@ class SessionsCompanion extends UpdateCompanion<SessionRow> {
           ..write('repsCompleted: $repsCompleted, ')
           ..write('startedAt: $startedAt, ')
           ..write('completedAt: $completedAt, ')
+          ..write('repTraceJson: $repTraceJson, ')
+          ..write('integrityVerdict: $integrityVerdict, ')
+          ..write('rejectedReason: $rejectedReason, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
@@ -4482,6 +4648,9 @@ typedef $$SessionsTableCreateCompanionBuilder =
       required int repsCompleted,
       required DateTime startedAt,
       Value<DateTime?> completedAt,
+      Value<String?> repTraceJson,
+      Value<String?> integrityVerdict,
+      Value<String?> rejectedReason,
       required DateTime updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -4494,6 +4663,9 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<int> repsCompleted,
       Value<DateTime> startedAt,
       Value<DateTime?> completedAt,
+      Value<String?> repTraceJson,
+      Value<String?> integrityVerdict,
+      Value<String?> rejectedReason,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -4535,6 +4707,21 @@ class $$SessionsTableFilterComposer
 
   ColumnFilters<DateTime> get completedAt => $composableBuilder(
     column: $table.completedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get repTraceJson => $composableBuilder(
+    column: $table.repTraceJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get integrityVerdict => $composableBuilder(
+    column: $table.integrityVerdict,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rejectedReason => $composableBuilder(
+    column: $table.rejectedReason,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4588,6 +4775,21 @@ class $$SessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get repTraceJson => $composableBuilder(
+    column: $table.repTraceJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get integrityVerdict => $composableBuilder(
+    column: $table.integrityVerdict,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get rejectedReason => $composableBuilder(
+    column: $table.rejectedReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -4629,6 +4831,21 @@ class $$SessionsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get completedAt => $composableBuilder(
     column: $table.completedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get repTraceJson => $composableBuilder(
+    column: $table.repTraceJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get integrityVerdict => $composableBuilder(
+    column: $table.integrityVerdict,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get rejectedReason => $composableBuilder(
+    column: $table.rejectedReason,
     builder: (column) => column,
   );
 
@@ -4676,6 +4893,9 @@ class $$SessionsTableTableManager
                 Value<int> repsCompleted = const Value.absent(),
                 Value<DateTime> startedAt = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
+                Value<String?> repTraceJson = const Value.absent(),
+                Value<String?> integrityVerdict = const Value.absent(),
+                Value<String?> rejectedReason = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4686,6 +4906,9 @@ class $$SessionsTableTableManager
                 repsCompleted: repsCompleted,
                 startedAt: startedAt,
                 completedAt: completedAt,
+                repTraceJson: repTraceJson,
+                integrityVerdict: integrityVerdict,
+                rejectedReason: rejectedReason,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,
@@ -4698,6 +4921,9 @@ class $$SessionsTableTableManager
                 required int repsCompleted,
                 required DateTime startedAt,
                 Value<DateTime?> completedAt = const Value.absent(),
+                Value<String?> repTraceJson = const Value.absent(),
+                Value<String?> integrityVerdict = const Value.absent(),
+                Value<String?> rejectedReason = const Value.absent(),
                 required DateTime updatedAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4708,6 +4934,9 @@ class $$SessionsTableTableManager
                 repsCompleted: repsCompleted,
                 startedAt: startedAt,
                 completedAt: completedAt,
+                repTraceJson: repTraceJson,
+                integrityVerdict: integrityVerdict,
+                rejectedReason: rejectedReason,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,

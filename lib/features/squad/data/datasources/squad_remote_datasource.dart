@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:injectable/injectable.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Wraps the 5 squad RPCs (`create_squad`/`join_squad`/`leave_squad`/
@@ -247,10 +248,19 @@ class SquadRemoteDataSource {
 
   void broadcastTelemetry(String squadId, Map<String, dynamic> payload) {
     unawaited(() async {
-      await _awaitSubscribed(squadId);
-      await _channelFor(
-        squadId,
-      ).sendBroadcastMessage(event: _broadcastEvent, payload: payload);
+      try {
+        await _awaitSubscribed(squadId);
+        await _channelFor(
+          squadId,
+        ).sendBroadcastMessage(event: _broadcastEvent, payload: payload);
+      } catch (e, st) {
+        // Fire-and-forget by design (the caller doesn't await this), but a
+        // dropped channel/failed subscribe must not become a silent,
+        // untracked unhandled exception in a detached future — see
+        // `trackPresence`'s repository-level location-fetch catch for the
+        // same reasoning.
+        unawaited(Sentry.captureException(e, stackTrace: st));
+      }
     }());
   }
 

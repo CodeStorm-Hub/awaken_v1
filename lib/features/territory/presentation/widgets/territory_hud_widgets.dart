@@ -12,6 +12,7 @@ import '../../domain/entities/rival.dart';
 import '../../domain/entities/territory_at_risk.dart';
 import '../../domain/usecases/watch_owned_area.dart';
 import '../pages/active_run_page.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// HUD chrome for `TerritoryPage`'s map overlay — extracted verbatim (no
 /// behavior change) from `territory_page.dart`, which had grown past 2700
@@ -64,7 +65,7 @@ class SyncStatusBanner extends StatelessWidget {
           padding: const EdgeInsets.only(top: 8),
           child: AppleGlassContainer(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: ShapeTokens.pill,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -120,7 +121,7 @@ class OwnedAreaChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: scheme.primary.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: ShapeTokens.pill,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -159,7 +160,7 @@ class TerritoryLegend extends StatelessWidget {
     final semantic = context.semanticColors;
     return AppleGlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: ShapeTokens.pill,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -225,7 +226,7 @@ class SkylineModeChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: scheme.tertiary.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: ShapeTokens.pill,
         border: Border.all(color: scheme.tertiary.withValues(alpha: 0.5)),
       ),
       child: Row(
@@ -249,7 +250,11 @@ class SkylineModeChip extends StatelessWidget {
 }
 
 class AtRiskBanner extends StatelessWidget {
-  const AtRiskBanner({super.key, required this.territories, required this.scheme});
+  const AtRiskBanner({
+    super.key,
+    required this.territories,
+    required this.scheme,
+  });
 
   final List<TerritoryAtRisk> territories;
   final ColorScheme scheme;
@@ -275,7 +280,7 @@ class AtRiskBanner extends StatelessWidget {
 
     return AppleGlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: ShapeTokens.r16,
       borderColor: atRiskColor.withValues(alpha: 0.6),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -345,7 +350,7 @@ class RivalCard extends StatelessWidget {
 
     return AppleGlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: ShapeTokens.r16,
       borderColor: accentColor.withValues(alpha: 0.5),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -510,16 +515,12 @@ class ZoomControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppleGlassContainer(
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: ShapeTokens.pill,
       padding: EdgeInsets.zero,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          RoundIconButton(
-            icon: Icons.add,
-            tooltip: 'Zoom in',
-            onTap: onZoomIn,
-          ),
+          RoundIconButton(icon: Icons.add, tooltip: 'Zoom in', onTap: onZoomIn),
           Container(
             width: 24,
             height: 0.5,

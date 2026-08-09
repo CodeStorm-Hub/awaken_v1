@@ -143,7 +143,8 @@ abstract final class TerritoryMapStyle {
 
     final centerLat = pts.map((p) => p.latitude).reduce((a, b) => a + b) / n;
     const metersPerDegLat = 111320.0;
-    final metersPerDegLng = metersPerDegLat * math.cos(centerLat * math.pi / 180);
+    final metersPerDegLng =
+        metersPerDegLat * math.cos(centerLat * math.pi / 180);
     if (metersPerDegLng.abs() < 1e-9) return null;
 
     final xy = pts
@@ -205,10 +206,7 @@ abstract final class TerritoryMapStyle {
       );
       final offsetPt = curr + avg * miter;
       result.add(
-        ll.LatLng(
-          offsetPt.dy / metersPerDegLat,
-          offsetPt.dx / metersPerDegLng,
-        ),
+        ll.LatLng(offsetPt.dy / metersPerDegLat, offsetPt.dx / metersPerDegLng),
       );
     }
     return result;
@@ -348,7 +346,11 @@ abstract final class TerritoryMapStyle {
     final shadowPaint = ui.Paint()
       ..color = const ui.Color(0xAA000000)
       ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 8);
-    canvas.drawCircle(center + const ui.Offset(0, 4), radius * 1.25, shadowPaint);
+    canvas.drawCircle(
+      center + const ui.Offset(0, 4),
+      radius * 1.25,
+      shadowPaint,
+    );
 
     // 3. Thick Pure-White Contrast Outer Ring
     canvas.drawCircle(
@@ -450,7 +452,8 @@ abstract final class TerritoryBasemapRecolor {
   static const _waterMain = '#2594E4';
   static const _waterShallow = '#5ABBEC'; // rivers/streams (linear water)
   static const _landcoverGreen = '#46EBA7'; // parks, wood/grass landcover
-  static const _landuseGreen = '#82FD88'; // man-made green landuse (residential)
+  static const _landuseGreen =
+      '#82FD88'; // man-made green landuse (residential)
   static const _roadTeal = '#4DA39A';
   static const _roadHalo = '#FFFFFF';
   static const _roadLabelColor = '#FFFFFF';
@@ -814,7 +817,9 @@ class TerritoryGeoJsonResult {
 }
 
 /// Top-level worker function for constructing GeoJSON feature collections off the UI thread via `compute()`.
-TerritoryGeoJsonResult buildTerritoryGeoJsonPayload(TerritoryGeoJsonParams params) {
+TerritoryGeoJsonResult buildTerritoryGeoJsonPayload(
+  TerritoryGeoJsonParams params,
+) {
   final visible = params.visible;
   final rivalCentroids = [
     for (final t in visible)
@@ -825,7 +830,8 @@ TerritoryGeoJsonResult buildTerritoryGeoJsonPayload(TerritoryGeoJsonParams param
     if (!territory.isMine || rivalCentroids.isEmpty) return false;
     final centroid = TerritoryMapStyle.territoryCentroid(territory);
     for (final rivalCentroid in rivalCentroids) {
-      if (TerritoryMapStyle.haversineMeters(centroid, rivalCentroid) <= params.contestedRadiusM) {
+      if (TerritoryMapStyle.haversineMeters(centroid, rivalCentroid) <=
+          params.contestedRadiusM) {
         return true;
       }
     }
@@ -834,8 +840,12 @@ TerritoryGeoJsonResult buildTerritoryGeoJsonPayload(TerritoryGeoJsonParams param
 
   final contestedById = {for (final t in visible) t.id: isContested(t)};
 
-  Map<String, dynamic> territoryFeatureProps(Territory territory, bool contested) {
-    final isSquadmate = !territory.isMine && params.squadMemberIds.contains(territory.ownerId);
+  Map<String, dynamic> territoryFeatureProps(
+    Territory territory,
+    bool contested,
+  ) {
+    final isSquadmate =
+        !territory.isMine && params.squadMemberIds.contains(territory.ownerId);
     final fillColor = territory.isMine
         ? params.ownedFillHex
         : (isSquadmate ? params.squadmateFillHex : params.rivalFillHex);
@@ -844,18 +854,29 @@ TerritoryGeoJsonResult buildTerritoryGeoJsonPayload(TerritoryGeoJsonParams param
         : params.rivalOutlineHex;
     final extrusionColor = territory.isMine
         ? params.ownedExtrusionHex
-        : (isSquadmate ? params.squadmateExtrusionHex : params.rivalExtrusionHex);
+        : (isSquadmate
+              ? params.squadmateExtrusionHex
+              : params.rivalExtrusionHex);
 
     final baseOpacity = territory.isMine ? 0.40 : 0.32;
     final health = territory.isMine
-        ? (territory.health?.toDouble() ?? params.healthOfMap[territory.id] ?? 100.0)
+        ? (territory.health?.toDouble() ??
+              params.healthOfMap[territory.id] ??
+              100.0)
         : 100.0;
-    final healthFactor = (0.4 + 0.6 * ((health - 25).clamp(0, 75) / 75)).clamp(0.4, 1.0);
-    final targetOpacity = territory.isMine ? baseOpacity * healthFactor : baseOpacity;
+    final healthFactor = (0.4 + 0.6 * ((health - 25).clamp(0, 75) / 75)).clamp(
+      0.4,
+      1.0,
+    );
+    final targetOpacity = territory.isMine
+        ? baseOpacity * healthFactor
+        : baseOpacity;
 
     return {
       'owner': territory.isMine ? 'me' : 'rival',
-      'ownerTier': territory.isMine ? 'me' : (isSquadmate ? 'squadmate' : 'rival'),
+      'ownerTier': territory.isMine
+          ? 'me'
+          : (isSquadmate ? 'squadmate' : 'rival'),
       'atRisk': territory.isMine && params.atRiskIds.contains(territory.id),
       'contested': contested,
       'areaSqm': territory.areaSqm,
@@ -867,22 +888,31 @@ TerritoryGeoJsonResult buildTerritoryGeoJsonPayload(TerritoryGeoJsonParams param
   }
 
   final propsById = {
-    for (final t in visible) t.id: territoryFeatureProps(t, contestedById[t.id]!),
+    for (final t in visible)
+      t.id: territoryFeatureProps(t, contestedById[t.id]!),
   };
 
   final features = [
     for (final territory in visible)
-      TerritoryMapStyle.territoryToGeoJsonFeature(territory, propsById[territory.id]!),
+      TerritoryMapStyle.territoryToGeoJsonFeature(
+        territory,
+        propsById[territory.id]!,
+      ),
   ];
 
   final wallFeatures = [
     for (final territory in visible)
-      TerritoryMapStyle.territoryToWallGeoJsonFeature(territory, propsById[territory.id]!),
+      TerritoryMapStyle.territoryToWallGeoJsonFeature(
+        territory,
+        propsById[territory.id]!,
+      ),
   ];
 
   final flagFeatures = [
     for (final territory in visible)
-      for (final centroid in TerritoryMapStyle.territoryComponentCentroids(territory))
+      for (final centroid in TerritoryMapStyle.territoryComponentCentroids(
+        territory,
+      ))
         {
           'type': 'Feature',
           'properties': {
@@ -890,8 +920,8 @@ TerritoryGeoJsonResult buildTerritoryGeoJsonPayload(TerritoryGeoJsonParams param
             'flagColor': territory.isMine
                 ? params.ownedExtrusionHex
                 : (params.squadMemberIds.contains(territory.ownerId)
-                    ? params.squadmateExtrusionHex
-                    : params.rivalExtrusionHex),
+                      ? params.squadmateExtrusionHex
+                      : params.rivalExtrusionHex),
           },
           'geometry': {
             'type': 'Point',
@@ -900,7 +930,9 @@ TerritoryGeoJsonResult buildTerritoryGeoJsonPayload(TerritoryGeoJsonParams param
         },
   ];
 
-  final hasAtRisk = visible.any((t) => t.isMine && params.atRiskIds.contains(t.id));
+  final hasAtRisk = visible.any(
+    (t) => t.isMine && params.atRiskIds.contains(t.id),
+  );
   final hasContested = contestedById.values.any((c) => c);
   final hasRival = visible.any((t) => !t.isMine);
 

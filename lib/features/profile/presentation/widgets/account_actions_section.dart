@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/theme/adaptive_dialog.dart';
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../domain/usecases/delete_account.dart';
@@ -31,27 +32,15 @@ class _AccountActionsSectionState extends State<AccountActionsSection> {
   var _deleting = false;
 
   Future<void> _signOut() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAdaptiveConfirmDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Sign out?'),
-        content: const Text(
+      title: 'Sign out?',
+      message:
           'This clears your data from this device. If you linked an email or Google account, '
           "it's still safe in the cloud — sign back in any time to get it back.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Sign out'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Sign out',
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     setState(() => _signingOut = true);
     try {

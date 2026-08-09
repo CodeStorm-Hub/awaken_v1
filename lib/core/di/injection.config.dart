@@ -24,7 +24,6 @@ import '../../features/alarm/domain/usecases/cancel_alarm.dart' as _i915;
 import '../../features/alarm/domain/usecases/cancel_all_alarms.dart' as _i971;
 import '../../features/alarm/domain/usecases/complete_alarm_workout.dart'
     as _i738;
-import '../../features/alarm/domain/usecases/dismiss_alarm.dart' as _i735;
 import '../../features/alarm/domain/usecases/engage_alarm_lockdown.dart'
     as _i830;
 import '../../features/alarm/domain/usecases/rearm_alarms_from_cache.dart'
@@ -164,6 +163,8 @@ import '../../features/verification/data/repositories/pose_verification_reposito
     as _i265;
 import '../../features/verification/domain/repositories/pose_verification_repository.dart'
     as _i5;
+import '../../features/verification/domain/usecases/release_verification_resources.dart'
+    as _i312;
 import '../../features/verification/domain/usecases/start_verification_session.dart'
     as _i188;
 import '../../features/verification/domain/usecases/stop_verification_session.dart'
@@ -240,6 +241,11 @@ _i174.GetIt init(
       gh<_i587.PoseDetectorDataSource>(),
     ),
   );
+  gh.factory<_i312.ReleaseVerificationResources>(
+    () => _i312.ReleaseVerificationResources(
+      gh<_i5.PoseVerificationRepository>(),
+    ),
+  );
   gh.factory<_i188.StartVerificationSession>(
     () => _i188.StartVerificationSession(gh<_i5.PoseVerificationRepository>()),
   );
@@ -300,14 +306,6 @@ _i174.GetIt init(
   );
   gh.factory<_i476.RequestBatteryExemption>(
     () => _i476.RequestBatteryExemption(gh<_i162.BatteryExemptionRepository>()),
-  );
-  gh.factory<_i349.VerificationCubit>(
-    () => _i349.VerificationCubit(
-      gh<_i188.StartVerificationSession>(),
-      gh<_i547.StopVerificationSession>(),
-      gh<_i703.WatchVerificationState>(),
-      gh<_i1051.SquadRepository>(),
-    ),
   );
   gh.lazySingleton<_i959.WakeUpTaxStore>(
     () => _i959.WakeUpTaxStore(gh<_i90.AppDatabase>(), gh<_i355.LocalWriter>()),
@@ -375,6 +373,15 @@ _i174.GetIt init(
       gh<_i563.RunProgressRemoteDataSource>(),
     ),
   );
+  gh.factory<_i349.VerificationCubit>(
+    () => _i349.VerificationCubit(
+      gh<_i188.StartVerificationSession>(),
+      gh<_i547.StopVerificationSession>(),
+      gh<_i703.WatchVerificationState>(),
+      gh<_i312.ReleaseVerificationResources>(),
+      gh<_i1051.SquadRepository>(),
+    ),
+  );
   gh.lazySingleton<_i1014.AlarmRepository>(
     () => _i153.AlarmRepositoryImpl(
       gh<_i96.AlarmLocalDataSource>(),
@@ -419,9 +426,6 @@ _i174.GetIt init(
   gh.factory<_i738.CompleteAlarmWorkout>(
     () => _i738.CompleteAlarmWorkout(gh<_i1014.AlarmRepository>()),
   );
-  gh.factory<_i735.DismissAlarm>(
-    () => _i735.DismissAlarm(gh<_i1014.AlarmRepository>()),
-  );
   gh.factory<_i830.EngageAlarmLockdown>(
     () => _i830.EngageAlarmLockdown(gh<_i1014.AlarmRepository>()),
   );
@@ -452,6 +456,17 @@ _i174.GetIt init(
   gh.factory<_i879.WatchRingingAlarm>(
     () => _i879.WatchRingingAlarm(gh<_i1014.AlarmRepository>()),
   );
+  gh.lazySingleton<_i268.AlarmCubit>(
+    () => _i268.AlarmCubit(
+      gh<_i396.WatchAlarms>(),
+      gh<_i879.WatchRingingAlarm>(),
+      gh<_i528.ScheduleAlarm>(),
+      gh<_i915.CancelAlarm>(),
+      gh<_i738.CompleteAlarmWorkout>(),
+      gh<_i893.WatchCurrentTaxMultiplier>(),
+      gh<_i1064.SetAlarmActive>(),
+    ),
+  );
   gh.lazySingleton<_i487.AuthRepository>(
     () => _i1.AuthRepositoryImpl(
       gh<_i670.AuthRemoteDataSource>(),
@@ -480,18 +495,6 @@ _i174.GetIt init(
       gh<_i125.CaptureRun>(),
       gh<_i256.WatchRunState>(),
       gh<_i1051.SquadRepository>(),
-    ),
-  );
-  gh.lazySingleton<_i268.AlarmCubit>(
-    () => _i268.AlarmCubit(
-      gh<_i396.WatchAlarms>(),
-      gh<_i879.WatchRingingAlarm>(),
-      gh<_i528.ScheduleAlarm>(),
-      gh<_i915.CancelAlarm>(),
-      gh<_i735.DismissAlarm>(),
-      gh<_i738.CompleteAlarmWorkout>(),
-      gh<_i893.WatchCurrentTaxMultiplier>(),
-      gh<_i1064.SetAlarmActive>(),
     ),
   );
   gh.factory<_i457.DeleteAccount>(

@@ -105,14 +105,14 @@ class AuthRepositoryImpl implements AuthRepository {
     required String email,
     required String password,
   }) async {
-    // Switching identity mid-session (not a cold start) carries the same
-    // cross-account leakage risk as sign-out — clear the outgoing
-    // identity's cache first, then immediately re-hydrate from the
-    // incoming account so the user isn't staring at an empty app until
-    // their next cold start (PullDownSync otherwise only runs from
-    // bootstrap).
-    await _clearIdentityState();
+    // Authenticate first, then clear the outgoing identity's cache and
+    // immediately re-hydrate from the incoming account — clearing before
+    // the credential check succeeds would wipe local data (alarms,
+    // streaks, territory) for a mistyped password with nothing to
+    // rehydrate from. Same ordering as signOut()/deleteAccount() below:
+    // only destroy state once the remote call it depends on has committed.
     await _remote.signInWithPassword(email: email, password: password);
+    await _clearIdentityState();
     await _pullDownSync.run();
   }
 
@@ -122,8 +122,10 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> signInWithGoogle() async {
-    await _clearIdentityState();
+    // See signInWithPassword above — authenticate before clearing so a
+    // cancelled/failed Google OAuth dialog doesn't wipe local data.
     await _remote.signInWithGoogle();
+    await _clearIdentityState();
     await _remote.syncDisplayNameFromMetadata();
     await _pullDownSync.run();
   }

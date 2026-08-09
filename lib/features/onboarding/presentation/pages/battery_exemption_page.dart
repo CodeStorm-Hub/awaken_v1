@@ -10,6 +10,7 @@ import '../../domain/entities/battery_exemption_status.dart';
 import '../../domain/usecases/check_battery_exemption_status.dart';
 import '../../domain/usecases/open_oem_autostart_settings.dart';
 import '../../domain/usecases/request_battery_exemption.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// Onboarding step (plan H4): explains why the OS's default battery
 /// management will silently break alarms, then requests the standard
@@ -185,7 +186,7 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage>
                                       top: Radius.circular(20),
                                       bottom: Radius.circular(8),
                                     )
-                                  : BorderRadius.circular(20),
+                                  : ShapeTokens.r20,
                               bg: status.isExempt
                                   ? scheme.primaryContainer
                                   : context.semanticColors.warningContainer,
@@ -261,7 +262,7 @@ class _BatteryExemptionPageState extends State<BatteryExemptionPage>
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(56),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: ShapeTokens.pill,
                     ),
                   ),
                   // `onContinue` is only ever supplied by the onboarding

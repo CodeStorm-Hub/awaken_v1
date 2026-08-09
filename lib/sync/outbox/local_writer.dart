@@ -71,7 +71,10 @@ class LocalWriter {
   }
 
   /// Append-only — verification sessions are never edited after logging
-  /// (plan §6 Phase 4).
+  /// (plan §6 Phase 4). [repTrace] (a list of `{offset_ms, angle_deg}`
+  /// maps — see `RepEvidence`) is submitted to `complete_workout_session()`
+  /// on sync, which computes the returned `integrity_verdict`/
+  /// `rejected_reason` server-side; this call never sets them itself.
   Future<void> insertSession({
     required String id,
     String? alarmId,
@@ -79,8 +82,10 @@ class LocalWriter {
     required int repsCompleted,
     required DateTime startedAt,
     DateTime? completedAt,
+    List<Map<String, Object?>> repTrace = const [],
   }) {
     final now = DateTime.now();
+    final repTraceJson = repTrace.isEmpty ? null : jsonEncode(repTrace);
     return _db.transaction(() async {
       await _db.into(_db.sessions).insert(
             SessionsCompanion.insert(
@@ -90,6 +95,7 @@ class LocalWriter {
               repsCompleted: repsCompleted,
               startedAt: startedAt,
               completedAt: Value(completedAt),
+              repTraceJson: Value(repTraceJson),
               updatedAt: now,
             ),
           );
@@ -104,6 +110,7 @@ class LocalWriter {
           'reps_completed': repsCompleted,
           'started_at': startedAt.toIso8601String(),
           'completed_at': completedAt?.toIso8601String(),
+          'rep_trace': repTrace,
           'updated_at': now.toIso8601String(),
         },
       );
@@ -175,6 +182,13 @@ class LocalWriter {
   Future<void> upsertUserStats({
     required double currentTaxMultiplier,
     required String action,
+    // Only meaningful for action == 'reset' — see `reset_wake_up_tax`'s
+    // doc comment. The RPC only actually grants the reset once this
+    // session's rep_trace has validated as 'trusted', so this session's
+    // own outbox entry must reach the server first; SyncWorker's FIFO push
+    // order (same drain cycle, insertSession enqueued before this call)
+    // already guarantees that in the common case.
+    String? sessionId,
   }) {
     final now = DateTime.now();
     return _db.transaction(() async {
@@ -189,7 +203,7 @@ class LocalWriter {
         table: 'user_stats',
         entityId: 'current', // no local per-user id; remote upserts key on user_id instead
         operation: OutboxOperation.upsert,
-        payload: {'action': action},
+        payload: {'action': action, 'session_id': ?sessionId},
       );
     });
   }

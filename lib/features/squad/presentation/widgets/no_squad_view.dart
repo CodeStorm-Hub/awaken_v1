@@ -4,6 +4,7 @@ import '../../../../core/theme/expressive_widgets.dart';
 import '../../../territory/presentation/pages/territory_page.dart';
 import 'conquest_ticker.dart';
 import 'squad_page_shared.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class NoSquadView extends StatelessWidget {
   const NoSquadView({super.key});
@@ -54,9 +55,7 @@ class NoSquadView extends StatelessWidget {
               child: FilledButton(
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: ShapeTokens.pill),
                 ),
                 onPressed: () => showCreateSquadDialog(context),
                 child: const Text('Create a squad'),
@@ -68,9 +67,7 @@ class NoSquadView extends StatelessWidget {
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: ShapeTokens.pill),
                 ),
                 onPressed: () => showJoinSquadDialog(context),
                 child: const Text('Join with invite code'),

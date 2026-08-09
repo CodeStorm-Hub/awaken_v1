@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:awaken/features/alarm/domain/entities/alarm_schedule.dart';
 import 'package:awaken/features/alarm/domain/usecases/cancel_alarm.dart';
 import 'package:awaken/features/alarm/domain/usecases/complete_alarm_workout.dart';
-import 'package:awaken/features/alarm/domain/usecases/dismiss_alarm.dart';
 import 'package:awaken/features/alarm/domain/usecases/schedule_alarm.dart';
 import 'package:awaken/features/alarm/domain/usecases/set_alarm_active.dart';
 import 'package:awaken/features/alarm/domain/usecases/watch_alarms.dart';
@@ -23,8 +22,6 @@ class _MockScheduleAlarm extends Mock implements ScheduleAlarm {}
 
 class _MockCancelAlarm extends Mock implements CancelAlarm {}
 
-class _MockDismissAlarm extends Mock implements DismissAlarm {}
-
 class _MockCompleteAlarmWorkout extends Mock implements CompleteAlarmWorkout {}
 
 class _MockWatchCurrentTaxMultiplier extends Mock
@@ -37,7 +34,6 @@ void main() {
   late _MockWatchRingingAlarm watchRingingAlarm;
   late _MockScheduleAlarm scheduleAlarm;
   late _MockCancelAlarm cancelAlarm;
-  late _MockDismissAlarm dismissAlarm;
   late _MockCompleteAlarmWorkout completeAlarmWorkout;
   late _MockWatchCurrentTaxMultiplier watchCurrentTaxMultiplier;
   late _MockSetAlarmActive setAlarmActive;
@@ -67,7 +63,6 @@ void main() {
     watchRingingAlarm = _MockWatchRingingAlarm();
     scheduleAlarm = _MockScheduleAlarm();
     cancelAlarm = _MockCancelAlarm();
-    dismissAlarm = _MockDismissAlarm();
     completeAlarmWorkout = _MockCompleteAlarmWorkout();
     watchCurrentTaxMultiplier = _MockWatchCurrentTaxMultiplier();
     setAlarmActive = _MockSetAlarmActive();
@@ -86,7 +81,6 @@ void main() {
     watchRingingAlarm,
     scheduleAlarm,
     cancelAlarm,
-    dismissAlarm,
     completeAlarmWorkout,
     watchCurrentTaxMultiplier,
     setAlarmActive,
@@ -180,16 +174,6 @@ void main() {
       await cubit.cancel('alarm-1');
 
       verify(() => cancelAlarm('alarm-1')).called(1);
-      await cubit.close();
-    });
-
-    test('dismiss() calls through to DismissAlarm with the id', () async {
-      when(() => dismissAlarm(any())).thenAnswer((_) async {});
-      final cubit = buildCubit();
-
-      await cubit.dismiss('alarm-1');
-
-      verify(() => dismissAlarm('alarm-1')).called(1);
       await cubit.close();
     });
 

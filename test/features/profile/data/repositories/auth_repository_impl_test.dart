@@ -148,9 +148,10 @@ void main() {
 
   group('signInWithPassword', () {
     test(
-      'clears the outgoing identity before signing in, then re-hydrates '
-      'from the incoming account — a stale identity must never be left '
-      'in the local cache once a different account is signed into',
+      'authenticates before clearing the outgoing identity, then '
+      're-hydrates from the incoming account — clearing first would wipe '
+      'local data (alarms, streaks, territory) for nothing on a failed '
+      'credential check',
       () async {
         when(
           () => remote.signInWithPassword(
@@ -165,20 +166,44 @@ void main() {
         );
 
         verifyInOrder([
+          () => remote.signInWithPassword(email: 'a@b.com', password: 'hunter2'),
           () => alarmRepository.cancelAllAlarms(),
           () => squadRepository.resetForAccountTransition(),
           () => db.clearAllLocalData(),
-          () => remote.signInWithPassword(email: 'a@b.com', password: 'hunter2'),
           () => pullDownSync.run(),
         ]);
+      },
+    );
+
+    test(
+      'a failed credential check never touches local state at all',
+      () async {
+        when(
+          () => remote.signInWithPassword(
+            email: any(named: 'email'),
+            password: any(named: 'password'),
+          ),
+        ).thenThrow(Exception('invalid credentials'));
+
+        await expectLater(
+          () => repository.signInWithPassword(
+            email: 'a@b.com',
+            password: 'wrong',
+          ),
+          throwsA(isA<Exception>()),
+        );
+
+        verifyNever(() => alarmRepository.cancelAllAlarms());
+        verifyNever(() => squadRepository.resetForAccountTransition());
+        verifyNever(() => db.clearAllLocalData());
       },
     );
   });
 
   group('signInWithGoogle', () {
     test(
-      'clears the outgoing identity, signs in, syncs display name, then '
-      're-hydrates — same cross-account-leakage guard as signInWithPassword',
+      'authenticates before clearing the outgoing identity, then syncs '
+      'display name and re-hydrates — same guard as signInWithPassword',
       () async {
         when(() => remote.signInWithGoogle()).thenAnswer((_) async {});
         when(
@@ -188,13 +213,31 @@ void main() {
         await repository.signInWithGoogle();
 
         verifyInOrder([
+          () => remote.signInWithGoogle(),
           () => alarmRepository.cancelAllAlarms(),
           () => squadRepository.resetForAccountTransition(),
           () => db.clearAllLocalData(),
-          () => remote.signInWithGoogle(),
           () => remote.syncDisplayNameFromMetadata(),
           () => pullDownSync.run(),
         ]);
+      },
+    );
+
+    test(
+      'a cancelled/failed Google sign-in never touches local state at all',
+      () async {
+        when(
+          () => remote.signInWithGoogle(),
+        ).thenThrow(Exception('cancelled'));
+
+        await expectLater(
+          () => repository.signInWithGoogle(),
+          throwsA(isA<Exception>()),
+        );
+
+        verifyNever(() => alarmRepository.cancelAllAlarms());
+        verifyNever(() => squadRepository.resetForAccountTransition());
+        verifyNever(() => db.clearAllLocalData());
       },
     );
   });

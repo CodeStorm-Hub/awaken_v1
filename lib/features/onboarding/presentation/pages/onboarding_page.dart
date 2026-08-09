@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../../../core/theme/expressive_widgets.dart';
 import 'battery_exemption_page.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class _OnboardCard {
   const _OnboardCard({
@@ -321,7 +322,7 @@ class _MarketingCarouselState extends State<_MarketingCarousel> {
                         color: active
                             ? card.fg(scheme)
                             : card.fg(scheme).withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(999),
+                        borderRadius: ShapeTokens.pill,
                       ),
                     ),
                   );
@@ -349,7 +350,7 @@ class _MarketingCarouselState extends State<_MarketingCarousel> {
                         foregroundColor: card.bg(scheme),
                         minimumSize: const Size.fromHeight(60),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
+                          borderRadius: ShapeTokens.pill,
                         ),
                       ),
                       onPressed: isLast
@@ -466,7 +467,7 @@ class _NotificationRationaleCard extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(56),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: ShapeTokens.pill,
                     ),
                   ),
                   onPressed: requesting ? null : onContinue,

@@ -102,7 +102,9 @@ class HomeCubit extends Cubit<HomeState> {
   /// actions), which all offer a retry.
   void retryRecentActivity() {
     unawaited(_activitySub.cancel());
-    emit(state.copyWith(recentActivityError: false, recentActivityLoading: true));
+    emit(
+      state.copyWith(recentActivityError: false, recentActivityLoading: true),
+    );
     _activitySub = _watchRecentActivity().listen(
       (v) => emit(
         state.copyWith(

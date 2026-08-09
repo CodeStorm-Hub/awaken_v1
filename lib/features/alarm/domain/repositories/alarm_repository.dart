@@ -1,3 +1,4 @@
+import '../../../verification/domain/entities/rep_evidence.dart';
 import '../entities/alarm_schedule.dart';
 
 abstract interface class AlarmRepository {
@@ -38,10 +39,6 @@ abstract interface class AlarmRepository {
   /// can be re-armed later; `watchAlarms()` still shows it, greyed out.
   Future<void> setActive(String id, bool isActive);
 
-  /// Stops the ringing alarm. Phase 1 scope only — this is a raw dismiss,
-  /// not gated by exercise verification yet (that's Phase 4, plan §6).
-  Future<void> dismissAlarm(String id);
-
   /// Ends the ring→verify loop (plan §6 Phase 4): stops the alarm
   /// regardless of outcome (the accessibility escape hatch — plan §5 point
   /// 5 — must never trap the user), logs a session, adjusts the global
@@ -66,6 +63,7 @@ abstract interface class AlarmRepository {
     required bool verified,
     required int repsCompleted,
     required DateTime startedAt,
+    List<RepEvidence> repTrace = const [],
     bool isPreview = false,
   });
 

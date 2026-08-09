@@ -41,6 +41,7 @@ import '../widgets/territory_layers_sheet.dart';
 import '../widgets/territory_map_math.dart';
 import '../widgets/territory_map_style.dart';
 import 'active_run_page.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// Territory map (plan §6 Phase 5c, redesigned per the territory feature
 /// review). Real vector-tile rendering via `maplibre_gl` — replaces the
@@ -562,10 +563,7 @@ class _TerritoryPageState extends State<TerritoryPage>
       } catch (_) {}
     } else {
       try {
-        await controller.setGeoJsonSource(
-          _userLocationSourceId,
-          geojson,
-        );
+        await controller.setGeoJsonSource(_userLocationSourceId, geojson);
       } catch (_) {}
     }
   }
@@ -932,7 +930,10 @@ class _TerritoryPageState extends State<TerritoryPage>
     AppSemanticColors semantic,
   ) async {
     if (!_territoryLayersReady) {
-      await controller.addGeoJsonSource(_territorySourceId, payload.mainCollection);
+      await controller.addGeoJsonSource(
+        _territorySourceId,
+        payload.mainCollection,
+      );
       await controller.addFillLayer(
         _territorySourceId,
         _territoryFillLayerId,
@@ -942,7 +943,10 @@ class _TerritoryPageState extends State<TerritoryPage>
           fillOutlineColor: ['get', 'outlineColor'],
         ),
       );
-      await controller.addGeoJsonSource(_territoryWallSourceId, payload.wallCollection);
+      await controller.addGeoJsonSource(
+        _territoryWallSourceId,
+        payload.wallCollection,
+      );
       await controller.addFillExtrusionLayer(
         _territoryWallSourceId,
         _territoryExtrusionLayerId,
@@ -1058,12 +1062,20 @@ class _TerritoryPageState extends State<TerritoryPage>
       );
       _territoryLayersReady = true;
     } else {
-      await controller.setGeoJsonSource(_territorySourceId, payload.mainCollection);
-      await controller.setGeoJsonSource(_territoryWallSourceId, payload.wallCollection);
+      await controller.setGeoJsonSource(
+        _territorySourceId,
+        payload.mainCollection,
+      );
+      await controller.setGeoJsonSource(
+        _territoryWallSourceId,
+        payload.wallCollection,
+      );
     }
   }
 
-  Future<void> _redrawFlagsWithCollection(Map<String, dynamic> collection) async {
+  Future<void> _redrawFlagsWithCollection(
+    Map<String, dynamic> collection,
+  ) async {
     final controller = _controller;
     if (controller == null || !mounted || !_flagIconRegistered) return;
 
@@ -1682,7 +1694,8 @@ class _TerritoryPageState extends State<TerritoryPage>
     final areaLabel = '${(territory.areaSqm / 1000000).toStringAsFixed(3)} km²';
     final atRiskById = {for (final t in _atRisk) t.id: t};
     final health = territory.isMine
-        ? (territory.health?.toDouble() ?? healthOfTerritory(territory.id, atRiskById))
+        ? (territory.health?.toDouble() ??
+              healthOfTerritory(territory.id, atRiskById))
         : null;
     final centroid = TerritoryMapStyle.territoryCentroid(territory);
     final canStealBack = !territory.isMine && !isSquadmate;
@@ -1748,7 +1761,8 @@ class _TerritoryPageState extends State<TerritoryPage>
       (bounds.southwest.latitude + bounds.northeast.latitude) / 2,
       (bounds.southwest.longitude + bounds.northeast.longitude) / 2,
     );
-    final currentZoom = controller.cameraPosition?.zoom ?? _currentZoom ?? _focusZoom;
+    final currentZoom =
+        controller.cameraPosition?.zoom ?? _currentZoom ?? _focusZoom;
     await controller.easeCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
@@ -1775,9 +1789,7 @@ class _TerritoryPageState extends State<TerritoryPage>
     if (isGuest) {
       return Scaffold(
         backgroundColor: scheme.surface,
-        body: const SafeArea(
-          child: TerritoryGateCard(),
-        ),
+        body: const SafeArea(child: TerritoryGateCard()),
       );
     }
 
@@ -1811,40 +1823,42 @@ class _TerritoryPageState extends State<TerritoryPage>
                       ? const SizedBox.shrink()
                       : RepaintBoundary(
                           child: MapLibreMap(
-                      key: _styleLoader.styleKey,
-                      styleString: _styleLoader.styleString,
-                      // Tilted from the very first frame (§5.3: 3D is the default
-                      // visual language, not a hidden toggle) — `_locateSelf`/
-                      // `_onStyleLoaded` re-apply this same tilt once a real GPS
-                      // fix/style load lands, via `_cameraUpdateForFocus`.
-                      initialCameraPosition: const CameraPosition(
-                        target: LatLng(20, 0),
-                        zoom: 2,
-                        tilt: 45,
-                      ),
-                      onMapCreated: _onMapCreated,
-                      onStyleLoadedCallback: _onStyleLoaded,
-                      onCameraMove: (_) {
-                        if (!_cameraMoving) _cameraMoving = true;
-                      },
-                      onCameraIdle: () {
-                        _cameraMoving = false;
-                        _scheduleRefreshForCurrentView();
-                      },
-                        onMapClick: _onMapTapped,
-                        onMapLongClick: _onMapLongTapped,
-                        compassEnabled: false,
-                        annotationConsumeTapEvents: const [AnnotationType.symbol],
-                        featureTapsTriggersMapClick: true,
-                        myLocationEnabled: false,
-                        logoEnabled: false,
-                        attributionButtonPosition:
-                            AttributionButtonPosition.bottomLeft,
-                        trackCameraPosition: false,
-                      ),
-                    ),
-                  ),
+                            key: _styleLoader.styleKey,
+                            styleString: _styleLoader.styleString,
+                            // Tilted from the very first frame (§5.3: 3D is the default
+                            // visual language, not a hidden toggle) — `_locateSelf`/
+                            // `_onStyleLoaded` re-apply this same tilt once a real GPS
+                            // fix/style load lands, via `_cameraUpdateForFocus`.
+                            initialCameraPosition: const CameraPosition(
+                              target: LatLng(20, 0),
+                              zoom: 2,
+                              tilt: 45,
+                            ),
+                            onMapCreated: _onMapCreated,
+                            onStyleLoadedCallback: _onStyleLoaded,
+                            onCameraMove: (_) {
+                              if (!_cameraMoving) _cameraMoving = true;
+                            },
+                            onCameraIdle: () {
+                              _cameraMoving = false;
+                              _scheduleRefreshForCurrentView();
+                            },
+                            onMapClick: _onMapTapped,
+                            onMapLongClick: _onMapLongTapped,
+                            compassEnabled: false,
+                            annotationConsumeTapEvents: const [
+                              AnnotationType.symbol,
+                            ],
+                            featureTapsTriggersMapClick: true,
+                            myLocationEnabled: false,
+                            logoEnabled: false,
+                            attributionButtonPosition:
+                                AttributionButtonPosition.bottomLeft,
+                            trackCameraPosition: false,
+                          ),
+                        ),
                 ),
+              ),
             ),
           ),
 
@@ -1880,7 +1894,7 @@ class _TerritoryPageState extends State<TerritoryPage>
                       horizontal: 16,
                       vertical: 8,
                     ),
-                    borderRadius: BorderRadius.circular(22),
+                    borderRadius: ShapeTokens.r22,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -1934,103 +1948,104 @@ class _TerritoryPageState extends State<TerritoryPage>
             right: 16,
             child: RepaintBoundary(
               child: Center(
-              child: AppleGlassContainer(
-                blurAmount: 25,
-                padding: const EdgeInsets.all(6),
-                borderRadius: BorderRadius.circular(999),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      RoundIconButton(
-                        icon: Icons.my_location,
-                        tooltip: 'Center map',
-                        onTap: _recenter,
-                      ),
-                      const SizedBox(width: 4),
-                      FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: scheme.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          minimumSize: const Size(0, 48),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(999),
-                          ),
+                child: AppleGlassContainer(
+                  blurAmount: 25,
+                  padding: const EdgeInsets.all(6),
+                  borderRadius: ShapeTokens.pill,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        RoundIconButton(
+                          icon: Icons.my_location,
+                          tooltip: 'Center map',
+                          onTap: _recenter,
                         ),
-                        onPressed: () async {
-                          await Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const ActiveRunPage(),
+                        const SizedBox(width: 4),
+                        FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: scheme.primary,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            minimumSize: const Size(0, 48),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
                             ),
-                          );
-                          if (!context.mounted) return;
-                          await _locateSelf();
-                          await _refreshForCurrentView();
-                          unawaited(_loadRivalAndDecayStatus());
-                        },
-                        icon: const Icon(Icons.directions_run, size: 20),
-                        label: const Text(
-                          'CLAIM TERRITORY',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                            letterSpacing: 0.5,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: ShapeTokens.pill,
+                            ),
+                          ),
+                          onPressed: () async {
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ActiveRunPage(),
+                              ),
+                            );
+                            if (!context.mounted) return;
+                            await _locateSelf();
+                            await _refreshForCurrentView();
+                            unawaited(_loadRivalAndDecayStatus());
+                          },
+                          icon: const Icon(Icons.directions_run, size: 20),
+                          label: const Text(
+                            'CLAIM TERRITORY',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              letterSpacing: 0.5,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 4),
-                      RoundIconButton(
-                        icon: _is3D
-                            ? Icons.view_in_ar
-                            : Icons.view_in_ar_outlined,
-                        tooltip: _is3D
-                            ? 'Switch to 2D view'
-                            : 'Switch to 3D view',
-                        onTap: _toggle3DView,
-                      ),
-                      const SizedBox(width: 4),
-                      Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          RoundIconButton(
-                            icon: Icons.layers,
-                            tooltip: _showRivalTerritory
-                                ? 'Map layers'
-                                : 'Map layers (rival territory hidden)',
-                            onTap: () => _showLayersSheet(context),
-                          ),
-                          if (!_showRivalTerritory)
-                            Positioned(
-                              top: 4,
-                              right: 4,
-                              child: Container(
-                                width: 9,
-                                height: 9,
-                                decoration: BoxDecoration(
-                                  color: context.semanticColors.territoryRival,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: scheme.surfaceContainerHigh,
-                                    width: 1.5,
+                        const SizedBox(width: 4),
+                        RoundIconButton(
+                          icon: _is3D
+                              ? Icons.view_in_ar
+                              : Icons.view_in_ar_outlined,
+                          tooltip: _is3D
+                              ? 'Switch to 2D view'
+                              : 'Switch to 3D view',
+                          onTap: _toggle3DView,
+                        ),
+                        const SizedBox(width: 4),
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            RoundIconButton(
+                              icon: Icons.layers,
+                              tooltip: _showRivalTerritory
+                                  ? 'Map layers'
+                                  : 'Map layers (rival territory hidden)',
+                              onTap: () => _showLayersSheet(context),
+                            ),
+                            if (!_showRivalTerritory)
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: Container(
+                                  width: 9,
+                                  height: 9,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        context.semanticColors.territoryRival,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: scheme.surfaceContainerHigh,
+                                      width: 1.5,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
 
           // Zoom Controls (Right Floating Bar, positioned above Action Dock)
           Positioned(

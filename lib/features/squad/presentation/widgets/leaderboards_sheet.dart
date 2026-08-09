@@ -206,7 +206,7 @@ class LeaderboardsSheetState extends State<LeaderboardsSheet> {
                 margin: const EdgeInsets.only(bottom: 18),
                 decoration: BoxDecoration(
                   color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: ShapeTokens.pill,
                 ),
               ),
             ),
@@ -266,7 +266,7 @@ class LeaderboardsSheetState extends State<LeaderboardsSheet> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: scheme.primary.withValues(alpha: 0.12),
-                borderRadius: ShapeTokens.medium,
+                borderRadius: ShapeTokens.r12,
                 border: Border.all(
                   color: scheme.primary.withValues(alpha: 0.3),
                 ),

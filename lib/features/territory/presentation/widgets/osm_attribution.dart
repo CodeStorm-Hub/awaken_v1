@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// Always-visible OSM attribution overlay, shared by `TerritoryPage` and
 /// `ActiveRunPage`'s map views — OSMF's attribution guidance allows a
@@ -22,11 +23,14 @@ class OsmAttribution extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: scheme.surface.withValues(alpha: 0.75),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: ShapeTokens.r4,
       ),
       child: Text(
         '© OpenStreetMap contributors',
-        style: TextStyle(fontSize: 9, color: scheme.onSurface.withValues(alpha: 0.85)),
+        style: TextStyle(
+          fontSize: 9,
+          color: scheme.onSurface.withValues(alpha: 0.85),
+        ),
       ),
     );
   }

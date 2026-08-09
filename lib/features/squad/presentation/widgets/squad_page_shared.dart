@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/theme/adaptive_dialog.dart';
 import '../bloc/squad_cubit.dart';
 import '../squad_error_message.dart';
 import '../../domain/entities/leaderboard_entry.dart';
@@ -57,24 +58,13 @@ Future<void> showJoinSquadDialog(BuildContext context) async {
 
 Future<void> confirmLeaveSquad(BuildContext context) async {
   final cubit = context.read<SquadCubit>();
-  final confirmed = await showDialog<bool>(
+  final confirmed = await showAdaptiveConfirmDialog(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Leave squad?'),
-      content: const Text("You'll need the invite code to rejoin later."),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Leave'),
-        ),
-      ],
-    ),
+    title: 'Leave squad?',
+    message: "You'll need the invite code to rejoin later.",
+    confirmLabel: 'Leave',
   );
-  if (confirmed != true) return;
+  if (!confirmed) return;
 
   try {
     await cubit.leaveSquad();

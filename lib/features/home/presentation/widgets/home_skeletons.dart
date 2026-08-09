@@ -8,7 +8,7 @@ import '../../../../core/theme/shape_tokens.dart';
 /// [_Pulsing] rather than a static gray block so it doesn't read as a
 /// permanently-broken tile.
 class SkeletonStatTile extends StatelessWidget {
-  const SkeletonStatTile({super.key, this.radius = ShapeTokens.small});
+  const SkeletonStatTile({super.key, this.radius = ShapeTokens.r8});
 
   final BorderRadius radius;
 
@@ -44,7 +44,7 @@ class SkeletonStatTile extends StatelessWidget {
                 height: 18,
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: ShapeTokens.r4,
                 ),
               ),
               const SizedBox(height: 4),
@@ -53,7 +53,7 @@ class SkeletonStatTile extends StatelessWidget {
                 height: 10,
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: ShapeTokens.r4,
                 ),
               ),
             ],
@@ -116,9 +116,10 @@ class _PulsingState extends State<_Pulsing>
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
-    _animation = Tween<double>(begin: 1.0, end: 0.4).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _animation = Tween<double>(
+      begin: 1.0,
+      end: 0.4,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
     _controller.repeat(reverse: true);
   }
 
@@ -131,9 +132,6 @@ class _PulsingState extends State<_Pulsing>
   @override
   Widget build(BuildContext context) {
     if (MediaQuery.disableAnimationsOf(context)) return widget.child;
-    return FadeTransition(
-      opacity: _animation,
-      child: widget.child,
-    );
+    return FadeTransition(opacity: _animation, child: widget.child);
   }
 }

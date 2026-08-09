@@ -20,7 +20,11 @@ enum BodyJoint {
 }
 
 class JointPosition extends Equatable {
-  const JointPosition({required this.x, required this.y, required this.likelihood});
+  const JointPosition({
+    required this.x,
+    required this.y,
+    required this.likelihood,
+  });
 
   final double x;
   final double y;

@@ -26,9 +26,12 @@ class MapStyleLoader {
   // An initializing formal here would force callers to name the argument
   // `_isDark` (a private identifier), not the public `isDark` every call
   // site uses — hence the plain assignment below over `this._isDark`.
-  MapStyleLoader({required this.onChange, required bool isDark, Duration? timeout})
-    : _isDark = isDark, // ignore: prefer_initializing_formals
-      _timeout = timeout ?? const Duration(seconds: 15);
+  MapStyleLoader({
+    required this.onChange,
+    required bool isDark,
+    Duration? timeout,
+  }) : _isDark = isDark, // ignore: prefer_initializing_formals
+       _timeout = timeout ?? const Duration(seconds: 15);
 
   final VoidCallback onChange;
   final Duration _timeout;
@@ -105,7 +108,10 @@ class MapStyleLoader {
   /// button after [status] reaches [MapStyleLoadStatus.failed].
   void retry() {
     _tier = 0;
-    _swapTo(Env.mapStyleUrl(isDark: _isDark), status: MapStyleLoadStatus.retrying);
+    _swapTo(
+      Env.mapStyleUrl(isDark: _isDark),
+      status: MapStyleLoadStatus.retrying,
+    );
   }
 
   /// Call from the host `State`'s `didChangeDependencies` with the current
@@ -118,7 +124,10 @@ class MapStyleLoader {
     if (isDark == _isDark || _tier > 1) return;
     _isDark = isDark;
     if (_tier == 0) {
-      _swapTo(Env.mapStyleUrl(isDark: isDark), status: MapStyleLoadStatus.retrying);
+      _swapTo(
+        Env.mapStyleUrl(isDark: isDark),
+        status: MapStyleLoadStatus.retrying,
+      );
     }
   }
 

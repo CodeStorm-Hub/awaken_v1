@@ -25,6 +25,7 @@ class SquadState extends Equatable {
     this.presence = const [],
     this.errorMessage,
     this.isLeavingSquad = false,
+    this.refreshFailed = false,
   });
 
   final SquadStatus status;
@@ -38,6 +39,14 @@ class SquadState extends Equatable {
   /// instead of blowing away the still-current `loaded` squad view.
   final bool isLeavingSquad;
 
+  /// One-shot flag: a *background* refresh of the current squad failed
+  /// (see `SquadRepository.refreshFailures`) while still-current data is
+  /// shown. Separate from [status]/[errorMessage] for the same reason as
+  /// [isLeavingSquad] — this must not replace the `loaded` view, only
+  /// prompt a transient SnackBar. The listener that shows it is expected
+  /// to clear it back to `false` via `SquadCubit.dismissRefreshFailure()`.
+  final bool refreshFailed;
+
   SquadState copyWith({
     SquadStatus? status,
     Squad? squad,
@@ -46,6 +55,7 @@ class SquadState extends Equatable {
     List<SquadPresenceMember>? presence,
     String? errorMessage,
     bool? isLeavingSquad,
+    bool? refreshFailed,
   }) {
     return SquadState(
       status: status ?? this.status,
@@ -54,6 +64,7 @@ class SquadState extends Equatable {
       presence: presence ?? this.presence,
       errorMessage: errorMessage ?? this.errorMessage,
       isLeavingSquad: isLeavingSquad ?? this.isLeavingSquad,
+      refreshFailed: refreshFailed ?? this.refreshFailed,
     );
   }
 
@@ -65,5 +76,6 @@ class SquadState extends Equatable {
     presence,
     errorMessage,
     isLeavingSquad,
+    refreshFailed,
   ];
 }

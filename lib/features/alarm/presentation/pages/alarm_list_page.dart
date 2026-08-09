@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/theme/adaptive_dialog.dart';
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../../onboarding/presentation/pages/battery_exemption_page.dart';
 import '../../../profile/presentation/widgets/current_user_avatar_button.dart';
@@ -18,6 +19,7 @@ import '../widgets/rise_in.dart';
 import '../widgets/schedule_sheet.dart';
 import 'alarm_reliability_test_page.dart';
 import 'alarm_ring_page.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// M3 Expressive Alarm Management Dashboard (UI/UX plan §2 / Claude Design
 /// handoff "AlarmListScreen"). Enable/disable persists through
@@ -66,7 +68,7 @@ class _AlarmListPageState extends State<AlarmListPage> {
                           horizontal: 16,
                           vertical: 8,
                         ),
-                        borderRadius: BorderRadius.circular(22),
+                        borderRadius: ShapeTokens.r22,
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -176,9 +178,7 @@ class _AlarmListPageState extends State<AlarmListPage> {
                                 final alarm = alarms[index];
                                 return RiseIn(
                                   key: ValueKey(alarm.id),
-                                  delay: Duration(
-                                    milliseconds: index * 60,
-                                  ),
+                                  delay: Duration(milliseconds: index * 60),
                                   child: AlarmCard(
                                     alarm: alarm,
                                     on: alarm.isActive,
@@ -186,17 +186,11 @@ class _AlarmListPageState extends State<AlarmListPage> {
                                       index: index,
                                       count: n,
                                     ),
-                                    onToggle: () => _toggleActive(
-                                      context,
-                                      alarm,
-                                    ),
-                                    onDelete: () => _confirmDelete(
-                                      context,
-                                      alarm,
-                                    ),
-                                    onTap: () => Navigator.of(
-                                      context,
-                                    ).push(
+                                    onToggle: () =>
+                                        _toggleActive(context, alarm),
+                                    onDelete: () =>
+                                        _confirmDelete(context, alarm),
+                                    onTap: () => Navigator.of(context).push(
                                       MaterialPageRoute(
                                         builder: (_) => AlarmRingPage(
                                           alarm: alarm,
@@ -278,27 +272,15 @@ class _AlarmListPageState extends State<AlarmListPage> {
     final scheme = Theme.of(context).colorScheme;
     final messenger = ScaffoldMessenger.of(context);
     final cubit = context.read<AlarmCubit>();
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAdaptiveConfirmDialog(
       context: context,
       barrierColor: scheme.scrim.withValues(alpha: 0.5),
-      builder: (_) => AlertDialog(
-        title: const Text('Delete alarm?'),
-        content: const Text(
-          'This alarm will be cancelled and removed from your schedule.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      title: 'Delete alarm?',
+      message: 'This alarm will be cancelled and removed from your schedule.',
+      confirmLabel: 'Delete',
+      isDestructive: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     try {
       await cubit.cancel(alarm.id);
     } catch (e) {

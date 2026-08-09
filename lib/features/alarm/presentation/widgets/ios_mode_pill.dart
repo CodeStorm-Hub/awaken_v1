@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class IosModePill extends StatelessWidget {
   const IosModePill({
@@ -36,7 +37,7 @@ class IosModePill extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: selected ? accentColor : unselectedBg,
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: ShapeTokens.pill,
             ),
             child: Text(
               label,

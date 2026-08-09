@@ -74,7 +74,7 @@ void main() {
           completedAt: any(named: 'completedAt'),
         ),
       );
-      verifyNever(() => taxStore.reset());
+      verifyNever(() => taxStore.reset(sessionId: any(named: 'sessionId')));
       verifyNever(() => taxStore.bump());
     });
 
@@ -103,9 +103,12 @@ void main() {
           repsCompleted: any(named: 'repsCompleted'),
           startedAt: any(named: 'startedAt'),
           completedAt: any(named: 'completedAt'),
+          repTrace: any(named: 'repTrace'),
         ),
       ).thenAnswer((_) async {});
-      when(() => taxStore.reset()).thenAnswer((_) async {});
+      when(
+        () => taxStore.reset(sessionId: any(named: 'sessionId')),
+      ).thenAnswer((_) async {});
       when(
         () => localWriter.upsertAlarm(
           id: any(named: 'id'),
@@ -127,7 +130,7 @@ void main() {
       );
 
       verify(() => local.stop(any())).called(1);
-      verify(() => taxStore.reset()).called(1);
+      verify(() => taxStore.reset(sessionId: any(named: 'sessionId'))).called(1);
       // Non-recurring alarm: the stale-Drift-row fix must mark it inactive
       // so it doesn't keep reporting `isActive: true` after it's done.
       verify(

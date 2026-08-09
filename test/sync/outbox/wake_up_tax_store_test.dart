@@ -38,7 +38,7 @@ void main() {
   test('reset() returns to 1.0 regardless of accumulated bumps', () async {
     await store.bump();
     await store.bump();
-    await store.reset();
+    await store.reset(sessionId: 'session-1');
     expect(await store.current(), 1.0);
   });
 
@@ -46,7 +46,7 @@ void main() {
     expect(await store.watch().first, 1.0);
     await store.bump();
     expect(await store.watch().first, 1.5);
-    await store.reset();
+    await store.reset(sessionId: 'session-1');
     expect(await store.watch().first, 1.0);
   });
 }

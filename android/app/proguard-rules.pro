@@ -44,6 +44,22 @@
 -keep class org.maplibre.android.** { *; }
 -dontwarn org.maplibre.android.**
 
+# The `alarm` package (com.gdelataillade.alarm) — its consumer-rules.pro
+# covers most of this, but its WorkManager-driven alarm-ring callback is
+# invoked by class name from a background isolate/worker, which R8 can't
+# trace statically. A silently-dropped callback here means an alarm that
+# never rings — explicit keep rather than trusting the consumer rules alone
+# (see this file's header comment: verified only by manual device testing,
+# not CI, so a dependency bump could regress this undetected).
+-keep class com.gdelataillade.alarm.** { *; }
+-dontwarn com.gdelataillade.alarm.**
+
+# flutter_foreground_task (com.pravera.flutter_foreground_task) — same
+# reasoning: its Android foreground-service/task-handler classes are
+# started by the OS via class name, not a direct Kotlin call R8 can trace.
+-keep class com.pravera.flutter_foreground_task.** { *; }
+-dontwarn com.pravera.flutter_foreground_task.**
+
 # Gson-based (de)serialization used transitively by several Play Services
 # APIs (location, ML Kit) needs generic signatures kept to work post-shrink.
 -keepattributes Signature,*Annotation*

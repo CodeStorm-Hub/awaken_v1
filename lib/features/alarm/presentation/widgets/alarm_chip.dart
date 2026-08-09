@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// Small pill-shaped label chip used on [AlarmCard]. Named `AlarmChip`
 /// (rather than `Chip`) to avoid clashing with Flutter's own `Chip` widget.
@@ -20,10 +21,7 @@ class AlarmChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
+      decoration: BoxDecoration(color: bg, borderRadius: ShapeTokens.pill),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

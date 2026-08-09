@@ -5,6 +5,7 @@ import '../../../../core/theme/expressive_widgets.dart';
 import '../../../alarm/domain/entities/alarm_schedule.dart';
 import '../../../alarm/presentation/bloc/alarm_cubit.dart';
 import '../../../alarm/presentation/bloc/alarm_state.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 const _weekdayAbbrLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -69,7 +70,7 @@ class _NextAlarmCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return AppleGlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: ShapeTokens.r14,
       child: Row(
         children: [
           Expanded(
@@ -121,9 +122,7 @@ class _NextAlarmCard extends StatelessWidget {
               foregroundColor: scheme.onPrimaryContainer,
               elevation: 0,
               minimumSize: const Size(0, 36),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: ShapeTokens.r10),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             ),
             onPressed: onViewAlarms,

@@ -12,6 +12,13 @@ abstract interface class RepCounter {
 
   RepPhase get phase;
 
+  /// The joint angle at the most recent rep confirmation (the frame
+  /// `update()` last returned `true` for) — null before any rep has been
+  /// confirmed. Used to build the rep-evidence trace submitted for
+  /// server-side plausibility validation; not consumed by the state
+  /// machine itself.
+  double? get lastConfirmedAngleDegrees;
+
   void reset();
 }
 
@@ -88,6 +95,9 @@ class AngleRepCounter implements RepCounter {
   @override
   RepPhase phase = RepPhase.up;
 
+  @override
+  double? lastConfirmedAngleDegrees;
+
   int _belowStreak = 0;
   int _aboveStreak = 0;
   int _downHoldFrames = 0;
@@ -109,6 +119,7 @@ class AngleRepCounter implements RepCounter {
     _downHoldFrames = 0;
     _cooldownRemaining = 0;
     _lockedIsLeft = null;
+    lastConfirmedAngleDegrees = null;
   }
 
   @override
@@ -152,6 +163,7 @@ class AngleRepCounter implements RepCounter {
       _belowStreak = 0;
       _aboveStreak = 0;
       _lockedIsLeft = null;
+      lastConfirmedAngleDegrees = angle;
       return true;
     }
     return false;
@@ -178,7 +190,10 @@ class AngleRepCounter implements RepCounter {
         : (false, right.angle);
   }
 
-  ({double angle, double confidence})? _chainAngle(BodyPose pose, JointChain chain) {
+  ({double angle, double confidence})? _chainAngle(
+    BodyPose pose,
+    JointChain chain,
+  ) {
     final a = pose[chain.proximal];
     final v = pose[chain.vertex];
     final c = pose[chain.distal];

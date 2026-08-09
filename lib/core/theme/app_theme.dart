@@ -126,7 +126,7 @@ abstract final class AppTheme {
         color: isDark ? darkCardContainer : scheme.surfaceContainer,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: ShapeTokens.mediumLarge,
+          borderRadius: ShapeTokens.r16,
           side: BorderSide(
             color: isDark ? darkBorderOutline : scheme.outline,
             width: 0.5,
@@ -137,14 +137,14 @@ abstract final class AppTheme {
         backgroundColor: isDark ? darkSurface : scheme.surfaceContainer,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: ShapeTokens.largeExtra,
+          borderRadius: ShapeTokens.r20,
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,
-          shape: RoundedRectangleBorder(borderRadius: ShapeTokens.medium),
+          shape: RoundedRectangleBorder(borderRadius: ShapeTokens.r12),
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
@@ -154,7 +154,7 @@ abstract final class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,
-          shape: RoundedRectangleBorder(borderRadius: ShapeTokens.medium),
+          shape: RoundedRectangleBorder(borderRadius: ShapeTokens.r12),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),

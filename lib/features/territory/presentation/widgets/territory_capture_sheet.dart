@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../../../core/theme/semantic_colors.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// Territory-captured celebration (Claude Design handoff —
 /// `isTerritoryCelebrate`). `areaLabel` comes from the real `submit_run()`
@@ -58,7 +59,7 @@ class TerritoryCaptureSheet extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
                   color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: ShapeTokens.pill,
                 ),
               ),
               ExpressiveFlower(
@@ -97,7 +98,7 @@ class TerritoryCaptureSheet extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: ShapeTokens.pill,
                   border: Border.all(
                     color: scheme.outline.withValues(alpha: 0.3),
                     width: 1,
@@ -132,7 +133,7 @@ class TerritoryCaptureSheet extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: semantic.bountyGoldContainer,
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: ShapeTokens.pill,
                     border: Border.all(color: semantic.bountyGold, width: 1.5),
                     boxShadow: [
                       BoxShadow(
@@ -172,7 +173,7 @@ class TerritoryCaptureSheet extends StatelessWidget {
                     foregroundColor: Colors.white,
                     minimumSize: const Size.fromHeight(56),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: ShapeTokens.pill,
                     ),
                   ),
                   onPressed: () => Navigator.of(context).pop(),

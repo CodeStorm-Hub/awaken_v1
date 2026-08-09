@@ -1,3 +1,15 @@
+// `kotlin.incremental=false` (see gradle.properties for the full rationale)
+// is a Windows-only workaround for the build-tools-api incremental compiler
+// failing to close its on-disk caches under this repo's build dir on that
+// OS. Injecting it here — into the same `-P`-flag-equivalent property map
+// `gradle.properties`/`providers.gradleProperty(...)` reads — rather than
+// hardcoding it in `gradle.properties` means Linux/CI builds (and macOS
+// contributors) keep incremental Kotlin compilation instead of paying this
+// workaround's slower-build cost for a bug that's specific to Windows.
+if (System.getProperty("os.name").lowercase().contains("windows")) {
+    gradle.startParameter.projectProperties["kotlin.incremental"] = "false"
+}
+
 pluginManagement {
     val flutterSdkPath =
         run {

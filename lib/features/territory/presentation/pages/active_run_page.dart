@@ -8,6 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/theme/adaptive_dialog.dart';
 import '../../../../core/theme/semantic_colors.dart';
 import '../../domain/entities/geo_bounds.dart';
 import '../../domain/entities/run_track_state.dart';
@@ -29,6 +30,7 @@ import '../widgets/territory_capture_sheet.dart';
 import '../widgets/territory_map_math.dart';
 import '../widgets/territory_map_style.dart';
 import '../widgets/zoom_controls.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// Active-run tracking. Redesigned per the territory feature review + design
 /// research (Strava's "Map + Stats" redesign — the live map and run stats
@@ -80,10 +82,14 @@ class _ActiveRunViewState extends State<_ActiveRunView>
     with SingleTickerProviderStateMixin {
   MapLibreMapController? _controller;
   bool _styleLoaded = false;
-  static const _activeUserLocationSourceId = 'awaken-active-user-location-source';
-  static const _activeUserLocationPulseLayerId = 'awaken-active-user-location-pulse';
-  static const _activeUserLocationOuterLayerId = 'awaken-active-user-location-outer';
-  static const _activeUserLocationInnerLayerId = 'awaken-active-user-location-inner';
+  static const _activeUserLocationSourceId =
+      'awaken-active-user-location-source';
+  static const _activeUserLocationPulseLayerId =
+      'awaken-active-user-location-pulse';
+  static const _activeUserLocationOuterLayerId =
+      'awaken-active-user-location-outer';
+  static const _activeUserLocationInnerLayerId =
+      'awaken-active-user-location-inner';
   bool _activeUserLocationLayerReady = false;
   LatLng? _lastPosition;
 
@@ -106,8 +112,10 @@ class _ActiveRunViewState extends State<_ActiveRunView>
   // map is built exactly once and never inside a rebuild scope (see class
   // doc comment), and a full redraw pipeline here would be a much bigger
   // change than "some context" calls for.
-  static const _territoryContextSourceId = 'active-run-territory-context-source';
-  static const _territoryContextFillLayerId = 'active-run-territory-context-fill-layer';
+  static const _territoryContextSourceId =
+      'active-run-territory-context-source';
+  static const _territoryContextFillLayerId =
+      'active-run-territory-context-fill-layer';
   bool _territoryContextLayerReady = false;
   StreamSubscription<List<Territory>>? _territoriesSub;
   LatLng? _lastRefreshedNear;
@@ -120,17 +128,26 @@ class _ActiveRunViewState extends State<_ActiveRunView>
   @override
   void initState() {
     super.initState();
-    _locationAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    )..addListener(() {
-        if (_previousLocation != null && _lastPosition != null) {
-          final t = _locationAnimController!.value;
-          final lat = lerpDouble(_previousLocation!.latitude, _lastPosition!.latitude, t)!;
-          final lng = lerpDouble(_previousLocation!.longitude, _lastPosition!.longitude, t)!;
-          unawaited(_updateMarkerLocation(LatLng(lat, lng)));
-        }
-      });
+    _locationAnimController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 1000),
+        )..addListener(() {
+          if (_previousLocation != null && _lastPosition != null) {
+            final t = _locationAnimController!.value;
+            final lat = lerpDouble(
+              _previousLocation!.latitude,
+              _lastPosition!.latitude,
+              t,
+            )!;
+            final lng = lerpDouble(
+              _previousLocation!.longitude,
+              _lastPosition!.longitude,
+              t,
+            )!;
+            unawaited(_updateMarkerLocation(LatLng(lat, lng)));
+          }
+        });
   }
 
   @override
@@ -184,7 +201,17 @@ class _ActiveRunViewState extends State<_ActiveRunView>
       // JSON). Kept in sync here too since this page renders its own
       // `MapLibreMap` on the same OpenFreeMap style tiers.
       final isDark = mounted && Theme.of(context).brightness == Brightness.dark;
-      unawaited(TerritoryBasemapRecolor.apply(controller, isDark: isDark));
+      // Both calls are already internally best-effort (every native call
+      // inside them is individually try/caught) — `catchError` here is a
+      // defensive backstop only, so a future regression in either can't
+      // turn into a silent unhandled-future rejection just because this
+      // call site is `unawaited`.
+      unawaited(
+        TerritoryBasemapRecolor.apply(
+          controller,
+          isDark: isDark,
+        ).catchError((_) {}),
+      );
       // Real 3D city buildings (territory map 3D redesign §5.4 — extends
       // §5.1's `TerritoryPage` treatment to the live-run map) — same
       // fallback-tier gate as `TerritoryPage._onStyleLoaded`.
@@ -193,7 +220,7 @@ class _ActiveRunViewState extends State<_ActiveRunView>
           TerritoryBasemapRecolor.applyCityBuildings(
             controller,
             isDark: isDark,
-          ),
+          ).catchError((_) {}),
         );
       }
       if (!_avatarIconRegistered) {
@@ -218,9 +245,7 @@ class _ActiveRunViewState extends State<_ActiveRunView>
       // has been drawn yet, so this never fights a live run already in
       // progress after a style-tier fallback swap.
       if (widget.focusLocation != null && _lastPosition == null) {
-        await controller.animateCamera(
-          _cameraUpdateFor(widget.focusLocation!),
-        );
+        await controller.animateCamera(_cameraUpdateFor(widget.focusLocation!));
       }
       // A fallback-tier style swap tears down and recreates the native map
       // view (see MapStyleLoader), so this can run more than once per page
@@ -290,9 +315,9 @@ class _ActiveRunViewState extends State<_ActiveRunView>
     _lastRefreshedNear = center;
     const earthRadiusM = 6371000.0;
     final latRad = center.latitude * (math.pi / 180);
-    final dLat =
-        (_territoryContextRadiusM / earthRadiusM) * (180 / math.pi);
-    final dLng = (_territoryContextRadiusM / (earthRadiusM * math.cos(latRad))) *
+    final dLat = (_territoryContextRadiusM / earthRadiusM) * (180 / math.pi);
+    final dLng =
+        (_territoryContextRadiusM / (earthRadiusM * math.cos(latRad))) *
         (180 / math.pi);
     try {
       await getIt<RefreshTerritories>()(
@@ -378,9 +403,7 @@ class _ActiveRunViewState extends State<_ActiveRunView>
   Future<void> _recenterCamera() async {
     final controller = _controller;
     if (controller == null || _lastPosition == null) return;
-    await controller.animateCamera(
-      _cameraUpdateFor(_lastPosition!),
-    );
+    await controller.animateCamera(_cameraUpdateFor(_lastPosition!));
   }
 
   Future<void> _updateMarkerLocation(LatLng pos) async {
@@ -455,9 +478,10 @@ class _ActiveRunViewState extends State<_ActiveRunView>
 
   /// `CameraUpdate.newLatLngZoom` always resets `tilt` to 0 — see
   /// `TerritoryPage._cameraUpdateForFocus`'s identical note.
-  CameraUpdate _cameraUpdateFor(LatLng target) => CameraUpdate.newCameraPosition(
-    CameraPosition(target: target, zoom: _focusZoom, tilt: _tilt),
-  );
+  CameraUpdate _cameraUpdateFor(LatLng target) =>
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: target, zoom: _focusZoom, tilt: _tilt),
+      );
 
   /// The follow/recenter zoom, clamped to the active style tier's data
   /// ceiling (see `MapStyleLoader.dataMaxZoom`) — otherwise the bundled
@@ -585,30 +609,16 @@ class _ActiveRunViewState extends State<_ActiveRunView>
     final elapsedSec = state.elapsed.inSeconds;
     final m = (elapsedSec ~/ 60).toString().padLeft(2, '0');
     final s = (elapsedSec % 60).toString().padLeft(2, '0');
-    final confirmed = await showDialog<bool>(
+    return showAdaptiveConfirmDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Discard this run?'),
-        content: Text(
+      title: 'Discard this run?',
+      message:
           "You'll lose $distanceKm km and $m:$s tracked so far — this run "
           "won't be saved.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Keep running'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(dialogContext).colorScheme.error,
-            ),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Discard'),
-          ),
-        ],
-      ),
+      cancelLabel: 'Keep running',
+      confirmLabel: 'Discard',
+      isDestructive: true,
     );
-    return confirmed ?? false;
   }
 
   Future<void> _abandon(BuildContext context, RunTrackingCubit cubit) async {
@@ -667,9 +677,11 @@ class _ActiveRunViewState extends State<_ActiveRunView>
                             ),
                             decoration: BoxDecoration(
                               color: scheme.surfaceContainerHigh,
-                              borderRadius: BorderRadius.circular(999),
+                              borderRadius: ShapeTokens.pill,
                               border: Border.all(
-                                color: scheme.outlineVariant.withValues(alpha: 0.25),
+                                color: scheme.outlineVariant.withValues(
+                                  alpha: 0.25,
+                                ),
                               ),
                             ),
                             child: Row(
@@ -703,9 +715,11 @@ class _ActiveRunViewState extends State<_ActiveRunView>
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Container(
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: ShapeTokens.r24,
                             border: Border.all(
-                              color: scheme.outlineVariant.withValues(alpha: 0.3),
+                              color: scheme.outlineVariant.withValues(
+                                alpha: 0.3,
+                              ),
                               width: 1,
                             ),
                             boxShadow: [
@@ -717,7 +731,7 @@ class _ActiveRunViewState extends State<_ActiveRunView>
                             ],
                           ),
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(23),
+                            borderRadius: ShapeTokens.r23,
                             child: Stack(
                               children: [
                                 // A static label, not one driven by
@@ -748,7 +762,9 @@ class _ActiveRunViewState extends State<_ActiveRunView>
                                             ),
                                       onMapCreated: _onMapCreated,
                                       onStyleLoadedCallback: _onStyleLoaded,
-                                      onMapLongClick: (_, _) => unawaited(HapticFeedback.mediumImpact()),
+                                      onMapLongClick: (_, _) => unawaited(
+                                        HapticFeedback.mediumImpact(),
+                                      ),
                                       compassEnabled: false,
                                       myLocationEnabled: false,
                                       logoEnabled: false,

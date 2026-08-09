@@ -87,7 +87,8 @@ class HomeState extends Equatable {
       squadError: squadError ?? this.squadError,
       recentActivity: recentActivity ?? this.recentActivity,
       recentActivityError: recentActivityError ?? this.recentActivityError,
-      recentActivityLoading: recentActivityLoading ?? this.recentActivityLoading,
+      recentActivityLoading:
+          recentActivityLoading ?? this.recentActivityLoading,
       wakeUpTaxMultiplier: wakeUpTaxMultiplier ?? this.wakeUpTaxMultiplier,
     );
   }

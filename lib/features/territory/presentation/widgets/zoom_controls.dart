@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'round_map_button.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// Manual zoom in/out — pinch gestures already reach the full zoom range
 /// (`MapLibreMap`'s default `minMaxZoomPreference` is unbounded), so this is
@@ -23,7 +24,7 @@ class ZoomControls extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: ShapeTokens.pill,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

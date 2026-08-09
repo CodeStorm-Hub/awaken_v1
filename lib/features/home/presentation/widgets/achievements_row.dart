@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class AchievementsRow extends StatelessWidget {
   const AchievementsRow({
@@ -45,7 +46,7 @@ class AchievementsRow extends StatelessWidget {
     ];
     return AppleGlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: ShapeTokens.r14,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: achievements.map((a) {

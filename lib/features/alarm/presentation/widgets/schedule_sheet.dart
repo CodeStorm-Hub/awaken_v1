@@ -9,6 +9,7 @@ import 'ios_day_toggle.dart';
 import 'ios_mode_pill.dart';
 import 'ios_step_button.dart';
 import 'weekday_labels.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class ScheduleSheet extends StatefulWidget {
   const ScheduleSheet({super.key, required this.onSchedule});
@@ -226,7 +227,7 @@ class ScheduleSheetState extends State<ScheduleSheet> {
                   color: isDark
                       ? const Color(0xFF2C2C2E)
                       : scheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: ShapeTokens.r14,
                   border: Border.all(
                     color: scheme.outline.withValues(alpha: 0.2),
                     width: 0.5,
@@ -410,7 +411,7 @@ class ScheduleSheetState extends State<ScheduleSheet> {
                 ),
                 decoration: BoxDecoration(
                   color: accentColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: ShapeTokens.r12,
                   border: Border.all(
                     color: accentColor.withValues(alpha: 0.35),
                   ),

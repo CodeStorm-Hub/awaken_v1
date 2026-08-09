@@ -5,7 +5,11 @@ import '../entities/body_pose.dart';
 /// Angle at [vertex], between rays to [a] and [c], in degrees (0–180).
 /// Standard 2D joint-angle formula used for the squat (hip-knee-ankle) and
 /// push-up (shoulder-elbow-wrist) rep state machines.
-double jointAngleDegrees(JointPosition a, JointPosition vertex, JointPosition c) {
+double jointAngleDegrees(
+  JointPosition a,
+  JointPosition vertex,
+  JointPosition c,
+) {
   final v1x = a.x - vertex.x;
   final v1y = a.y - vertex.y;
   final v2x = c.x - vertex.x;
@@ -24,7 +28,11 @@ double jointAngleDegrees(JointPosition a, JointPosition vertex, JointPosition c)
 /// drives a rep count, with a left/right pair so whichever side the camera
 /// sees more clearly (higher confidence) is used.
 class JointChain {
-  const JointChain({required this.proximal, required this.vertex, required this.distal});
+  const JointChain({
+    required this.proximal,
+    required this.vertex,
+    required this.distal,
+  });
 
   final BodyJoint proximal;
   final BodyJoint vertex;

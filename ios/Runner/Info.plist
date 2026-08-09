@@ -68,8 +68,6 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>This app uses the camera for verifying exercises (like squats and pushups) to dismiss alarms.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>This app uses the microphone when recording exercise videos for verification.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>This app needs access to your location when open to track your runs and capture territory on the map.</string>
 	<key>CFBundleURLTypes</key>

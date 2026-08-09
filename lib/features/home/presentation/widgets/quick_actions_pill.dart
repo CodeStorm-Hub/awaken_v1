@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../../../core/di/injection.dart';
+import '../../../profile/domain/repositories/auth_repository.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class QuickActionsPill extends StatelessWidget {
   const QuickActionsPill({
@@ -14,13 +17,8 @@ class QuickActionsPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    bool isGuest = false;
-    try {
-      final user = Supabase.instance.client.auth.currentUser;
-      isGuest = user == null || user.isAnonymous;
-    } catch (_) {
-      isGuest = false;
-    }
+    final user = getIt<AuthRepository>().currentUser;
+    final isGuest = user == null || user.isAnonymous;
 
     return Row(
       children: [
@@ -31,12 +29,13 @@ class QuickActionsPill extends StatelessWidget {
               backgroundColor: scheme.primary,
               foregroundColor: Colors.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: ShapeTokens.r12),
             ),
             onPressed: onOpenTerritory,
-            icon: Icon(isGuest ? Icons.lock_outline : Icons.directions_run, size: 18),
+            icon: Icon(
+              isGuest ? Icons.lock_outline : Icons.directions_run,
+              size: 18,
+            ),
             label: Text(
               isGuest ? 'Unlock Run' : 'Start run',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
@@ -51,9 +50,7 @@ class QuickActionsPill extends StatelessWidget {
               foregroundColor: scheme.onSurface,
               side: BorderSide(color: scheme.outline, width: 0.5),
               backgroundColor: scheme.surfaceContainer,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: ShapeTokens.r12),
             ),
             onPressed: onOpenSquad,
             icon: Icon(isGuest ? Icons.lock_outline : Icons.groups, size: 18),

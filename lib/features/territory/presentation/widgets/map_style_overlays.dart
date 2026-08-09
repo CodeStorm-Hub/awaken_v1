@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/semantic_colors.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// Blocking overlay shown once every configured style tier
 /// ([MapStyleLoader]) has timed out. Offers a manual retry rather than
@@ -63,10 +64,7 @@ class MapStyleRetryingBanner extends StatelessWidget {
   // "Incorrect use of ParentDataWidget" on every build once a retry
   // banner was shown).
   const MapStyleRetryingBanner({this.top, this.bottom, super.key})
-    : assert(
-        top == null || bottom == null,
-        'pass only one of top/bottom',
-      );
+    : assert(top == null || bottom == null, 'pass only one of top/bottom');
 
   final double? top;
   final double? bottom;
@@ -81,7 +79,7 @@ class MapStyleRetryingBanner extends StatelessWidget {
       right: 14,
       child: Material(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: ShapeTokens.r12,
         child: const Padding(
           padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
@@ -139,7 +137,7 @@ class MapDegradedModeChip extends StatelessWidget {
           label: 'Limited map mode — showing a low-detail offline map',
           child: Material(
             color: semantic.warningContainer,
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: ShapeTokens.pill,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: Row(

@@ -38,8 +38,14 @@ class EmptyState extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            SizedBox(
-              width: 220,
+            // Was a fixed `width: 220` — at 200%+ accessibility text scale
+            // that forced many short wrapped lines in a narrow column
+            // instead of reflowing to use the space actually available (the
+            // parent is already `width: double.infinity`). Horizontal
+            // padding alone keeps the same compact centered look at normal
+            // text scale while letting large-scale text use the full width.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Text(
                 'Schedule one and earn tomorrow morning.',
                 textAlign: TextAlign.center,

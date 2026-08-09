@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
 class StartFailedView extends StatelessWidget {
-  const StartFailedView({super.key, required this.onRetry, required this.onClose});
+  const StartFailedView({
+    super.key,
+    required this.onRetry,
+    required this.onClose,
+  });
 
   final VoidCallback onRetry;
   final VoidCallback onClose;

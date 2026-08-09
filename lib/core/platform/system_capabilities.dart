@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/services.dart';
 import 'package:injectable/injectable.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 /// Wraps the native `com.awaken.awaken/system_capabilities` MethodChannel
 /// (see android/app/.../MainActivity.kt) — FSI/exact-alarm capability
@@ -17,10 +19,23 @@ import 'package:injectable/injectable.dart';
 class SystemCapabilities {
   static const _channel = MethodChannel('com.awaken.awaken/system_capabilities');
 
+  /// The `Platform.isAndroid` guard only protects iOS (no channel exists
+  /// there at all) — it says nothing about a genuine Android-side channel
+  /// failure (e.g. an OEM-patched `MainActivity.kt` missing a handler
+  /// branch, or the channel not yet attached during a very early call).
+  /// Every caller here treats these as best-effort capability probes, not
+  /// load-bearing calls, so falling back rather than throwing/crashing is
+  /// the correct behavior for a `PlatformException`/`MissingPluginException`
+  /// too, not just the "not Android" case.
   Future<T> _invoke<T>(String method, T fallback) async {
     if (!Platform.isAndroid) return fallback;
-    final result = await _channel.invokeMethod<T>(method);
-    return result ?? fallback;
+    try {
+      final result = await _channel.invokeMethod<T>(method);
+      return result ?? fallback;
+    } catch (e, st) {
+      unawaited(Sentry.captureException(e, stackTrace: st));
+      return fallback;
+    }
   }
 
   Future<bool> canUseFullScreenIntent() =>

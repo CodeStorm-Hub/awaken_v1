@@ -7,6 +7,7 @@ import 'invite_code_card.dart';
 import 'leaderboard_row.dart';
 import 'member_avatar.dart';
 import 'squad_page_shared.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class SquadLoadedView extends StatelessWidget {
   const SquadLoadedView({super.key, required this.state});
@@ -75,7 +76,7 @@ class SquadLoadedView extends StatelessWidget {
                                     displayName: m.displayName,
                                     avatarUrl: m.avatarUrl,
                                     size: 44,
-                                    borderRadius: BorderRadius.circular(16),
+                                    borderRadius: ShapeTokens.r16,
                                     background: scheme.tertiaryContainer,
                                     foreground: scheme.onTertiaryContainer,
                                   ),

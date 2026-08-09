@@ -92,7 +92,7 @@ class AppleGlassContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final effectiveRadius = borderRadius ?? ShapeTokens.mediumLarge;
+    final effectiveRadius = borderRadius ?? ShapeTokens.r16;
 
     final surfaceBorder =
         borderColor ?? scheme.outlineVariant.withValues(alpha: 0.4);
@@ -465,8 +465,8 @@ class ExpressiveSwitch extends StatelessWidget {
 BorderRadius groupedItemRadius({
   required int index,
   required int count,
-  double outer = 24, // ShapeTokens.extraLarge
-  double inner = 8, // ShapeTokens.small
+  double outer = 24, // ShapeTokens.r24
+  double inner = 8, // ShapeTokens.r8
 }) {
   final top = index == 0 ? outer : inner;
   final bottom = index == count - 1 ? outer : inner;
@@ -487,7 +487,7 @@ class StatTile extends StatelessWidget {
     required this.value,
     required this.label,
     this.icon,
-    this.radius = ShapeTokens.small,
+    this.radius = ShapeTokens.r8,
     this.hasError = false,
     this.padding = const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
     super.key,

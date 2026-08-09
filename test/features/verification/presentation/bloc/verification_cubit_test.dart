@@ -4,6 +4,7 @@ import 'package:awaken/core/usecase/usecase.dart';
 import 'package:awaken/features/alarm/domain/entities/alarm_schedule.dart';
 import 'package:awaken/features/squad/domain/repositories/squad_repository.dart';
 import 'package:awaken/features/verification/domain/entities/verification_state.dart';
+import 'package:awaken/features/verification/domain/usecases/release_verification_resources.dart';
 import 'package:awaken/features/verification/domain/usecases/start_verification_session.dart';
 import 'package:awaken/features/verification/domain/usecases/stop_verification_session.dart';
 import 'package:awaken/features/verification/domain/usecases/watch_verification_state.dart';
@@ -24,6 +25,9 @@ class _MockStopVerificationSession extends Mock
 class _MockWatchVerificationState extends Mock
     implements WatchVerificationState {}
 
+class _MockReleaseVerificationResources extends Mock
+    implements ReleaseVerificationResources {}
+
 class _MockSquadRepository extends Mock implements SquadRepository {}
 
 class _MockPermissionHandlerPlatform extends Mock
@@ -40,6 +44,7 @@ void main() {
   late _MockStartVerificationSession startSession;
   late _MockStopVerificationSession stopSession;
   late _MockWatchVerificationState watchState;
+  late _MockReleaseVerificationResources releaseResources;
   late _MockSquadRepository squadRepository;
   late _MockPermissionHandlerPlatform permissionPlatform;
   late _MockWakelockPlusPlatform wakelockPlatform;
@@ -58,6 +63,7 @@ void main() {
     startSession = _MockStartVerificationSession();
     stopSession = _MockStopVerificationSession();
     watchState = _MockWatchVerificationState();
+    releaseResources = _MockReleaseVerificationResources();
     squadRepository = _MockSquadRepository();
     permissionPlatform = _MockPermissionHandlerPlatform();
     wakelockPlatform = _MockWakelockPlusPlatform();
@@ -81,6 +87,7 @@ void main() {
     when(() => watchState()).thenAnswer((_) => stateController.stream);
     when(() => startSession(any())).thenAnswer((_) async {});
     when(() => stopSession(any())).thenAnswer((_) async {});
+    when(() => releaseResources(any())).thenAnswer((_) async {});
     when(
       () => squadRepository.trackPresence(activity: any(named: 'activity')),
     ).thenAnswer((_) async {});
@@ -94,7 +101,7 @@ void main() {
   });
 
   VerificationCubit buildCubit() =>
-      VerificationCubit(startSession, stopSession, watchState, squadRepository);
+      VerificationCubit(startSession, stopSession, watchState, releaseResources, squadRepository);
 
   void denyPermission() {
     when(() => permissionPlatform.requestPermissions(any())).thenAnswer(

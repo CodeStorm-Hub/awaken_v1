@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/theme/adaptive_dialog.dart';
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../../alarm/domain/entities/alarm_schedule.dart';
 import '../../data/datasources/camera_datasource.dart';
@@ -14,6 +15,7 @@ import '../../domain/entities/verification_result.dart';
 import '../../domain/entities/verification_state.dart';
 import '../bloc/verification_cubit.dart';
 import '../widgets/skeleton_painter.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// Camera + pose verification screen (plan §6 Phase 2). Wired in as the
 /// alarm-dismiss gate — `AlarmRingPage` pushes this instead of exposing any
@@ -71,7 +73,11 @@ class _VerificationViewState extends State<_VerificationView>
       case AppLifecycleState.resumed:
         unawaited(cubit.resume());
       case AppLifecycleState.detached:
-        break;
+        // The engine is tearing down — release ML Kit's native detector
+        // here rather than never, since there's no other reliable teardown
+        // hook for a process-lifetime singleton (see
+        // PoseDetectorDataSource.close()).
+        unawaited(cubit.releaseNativeResources());
     }
   }
 
@@ -86,34 +92,24 @@ class _VerificationViewState extends State<_VerificationView>
     final cubit = context.read<VerificationCubit>();
     final state = cubit.state;
     if (state.completedReps > 0 && !state.isComplete) {
-      final confirmed = await showDialog<bool>(
+      final confirmed = await showAdaptiveConfirmDialog(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Exit workout?'),
-          content: Text(
+        title: 'Exit workout?',
+        message:
             "You've completed ${state.completedReps} of "
             '${state.targetReps} reps — leaving now won\'t dismiss the '
             'alarm.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Keep going'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Exit'),
-            ),
-          ],
-        ),
+        cancelLabel: 'Keep going',
+        confirmLabel: 'Exit',
       );
-      if (confirmed != true) return;
+      if (!confirmed) return;
     }
     if (context.mounted) {
       Navigator.of(context).pop(
         VerificationResult(
           completed: false,
           repsCompleted: state.completedReps,
+          repTrace: state.repTrace,
         ),
       );
     }
@@ -431,7 +427,7 @@ class _StatusBannerState extends State<_StatusBanner>
             // A smaller rounded-rect radius still reads as a soft banner
             // chip on the single-line messages and doesn't visually break
             // when the text wraps.
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: ShapeTokens.r18,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -521,7 +517,7 @@ class _RepSegments extends StatelessWidget {
                       color: filled
                           ? scheme.primaryContainer
                           : Colors.white.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: ShapeTokens.pill,
                     ),
                   ),
                 ),
@@ -673,14 +669,13 @@ class _RepCounterState extends State<_RepCounter> {
                 backgroundColor: scheme.primaryContainer,
                 foregroundColor: scheme.onPrimaryContainer,
                 minimumSize: const Size.fromHeight(60),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(999),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: ShapeTokens.pill),
               ),
               onPressed: () => Navigator.of(context).pop(
                 VerificationResult(
                   completed: true,
                   repsCompleted: state.completedReps,
+                  repTrace: state.repTrace,
                 ),
               ),
               child: const Text('Done'),
@@ -694,14 +689,13 @@ class _RepCounterState extends State<_RepCounter> {
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.white.withValues(alpha: 0.8),
               side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: ShapeTokens.pill),
             ),
             onPressed: () => Navigator.of(context).pop(
               VerificationResult(
                 completed: false,
                 repsCompleted: state.completedReps,
+                repTrace: state.repTrace,
               ),
             ),
             child: const Text("I can't do this exercise today"),

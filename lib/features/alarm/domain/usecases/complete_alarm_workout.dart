@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:injectable/injectable.dart';
 
 import '../../../../core/usecase/usecase.dart';
+import '../../../verification/domain/entities/rep_evidence.dart';
 import '../entities/alarm_schedule.dart';
 import '../repositories/alarm_repository.dart';
 
@@ -11,6 +12,7 @@ class CompleteAlarmWorkoutParams extends Equatable {
     required this.verified,
     required this.repsCompleted,
     required this.startedAt,
+    this.repTrace = const [],
     this.isPreview = false,
   });
 
@@ -18,6 +20,10 @@ class CompleteAlarmWorkoutParams extends Equatable {
   final bool verified;
   final int repsCompleted;
   final DateTime startedAt;
+
+  /// See `RepEvidence`'s doc comment — forwarded to
+  /// `complete_workout_session()` for server-side plausibility validation.
+  final List<RepEvidence> repTrace;
 
   /// See `AlarmRepository.completeWorkout`'s doc comment — must be true for
   /// `AlarmListPage`'s "tap to preview" flow, false for a real ring.
@@ -29,6 +35,7 @@ class CompleteAlarmWorkoutParams extends Equatable {
     verified,
     repsCompleted,
     startedAt,
+    repTrace,
     isPreview,
   ];
 }
@@ -47,6 +54,7 @@ class CompleteAlarmWorkout
         verified: params.verified,
         repsCompleted: params.repsCompleted,
         startedAt: params.startedAt,
+        repTrace: params.repTrace,
         isPreview: params.isPreview,
       );
 }

@@ -54,9 +54,14 @@ void main() {
     // CurrentUserAvatarButton (in HomePage's header) resolves this via getIt
     // — same fake used by alarm_list_page_test.dart to avoid needing the
     // app's full configureDependencies().
+    final fakeAuthRepository = _FakeAuthRepository();
     getIt.registerFactory<WatchCurrentUser>(
-      () => WatchCurrentUser(_FakeAuthRepository()),
+      () => WatchCurrentUser(fakeAuthRepository),
     );
+    // QuickActionsPill (HomePage's Territory/Squad shortcuts) resolves this
+    // directly via getIt to gate guest access — see app_shell_page.dart's
+    // identical pattern.
+    getIt.registerFactory<AuthRepository>(() => fakeAuthRepository);
   });
 
   tearDown(() async {

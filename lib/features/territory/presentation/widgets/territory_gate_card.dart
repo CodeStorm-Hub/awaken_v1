@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../../profile/presentation/widgets/auth_dialog.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// Expressive feature gate shown to Guest / Unauthenticated users when
 /// attempting to access Territory mapping, GPS run tracking, or Squads.
@@ -18,7 +19,7 @@ class TerritoryGateCard extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         child: AppleGlassContainer(
           padding: const EdgeInsets.all(28),
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: ShapeTokens.r28,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -56,18 +57,17 @@ class TerritoryGateCard extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: ShapeTokens.r12,
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.alarm,
-                      size: 18,
-                      color: scheme.primary,
-                    ),
+                    Icon(Icons.alarm, size: 18, color: scheme.primary),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
@@ -88,13 +88,11 @@ class TerritoryGateCard extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(50),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: ShapeTokens.r14,
                     ),
                   ),
-                  onPressed: () => AuthDialog.show(
-                    context,
-                    mode: AuthDialogMode.link,
-                  ),
+                  onPressed: () =>
+                      AuthDialog.show(context, mode: AuthDialogMode.link),
                   child: const Text(
                     'Create Free Account',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -103,10 +101,8 @@ class TerritoryGateCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               TextButton(
-                onPressed: () => AuthDialog.show(
-                  context,
-                  mode: AuthDialogMode.signIn,
-                ),
+                onPressed: () =>
+                    AuthDialog.show(context, mode: AuthDialogMode.signIn),
                 child: const Text(
                   'Already have an account? Sign in',
                   style: TextStyle(fontWeight: FontWeight.w600),

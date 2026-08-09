@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class SettingsRow extends StatelessWidget {
   const SettingsRow({
@@ -42,7 +43,7 @@ class SettingsRow extends StatelessWidget {
                 height: 32,
                 decoration: BoxDecoration(
                   color: scheme.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: ShapeTokens.r8,
                 ),
                 child: Icon(icon, size: 18, color: scheme.primary),
               ),

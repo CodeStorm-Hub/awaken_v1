@@ -84,6 +84,7 @@ void main() {
     when(
       () => watchSquadPresence(any()),
     ).thenAnswer((_) => const Stream.empty());
+    when(() => squadRepository.refreshFailures).thenAnswer((_) => const Stream.empty());
   });
 
   SquadCubit buildCubit() => SquadCubit(

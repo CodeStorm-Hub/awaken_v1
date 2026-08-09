@@ -31,6 +31,9 @@ class SquadCubit extends Cubit<SquadState> {
     this._squadRepository,
   ) : super(const SquadState()) {
     _subscribeToMySquad();
+    _refreshFailureSub = _squadRepository.refreshFailures.listen(
+      (_) => emit(state.copyWith(refreshFailed: true)),
+    );
   }
 
   void _subscribeToMySquad() {
@@ -70,6 +73,11 @@ class SquadCubit extends Cubit<SquadState> {
   late StreamSubscription<Squad?> _mySquadSub;
   StreamSubscription<List<LeaderboardEntry>>? _leaderboardSub;
   StreamSubscription<List<SquadPresenceMember>>? _presenceSub;
+  late final StreamSubscription<Object> _refreshFailureSub;
+
+  /// Called by the page once it's shown the transient SnackBar for
+  /// [SquadState.refreshFailed], so a later rebuild doesn't show it again.
+  void dismissRefreshFailure() => emit(state.copyWith(refreshFailed: false));
 
   void _onSquadChanged(Squad? squad) {
     unawaited(_leaderboardSub?.cancel());
@@ -131,6 +139,7 @@ class SquadCubit extends Cubit<SquadState> {
     await _mySquadSub.cancel();
     await _leaderboardSub?.cancel();
     await _presenceSub?.cancel();
+    await _refreshFailureSub.cancel();
     return super.close();
   }
 }

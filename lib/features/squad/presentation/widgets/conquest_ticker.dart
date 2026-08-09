@@ -81,37 +81,37 @@ class ConquestTickerState extends State<ConquestTicker> {
         duration: MotionTokens.defaultSpatial,
         switchInCurve: MotionTokens.effectsCurve,
         switchOutCurve: MotionTokens.effectsCurve,
-      child: Container(
-        key: ValueKey(item.captureId),
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainer,
-          borderRadius: ShapeTokens.mediumLarge,
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.bolt_rounded, size: 16, color: scheme.tertiary),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Semantics(
-                liveRegion: true,
-                child: Text(
-                  _label(item),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: scheme.onSurfaceVariant,
+        child: Container(
+          key: ValueKey(item.captureId),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainer,
+            borderRadius: ShapeTokens.r16,
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.bolt_rounded, size: 16, color: scheme.tertiary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    _label(item),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
   }
 }

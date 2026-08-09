@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import '../../../alarm/domain/entities/alarm_schedule.dart';
 import 'body_pose.dart';
+import 'rep_evidence.dart';
 
 /// Number of clean reps required during calibration before counting
 /// "for real" toward the target (plan §5 point 5 — "3-rep calibration
@@ -66,6 +67,7 @@ class VerificationState extends Equatable {
     this.completedReps = 0,
     this.calibrationRepsRemaining = kCalibrationReps,
     this.currentPose,
+    this.repTrace = const [],
   });
 
   final VerificationStatus status;
@@ -78,6 +80,11 @@ class VerificationState extends Equatable {
   /// currently detected.
   final BodyPose? currentPose;
 
+  /// Timing/angle evidence for every confirmed rep this session (including
+  /// calibration reps) — submitted as [VerificationResult.repTrace] for
+  /// server-side plausibility validation. See `RepEvidence`'s doc comment.
+  final List<RepEvidence> repTrace;
+
   bool get isComplete => status == VerificationStatus.complete;
 
   VerificationState copyWith({
@@ -88,14 +95,17 @@ class VerificationState extends Equatable {
     int? calibrationRepsRemaining,
     BodyPose? currentPose,
     bool clearPose = false,
+    List<RepEvidence>? repTrace,
   }) {
     return VerificationState(
       status: status ?? this.status,
       exerciseMode: exerciseMode ?? this.exerciseMode,
       targetReps: targetReps ?? this.targetReps,
       completedReps: completedReps ?? this.completedReps,
-      calibrationRepsRemaining: calibrationRepsRemaining ?? this.calibrationRepsRemaining,
+      calibrationRepsRemaining:
+          calibrationRepsRemaining ?? this.calibrationRepsRemaining,
       currentPose: clearPose ? null : (currentPose ?? this.currentPose),
+      repTrace: repTrace ?? this.repTrace,
     );
   }
 
@@ -107,5 +117,6 @@ class VerificationState extends Equatable {
     completedReps,
     calibrationRepsRemaining,
     currentPose,
+    repTrace,
   ];
 }

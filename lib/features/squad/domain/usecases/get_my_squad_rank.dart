@@ -12,10 +12,7 @@ class GetMySquadRank {
 
   final SquadRepository _repository;
 
-  Future<int?> call({
-    required String squadId,
-    String timeWindow = 'all_time',
-  }) {
+  Future<int?> call({required String squadId, String timeWindow = 'all_time'}) {
     return _repository.fetchMySquadRank(
       squadId: squadId,
       timeWindow: timeWindow,

@@ -8,7 +8,10 @@ import 'package:injectable/injectable.dart';
 @lazySingleton
 class PoseDetectorDataSource {
   final PoseDetector _detector = PoseDetector(
-    options: PoseDetectorOptions(model: PoseDetectionModel.base, mode: PoseDetectionMode.stream),
+    options: PoseDetectorOptions(
+      model: PoseDetectionModel.base,
+      mode: PoseDetectionMode.stream,
+    ),
   );
 
   Future<List<Pose>> process(InputImage image) => _detector.processImage(image);

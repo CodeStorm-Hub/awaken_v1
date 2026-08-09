@@ -50,7 +50,15 @@ class WakeUpTaxStore {
   }
 
   /// Full reset on any verified completion — the most legible rule (plan
-  /// discussion: legibility over economy-tuning nuance).
-  Future<void> reset() =>
-      _localWriter.upsertUserStats(currentTaxMultiplier: 1.0, action: 'reset');
+  /// discussion: legibility over economy-tuning nuance). [sessionId] lets
+  /// the server gate the actual reward on that session's rep-trace
+  /// integrity verdict (see `reset_wake_up_tax`'s doc comment) — the local
+  /// value here is still written optimistically for a responsive UI either
+  /// way, same as `bump()` above.
+  Future<void> reset({required String sessionId}) =>
+      _localWriter.upsertUserStats(
+        currentTaxMultiplier: 1.0,
+        action: 'reset',
+        sessionId: sessionId,
+      );
 }

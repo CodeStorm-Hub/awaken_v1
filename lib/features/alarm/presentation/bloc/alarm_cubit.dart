@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 
+import '../../../verification/domain/entities/rep_evidence.dart';
 import '../../domain/entities/alarm_schedule.dart';
 import '../../domain/usecases/cancel_alarm.dart';
 import '../../domain/usecases/complete_alarm_workout.dart';
-import '../../domain/usecases/dismiss_alarm.dart';
 import '../../domain/usecases/schedule_alarm.dart';
 import '../../domain/usecases/set_alarm_active.dart';
 import '../../domain/usecases/watch_alarms.dart';
@@ -23,7 +23,6 @@ class AlarmCubit extends Cubit<AlarmState> {
     this._watchRingingAlarm,
     this._scheduleAlarm,
     this._cancelAlarm,
-    this._dismissAlarm,
     this._completeWorkout,
     this._watchCurrentTaxMultiplier,
     this._setAlarmActive,
@@ -43,7 +42,6 @@ class AlarmCubit extends Cubit<AlarmState> {
   final WatchRingingAlarm _watchRingingAlarm;
   final ScheduleAlarm _scheduleAlarm;
   final CancelAlarm _cancelAlarm;
-  final DismissAlarm _dismissAlarm;
   final CompleteAlarmWorkout _completeWorkout;
   final WatchCurrentTaxMultiplier _watchCurrentTaxMultiplier;
   final SetAlarmActive _setAlarmActive;
@@ -54,7 +52,6 @@ class AlarmCubit extends Cubit<AlarmState> {
 
   Future<void> schedule(AlarmSchedule alarm) => _scheduleAlarm(alarm);
   Future<void> cancel(String id) => _cancelAlarm(id);
-  Future<void> dismiss(String id) => _dismissAlarm(id);
 
   Future<void> setActive(String id, bool isActive) =>
       _setAlarmActive(SetAlarmActiveParams(id: id, isActive: isActive));
@@ -64,6 +61,7 @@ class AlarmCubit extends Cubit<AlarmState> {
     required bool verified,
     required int repsCompleted,
     required DateTime startedAt,
+    List<RepEvidence> repTrace = const [],
     bool isPreview = false,
   }) => _completeWorkout(
     CompleteAlarmWorkoutParams(
@@ -71,6 +69,7 @@ class AlarmCubit extends Cubit<AlarmState> {
       verified: verified,
       repsCompleted: repsCompleted,
       startedAt: startedAt,
+      repTrace: repTrace,
       isPreview: isPreview,
     ),
   );

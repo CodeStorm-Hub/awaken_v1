@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/theme/adaptive_dialog.dart';
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../../../core/theme/gamification_widgets.dart';
 import '../../../../core/theme/semantic_colors.dart';
@@ -18,6 +19,7 @@ import '../widgets/auth_dialog.dart';
 import '../widgets/edit_name_dialog.dart';
 import '../widgets/initial_avatar.dart';
 import '../widgets/settings_row.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// Profile screen (Claude Design handoff — `isProfile`). Streak/territory-
 /// area/current-user come from the per-page `ProfileCubit` (Phase 3:
@@ -49,7 +51,7 @@ class ProfilePage extends StatelessWidget {
                     horizontal: 16,
                     vertical: 8,
                   ),
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: ShapeTokens.r22,
                   child: Row(
                     children: [
                       Tooltip(
@@ -121,7 +123,7 @@ class ProfilePage extends StatelessWidget {
                               horizontal: 20,
                               vertical: 22,
                             ),
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: ShapeTokens.r16,
                             child: Column(
                               children: [
                                 StreakTierAvatarRing(
@@ -219,16 +221,16 @@ class ProfilePage extends StatelessWidget {
                                       style: FilledButton.styleFrom(
                                         minimumSize: const Size.fromHeight(44),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
+                                          borderRadius: ShapeTokens.r12,
                                         ),
                                       ),
                                       onPressed: () => AuthDialog.show(
                                         context,
                                         mode: AuthDialogMode.link,
                                       ),
-                                      child: const Text('Save progress to cloud'),
+                                      child: const Text(
+                                        'Save progress to cloud',
+                                      ),
                                     ),
                                   ),
                                   Center(
@@ -291,7 +293,7 @@ class ProfilePage extends StatelessWidget {
                             ),
                           ),
                           AppleGlassContainer(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: ShapeTokens.r14,
                             child: Column(
                               children: [
                                 SettingsRow(
@@ -376,48 +378,27 @@ Future<void> _openLegalUrl(BuildContext context, String url) async {
   final uri = Uri.parse(url);
   final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
   if (!launched && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Could not open the link.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Could not open the link.')));
   }
 }
 
 Future<void> _showAppearanceDialog(BuildContext context) async {
   final cubit = context.read<ThemeModeCubit>();
-  await showDialog<void>(
+  String labelFor(ThemeMode mode) => switch (mode) {
+    ThemeMode.light => 'Light',
+    ThemeMode.dark => 'Dark',
+    ThemeMode.system => 'System default',
+  };
+  final selected = await showAdaptiveChoiceDialog<ThemeMode>(
     context: context,
-    builder: (dialogContext) {
-      return BlocBuilder<ThemeModeCubit, ThemeMode>(
-        bloc: cubit,
-        builder: (context, current) {
-          return SimpleDialog(
-            title: const Text('Appearance'),
-            children: [
-              RadioGroup<ThemeMode>(
-                groupValue: current,
-                onChanged: (value) {
-                  if (value != null) cubit.setThemeMode(value);
-                  Navigator.of(dialogContext).pop();
-                },
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final mode in ThemeMode.values)
-                      RadioListTile<ThemeMode>(
-                        title: Text(switch (mode) {
-                          ThemeMode.light => 'Light',
-                          ThemeMode.dark => 'Dark',
-                          ThemeMode.system => 'System default',
-                        }),
-                        value: mode,
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      );
-    },
+    title: 'Appearance',
+    groupValue: cubit.state,
+    options: [
+      for (final mode in ThemeMode.values)
+        AdaptiveChoiceOption(label: labelFor(mode), value: mode),
+    ],
   );
+  if (selected != null) cubit.setThemeMode(selected);
 }

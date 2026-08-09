@@ -8,6 +8,7 @@ import '../../../../core/theme/expressive_widgets.dart';
 import '../../domain/entities/alarm_schedule.dart';
 import '../bloc/alarm_cubit.dart';
 import '../bloc/alarm_state.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 enum _TestPhase { idle, waiting, passed, timedOut }
 
@@ -24,9 +25,9 @@ class AlarmReliabilityTestPage extends StatefulWidget {
   /// self-test button and from profile settings; both should push through
   /// here rather than each constructing their own `MaterialPageRoute`.
   static void push(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AlarmReliabilityTestPage()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AlarmReliabilityTestPage()));
   }
 
   @override
@@ -196,7 +197,7 @@ class _AlarmReliabilityTestPageState extends State<AlarmReliabilityTestPage> {
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(56),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: ShapeTokens.pill,
                     ),
                   ),
                   onPressed: _phase == _TestPhase.waiting
@@ -239,7 +240,7 @@ class _StatusContainer extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 18),
       decoration: BoxDecoration(
         color: passed ? scheme.primaryContainer : scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: ShapeTokens.r24,
       ),
       child: Column(
         children: [

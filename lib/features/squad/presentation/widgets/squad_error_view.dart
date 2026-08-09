@@ -7,7 +7,11 @@ import 'squad_page_shared.dart';
 /// longer routes here, so both real recovery paths stay available instead of
 /// only the one the user happened not to be using.
 class SquadErrorView extends StatelessWidget {
-  const SquadErrorView({super.key, required this.message, required this.onRetry});
+  const SquadErrorView({
+    super.key,
+    required this.message,
+    required this.onRetry,
+  });
 
   final String message;
   final VoidCallback onRetry;

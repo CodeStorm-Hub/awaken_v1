@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/adaptive_dialog.dart';
+
 /// Delete-account confirmation. A single accidental tap used to be enough
 /// to permanently delete the account and all cloud data — this now
 /// requires typing an exact match (the user's display name, or the literal
@@ -42,9 +44,8 @@ class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return AlertDialog(
-      title: const Text('Delete account?'),
+    return AdaptiveAlertDialog<bool>(
+      title: 'Delete account?',
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -79,15 +80,16 @@ class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
         ],
       ),
       actions: [
-        FilledButton.tonal(
-          autofocus: true,
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+        const AdaptiveDialogAction(
+          label: 'Cancel',
+          value: false,
+          isDefault: true,
         ),
-        TextButton(
-          style: TextButton.styleFrom(foregroundColor: scheme.error),
-          onPressed: _matches ? () => Navigator.of(context).pop(true) : null,
-          child: const Text('Delete'),
+        AdaptiveDialogAction(
+          label: 'Delete',
+          value: true,
+          isDestructive: true,
+          enabled: _matches,
         ),
       ],
     );

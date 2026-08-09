@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/expressive_widgets.dart';
@@ -7,9 +6,11 @@ import '../../../../sync/outbox/sync_worker.dart';
 import '../../../../sync/sync_status.dart';
 import '../../../alarm/presentation/pages/alarm_list_page.dart';
 import '../../../home/presentation/pages/home_page.dart';
+import '../../../profile/domain/repositories/auth_repository.dart';
 import '../../../profile/presentation/widgets/auth_dialog.dart';
 import '../../../squad/presentation/pages/squad_page.dart';
 import '../../../territory/presentation/pages/territory_page.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// iOS adaptive navigation shell — iOS Cupertino TabBar styling on compact
 /// windows (<600dp), `NavigationRail` at the medium-window-size-class
@@ -66,7 +67,7 @@ class _AppShellPageState extends State<AppShellPage> {
 
   void _goTo(int index) {
     if (index == _territoryTabIndex || index == 3) {
-      final user = Supabase.instance.client.auth.currentUser;
+      final user = getIt<AuthRepository>().currentUser;
       final isGuest = user == null || user.isAnonymous;
       if (isGuest) {
         AuthDialog.show(context, mode: AuthDialogMode.link);
@@ -114,11 +115,7 @@ class _AppShellPageState extends State<AppShellPage> {
           const Positioned(
             top: 0,
             right: 0,
-            child: SafeArea(
-              child: RepaintBoundary(
-                child: _ShellSyncBadge(),
-              ),
-            ),
+            child: SafeArea(child: RepaintBoundary(child: _ShellSyncBadge())),
           ),
         ],
       ),
@@ -260,7 +257,7 @@ class AdaptiveNavScaffold extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: AppleGlassContainer(
             blurAmount: 25,
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: ShapeTokens.r28,
             padding: EdgeInsets.zero,
             child: NavigationBarTheme(
               data: NavigationBarThemeData(

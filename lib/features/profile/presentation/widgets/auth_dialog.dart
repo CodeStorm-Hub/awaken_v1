@@ -10,6 +10,7 @@ import '../../domain/usecases/send_password_reset_email.dart';
 import '../../domain/usecases/sign_in_with_google.dart';
 import '../../domain/usecases/sign_in_with_password.dart';
 import '../auth_error_message.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 enum AuthDialogMode { link, signIn }
 
@@ -205,11 +206,11 @@ class _AuthDialogState extends State<AuthDialog> {
       fillColor: fill,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: ShapeTokens.r16,
         borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: ShapeTokens.r16,
         borderSide: BorderSide(
           color: isDark
               ? Colors.white.withValues(alpha: 0.08)
@@ -218,15 +219,15 @@ class _AuthDialogState extends State<AuthDialog> {
         ),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: ShapeTokens.r16,
         borderSide: BorderSide(color: scheme.primary, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: ShapeTokens.r16,
         borderSide: BorderSide(color: scheme.error, width: 1),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: ShapeTokens.r16,
         borderSide: BorderSide(color: scheme.error, width: 1.5),
       ),
     );
@@ -252,7 +253,7 @@ class _AuthDialogState extends State<AuthDialog> {
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
             decoration: BoxDecoration(
               color: sheetBackground,
-              borderRadius: BorderRadius.circular(28),
+              borderRadius: ShapeTokens.r28,
               border: Border.all(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.12)
@@ -268,7 +269,7 @@ class _AuthDialogState extends State<AuthDialog> {
               ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(28),
+              borderRadius: ShapeTokens.r28,
               child: Material(
                 color: Colors.transparent,
                 child: Padding(
@@ -283,8 +284,10 @@ class _AuthDialogState extends State<AuthDialog> {
                           height: 4,
                           margin: const EdgeInsets.only(bottom: 12),
                           decoration: BoxDecoration(
-                            color: scheme.onSurfaceVariant.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(2),
+                            color: scheme.onSurfaceVariant.withValues(
+                              alpha: 0.3,
+                            ),
+                            borderRadius: ShapeTokens.r2,
                           ),
                         ),
                       ),
@@ -313,10 +316,10 @@ class _AuthDialogState extends State<AuthDialog> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  isLink ? 'Save Your Progress' : 'Welcome Back',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleLarge
+                                  isLink
+                                      ? 'Save Your Progress'
+                                      : 'Welcome Back',
+                                  style: Theme.of(context).textTheme.titleLarge
                                       ?.copyWith(
                                         fontWeight: FontWeight.w800,
                                         letterSpacing: -0.4,
@@ -353,7 +356,7 @@ class _AuthDialogState extends State<AuthDialog> {
                           color: isDark
                               ? const Color(0xFF141418)
                               : scheme.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: ShapeTokens.r16,
                         ),
                         child: Row(
                           children: [
@@ -364,9 +367,9 @@ class _AuthDialogState extends State<AuthDialog> {
                                 onPressed: _submitting
                                     ? null
                                     : () => setState(() {
-                                          _mode = AuthDialogMode.signIn;
-                                          _error = null;
-                                        }),
+                                        _mode = AuthDialogMode.signIn;
+                                        _error = null;
+                                      }),
                               ),
                             ),
                             Expanded(
@@ -376,9 +379,9 @@ class _AuthDialogState extends State<AuthDialog> {
                                 onPressed: _submitting
                                     ? null
                                     : () => setState(() {
-                                          _mode = AuthDialogMode.link;
-                                          _error = null;
-                                        }),
+                                        _mode = AuthDialogMode.link;
+                                        _error = null;
+                                      }),
                               ),
                             ),
                           ],
@@ -464,7 +467,9 @@ class _AuthDialogState extends State<AuthDialog> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
-                                  onPressed: _submitting ? null : _forgotPassword,
+                                  onPressed: _submitting
+                                      ? null
+                                      : _forgotPassword,
                                   style: TextButton.styleFrom(
                                     visualDensity: VisualDensity.compact,
                                   ),
@@ -487,7 +492,7 @@ class _AuthDialogState extends State<AuthDialog> {
                                   color: scheme.errorContainer.withValues(
                                     alpha: 0.8,
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: ShapeTokens.r12,
                                   border: Border.all(
                                     color: scheme.error.withValues(alpha: 0.3),
                                   ),
@@ -523,7 +528,7 @@ class _AuthDialogState extends State<AuthDialog> {
                                 onPressed: _submitting ? null : _submitEmail,
                                 style: FilledButton.styleFrom(
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
+                                    borderRadius: ShapeTokens.r16,
                                   ),
                                   elevation: 0,
                                 ),
@@ -591,7 +596,7 @@ class _AuthDialogState extends State<AuthDialog> {
                                 onPressed: _submitting ? null : _submitGoogle,
                                 style: OutlinedButton.styleFrom(
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
+                                    borderRadius: ShapeTokens.r16,
                                   ),
                                   side: BorderSide(
                                     color: isDark
@@ -660,13 +665,13 @@ class _ModeTabButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: ShapeTokens.r12,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
             color: isSelected ? activeBg : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: ShapeTokens.r12,
             boxShadow: isSelected
                 ? [
                     BoxShadow(
@@ -691,4 +696,3 @@ class _ModeTabButton extends StatelessWidget {
     );
   }
 }
-

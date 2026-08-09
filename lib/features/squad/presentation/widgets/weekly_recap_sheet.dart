@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// Weekly-leaderboard-reset ceremony (2026-07-29 UI/UX audit item 11) —
 /// shown once, the first time the Squad page is opened after a weekly
@@ -52,7 +53,7 @@ class WeeklyRecapSheet extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
                   color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: ShapeTokens.pill,
                 ),
               ),
               ExpressiveFlower(
@@ -90,7 +91,7 @@ class WeeklyRecapSheet extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: scheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: ShapeTokens.r20,
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -123,7 +124,7 @@ class WeeklyRecapSheet extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(56),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: ShapeTokens.pill,
                     ),
                   ),
                   onPressed: () => Navigator.of(context).pop(),

@@ -6,6 +6,7 @@ import '../../../../core/theme/semantic_colors.dart';
 import '../../domain/entities/leaderboard_entry.dart';
 import 'member_avatar.dart';
 import 'squad_page_shared.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class LeaderboardRow extends StatelessWidget {
   const LeaderboardRow({
@@ -48,7 +49,7 @@ class LeaderboardRow extends StatelessWidget {
     };
 
     final radius = row.isYou
-        ? BorderRadius.circular(14)
+        ? ShapeTokens.r14
         : groupedItemRadius(index: index, count: count, outer: 14);
     final bg = podiumColor != null
         ? podiumColor.withValues(alpha: 0.16)

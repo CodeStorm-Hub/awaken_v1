@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../domain/entities/recent_activity_entry.dart';
 import 'home_skeletons.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class RecentActivitySection extends StatefulWidget {
   const RecentActivitySection({
@@ -117,7 +118,7 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
                   height: 30,
                   decoration: BoxDecoration(
                     color: scheme.primary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: ShapeTokens.r8,
                   ),
                   child: Icon(icon, size: 16, color: scheme.primary),
                 ),

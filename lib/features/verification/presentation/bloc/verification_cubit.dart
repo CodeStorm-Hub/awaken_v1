@@ -9,6 +9,7 @@ import '../../../../core/usecase/usecase.dart';
 import '../../../alarm/domain/entities/alarm_schedule.dart';
 import '../../../squad/domain/repositories/squad_repository.dart';
 import '../../domain/entities/verification_state.dart';
+import '../../domain/usecases/release_verification_resources.dart';
 import '../../domain/usecases/start_verification_session.dart';
 import '../../domain/usecases/stop_verification_session.dart';
 import '../../domain/usecases/watch_verification_state.dart';
@@ -19,12 +20,18 @@ import '../../domain/usecases/watch_verification_state.dart';
 /// lifetime.
 @injectable
 class VerificationCubit extends Cubit<VerificationState> {
-  VerificationCubit(this._startSession, this._stopSession, this._watchState, this._squadRepository)
-    : super(const VerificationState());
+  VerificationCubit(
+    this._startSession,
+    this._stopSession,
+    this._watchState,
+    this._releaseResources,
+    this._squadRepository,
+  ) : super(const VerificationState());
 
   final StartVerificationSession _startSession;
   final StopVerificationSession _stopSession;
   final WatchVerificationState _watchState;
+  final ReleaseVerificationResources _releaseResources;
 
   /// Squad-telemetry broadcast (plan §6 Phase 6, H6) — throttled and a
   /// no-op internally when the user has no squad.
@@ -50,7 +57,10 @@ class VerificationCubit extends Cubit<VerificationState> {
   /// restart anything.
   var _pausedForLifecycle = false;
 
-  Future<void> begin({required ExerciseMode exercise, required int targetReps}) async {
+  Future<void> begin({
+    required ExerciseMode exercise,
+    required int targetReps,
+  }) async {
     _lastExercise = exercise;
     _lastTargetReps = targetReps;
     final status = await Permission.camera.request();
@@ -64,16 +74,38 @@ class VerificationCubit extends Cubit<VerificationState> {
     _presenceTracked = false;
     _stateSub = _watchState().listen((state) {
       emit(state);
-      if (state.status == VerificationStatus.counting || state.status == VerificationStatus.calibrating) {
+      if (state.status == VerificationStatus.counting ||
+          state.status == VerificationStatus.calibrating) {
         if (!_presenceTracked) {
           _presenceTracked = true;
           unawaited(_squadRepository.trackPresence(activity: 'Working out'));
         }
-        final label = state.exerciseMode == ExerciseMode.squat ? 'squats' : 'push-ups';
-        _squadRepository.broadcastTelemetry(label: 'Workout · ${state.completedReps}/${state.targetReps} $label');
+        final label = state.exerciseMode == ExerciseMode.squat
+            ? 'squats'
+            : 'push-ups';
+        _squadRepository.broadcastTelemetry(
+          label: 'Workout · ${state.completedReps}/${state.targetReps} $label',
+        );
       }
     });
-    await _startSession(StartVerificationParams(exercise: exercise, targetReps: targetReps));
+    try {
+      await _startSession(
+        StartVerificationParams(exercise: exercise, targetReps: targetReps),
+      );
+    } catch (_) {
+      // The repository already catches and reports the camera-init path
+      // itself (emitting `cameraError`) — this is a backstop for anything
+      // else in the start path (e.g. `availableCameras()` throwing on a
+      // camera-less device), so `begin()` never lets an exception escape
+      // uncaught into `VerificationPage`'s `create:` callback.
+      emit(
+        state.copyWith(
+          status: VerificationStatus.cameraError,
+          exerciseMode: exercise,
+          targetReps: targetReps,
+        ),
+      );
+    }
   }
 
   /// Retries after a [VerificationStatus.cameraError] with the same
@@ -104,6 +136,10 @@ class VerificationCubit extends Cubit<VerificationState> {
     _pausedForLifecycle = false;
     await retry();
   }
+
+  /// Only meaningful on `AppLifecycleState.detached` — see
+  /// [ReleaseVerificationResources]'s repository method doc comment.
+  Future<void> releaseNativeResources() => _releaseResources(const NoParams());
 
   @override
   Future<void> close() async {

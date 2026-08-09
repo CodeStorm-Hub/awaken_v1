@@ -7,6 +7,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../alarm/domain/entities/alarm_schedule.dart';
 import '../../domain/entities/body_pose.dart';
+import '../../domain/entities/rep_evidence.dart';
 import '../../domain/entities/verification_state.dart';
 import '../../domain/repositories/pose_verification_repository.dart';
 import '../../domain/services/rep_counter.dart';
@@ -25,6 +26,11 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
   VerificationState _state = const VerificationState();
 
   RepCounter? _repCounter;
+
+  /// Accumulates across the whole session (including calibration reps) —
+  /// reset in `start()`, read by `_emit` so every `VerificationState`
+  /// carries the trace so far. See `RepEvidence`'s doc comment.
+  final _repTrace = <RepEvidence>[];
 
   /// Frame-drop governor (plan §6: "process-latest") — ML Kit inference is
   /// slower than the camera's frame rate, so a new frame is dropped
@@ -56,9 +62,13 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
   Stream<VerificationState> watchState() => _stateController.stream;
 
   @override
-  Future<void> start({required ExerciseMode exercise, required int targetReps}) async {
+  Future<void> start({
+    required ExerciseMode exercise,
+    required int targetReps,
+  }) async {
     _generation++;
     _lastProcessedAt = null;
+    _repTrace.clear();
     _repCounter = exercise == ExerciseMode.squat
         ? AngleRepCounter.squat()
         : AngleRepCounter.pushup();
@@ -135,11 +145,15 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
     _emit(const VerificationState());
   }
 
+  @override
+  Future<void> releaseNativeResources() => _poseDetector.close();
+
   Future<void> _onFrame(CameraImage image) async {
     if (_processingFrame) return;
     final now = DateTime.now();
     final lastProcessedAt = _lastProcessedAt;
-    if (lastProcessedAt != null && now.difference(lastProcessedAt) < _minFrameInterval) {
+    if (lastProcessedAt != null &&
+        now.difference(lastProcessedAt) < _minFrameInterval) {
       return;
     }
     final controller = _camera.controller;
@@ -155,13 +169,23 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
       final poses = await _poseDetector.process(inputImage);
       if (generation != _generation) return;
       if (poses.isEmpty) {
-        _emit(_state.copyWith(status: VerificationStatus.noPoseDetected, clearPose: true));
+        _emit(
+          _state.copyWith(
+            status: VerificationStatus.noPoseDetected,
+            clearPose: true,
+          ),
+        );
         return;
       }
 
       final pose = poseToBodyPose(poses.first);
       if (pose.averageLikelihood < kMinPoseLikelihood) {
-        _emit(_state.copyWith(status: VerificationStatus.noPoseDetected, currentPose: pose));
+        _emit(
+          _state.copyWith(
+            status: VerificationStatus.noPoseDetected,
+            currentPose: pose,
+          ),
+        );
         return;
       }
 
@@ -178,6 +202,11 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
     final repCompleted = counter.update(pose);
 
     if (_state.status == VerificationStatus.calibrating) {
+      // Calibration reps intentionally don't enter `_repTrace` — they never
+      // count toward `completedReps`/`targetReps` either, and the server
+      // validates the trace's length against `repsCompleted` exactly (see
+      // `validate_workout_trace`'s doc comment), so including them here
+      // would make every real completion fail that check.
       if (!repCompleted) {
         _emit(
           _state.copyWith(
@@ -190,7 +219,9 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
       final remaining = _state.calibrationRepsRemaining - 1;
       _emit(
         _state.copyWith(
-          status: remaining > 0 ? VerificationStatus.calibrating : VerificationStatus.counting,
+          status: remaining > 0
+              ? VerificationStatus.calibrating
+              : VerificationStatus.counting,
           calibrationRepsRemaining: remaining,
           currentPose: pose,
         ),
@@ -199,17 +230,27 @@ class PoseVerificationRepositoryImpl implements PoseVerificationRepository {
     }
 
     if (!repCompleted) {
-      _emit(_state.copyWith(status: VerificationStatus.counting, currentPose: pose));
+      _emit(
+        _state.copyWith(status: VerificationStatus.counting, currentPose: pose),
+      );
       return;
+    }
+
+    final angle = counter.lastConfirmedAngleDegrees;
+    if (angle != null) {
+      _repTrace.add(RepEvidence(confirmedAt: DateTime.now(), angleDeg: angle));
     }
 
     final completed = _state.completedReps + 1;
     final done = completed >= _state.targetReps;
     _emit(
       _state.copyWith(
-        status: done ? VerificationStatus.complete : VerificationStatus.counting,
+        status: done
+            ? VerificationStatus.complete
+            : VerificationStatus.counting,
         completedReps: completed,
         currentPose: pose,
+        repTrace: List.unmodifiable(_repTrace),
       ),
     );
   }

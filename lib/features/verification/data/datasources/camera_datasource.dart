@@ -17,7 +17,9 @@ class CameraDataSource {
   /// requested here. `pose_mapper.dart`'s `cameraImageToInputImage` reads
   /// the frame's *actual* reported format rather than assuming this
   /// request was honored, so this is a request, not a hard guarantee.
-  static final _preferredFormat = Platform.isAndroid ? ImageFormatGroup.nv21 : ImageFormatGroup.bgra8888;
+  static final _preferredFormat = Platform.isAndroid
+      ? ImageFormatGroup.nv21
+      : ImageFormatGroup.bgra8888;
 
   /// Exposed for `CameraPreview(controller)` in the presentation layer.
   /// This is a narrow, deliberate exception to "presentation never touches
@@ -27,7 +29,9 @@ class CameraDataSource {
   /// `package:camera` imports across pages.
   CameraController? get controller => _controller;
 
-  Future<void> startFrontCameraStream(void Function(CameraImage image) onFrame) async {
+  Future<void> startFrontCameraStream(
+    void Function(CameraImage image) onFrame,
+  ) async {
     final cameras = await availableCameras();
     final front = cameras.firstWhere(
       (c) => c.lensDirection == CameraLensDirection.front,
@@ -40,10 +44,18 @@ class CameraDataSource {
       enableAudio: false,
       imageFormatGroup: _preferredFormat,
     );
-    _controller = controller;
 
-    await controller.initialize();
-    await controller.startImageStream(onFrame);
+    try {
+      await controller.initialize();
+      await controller.startImageStream(onFrame);
+    } catch (_) {
+      // Don't leave a failed, undisposed controller behind — a later
+      // retry() would otherwise overwrite `_controller` and leak this one's
+      // camera handle/texture resources.
+      await controller.dispose();
+      rethrow;
+    }
+    _controller = controller;
   }
 
   Future<void> stop() async {

@@ -61,9 +61,14 @@ class WeeklyResetCeremonyGateState extends State<WeeklyResetCeremonyGate> {
       // Read squad membership off the already-provided `SquadCubit` rather
       // than fetching it again — this widget sits inside the same
       // `BlocProvider<SquadCubit>` as `SquadView`.
-      final squadId = mounted ? context.read<SquadCubit>().state.squad?.id : null;
+      final squadId = mounted
+          ? context.read<SquadCubit>().state.squad?.id
+          : null;
       final currentRank = squadId != null
-          ? await getIt<GetMySquadRank>()(squadId: squadId, timeWindow: 'weekly')
+          ? await getIt<GetMySquadRank>()(
+              squadId: squadId,
+              timeWindow: 'weekly',
+            )
           : await getIt<GetMyLeaderboardRank>()(
               nearby: false,
               timeWindow: 'weekly',

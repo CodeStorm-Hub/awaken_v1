@@ -10,4 +10,10 @@ abstract interface class PoseVerificationRepository {
 
   /// Stops the camera + pose pipeline and releases the camera.
   Future<void> stop();
+
+  /// Releases the underlying ML Kit pose detector's native resources.
+  /// Call only when the process is genuinely tearing down (app-detached) —
+  /// the detector is a process-lifetime singleton reused across every
+  /// verification session, and processing a frame after this call throws.
+  Future<void> releaseNativeResources();
 }

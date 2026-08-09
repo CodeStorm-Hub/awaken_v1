@@ -11,6 +11,14 @@ abstract interface class SquadRepository {
   /// actions.
   Stream<Squad?> watchMySquad();
 
+  /// Fires whenever a *background* refresh of [watchMySquad]'s underlying
+  /// data fails (e.g. a dropped connection) after at least one successful
+  /// fetch already happened. [watchMySquad] deliberately keeps serving the
+  /// last-known-good squad in that case rather than blowing it away — this
+  /// is the side channel for the UI to still surface "couldn't refresh,
+  /// showing older data" without disturbing the current view.
+  Stream<Object> get refreshFailures;
+
   Future<Squad> createSquad(String name);
 
   Future<Squad> joinSquad(String inviteCode);

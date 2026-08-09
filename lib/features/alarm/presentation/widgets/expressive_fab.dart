@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/shape_tokens.dart';
+
 class ExpressiveFab extends StatefulWidget {
   const ExpressiveFab({super.key, required this.onPressed});
 
@@ -37,7 +39,7 @@ class ExpressiveFabState extends State<ExpressiveFab> {
           transformAlignment: Alignment.center,
           decoration: BoxDecoration(
             color: scheme.primary,
-            borderRadius: BorderRadius.circular(_pressed ? 999 : 22),
+            borderRadius: _pressed ? ShapeTokens.pill : ShapeTokens.r22,
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.15),

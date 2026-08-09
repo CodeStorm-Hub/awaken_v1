@@ -16,6 +16,7 @@ import '../widgets/next_alarm_card.dart';
 import '../widgets/quick_actions_pill.dart';
 import '../widgets/recent_activity_section.dart';
 import '../widgets/section_label.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({
@@ -50,7 +51,7 @@ class HomePage extends StatelessWidget {
                         horizontal: 16,
                         vertical: 8,
                       ),
-                      borderRadius: BorderRadius.circular(22),
+                      borderRadius: ShapeTokens.r22,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -61,12 +62,13 @@ class HomePage extends StatelessWidget {
                               Text(
                                 'Awaken',
                                 style:
-                                    Theme.of(context).textTheme.titleLarge
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: -0.5,
-                                          color: scheme.onSurface,
-                                        ) ??
+                                    Theme.of(
+                                      context,
+                                    ).textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.5,
+                                      color: scheme.onSurface,
+                                    ) ??
                                     TextStyle(
                                       fontSize: 22,
                                       fontWeight: FontWeight.w800,
@@ -96,7 +98,7 @@ class HomePage extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: context.semanticColors.streakFlame
                                       .withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(999),
+                                  borderRadius: ShapeTokens.pill,
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,

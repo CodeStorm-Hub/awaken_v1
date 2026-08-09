@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/expressive_widgets.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 class InviteCodeCard extends StatelessWidget {
   const InviteCodeCard({super.key, required this.inviteCode});
@@ -13,7 +14,7 @@ class InviteCodeCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return AppleGlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: ShapeTokens.r14,
       child: Row(
         children: [
           Icon(Icons.qr_code, color: scheme.primary),

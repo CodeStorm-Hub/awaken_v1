@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/semantic_colors.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 /// Tap-to-inspect bottom sheet content (Conquest Skyline redesign) — shown
 /// when a territory fill/extrusion feature is tapped on the map. Pure
@@ -55,7 +56,7 @@ class TerritoryInspectSheet extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 18),
                   decoration: BoxDecoration(
                     color: scheme.onSurfaceVariant.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: ShapeTokens.pill,
                   ),
                 ),
               ),
@@ -107,7 +108,7 @@ class TerritoryInspectSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: ShapeTokens.pill,
                   child: LinearProgressIndicator(
                     value: (health! / 100).clamp(0, 1),
                     minHeight: 6,

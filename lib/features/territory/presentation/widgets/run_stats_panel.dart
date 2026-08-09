@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/expressive_widgets.dart';
 import '../../domain/entities/run_track_state.dart';
+import '../../../../core/theme/shape_tokens.dart';
 
 String _fmtTime(int totalSec) {
   final m = (totalSec ~/ 60).toString().padLeft(2, '0');
@@ -50,7 +51,7 @@ class RunStatsPanel extends StatelessWidget {
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
               color: scheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: ShapeTokens.r18,
               border: Border.all(
                 color: scheme.outlineVariant.withValues(alpha: 0.2),
               ),
@@ -64,7 +65,7 @@ class RunStatsPanel extends StatelessWidget {
                     value: _fmtTime(elapsedSec),
                     label: 'Time',
                     icon: Icons.timer_outlined,
-                    radius: BorderRadius.circular(14),
+                    radius: ShapeTokens.r14,
                     padding: const EdgeInsets.symmetric(
                       vertical: 8,
                       horizontal: 6,
@@ -79,7 +80,7 @@ class RunStatsPanel extends StatelessWidget {
                     value: distanceKm.toStringAsFixed(2),
                     label: 'Distance (km)',
                     icon: Icons.directions_run,
-                    radius: BorderRadius.circular(14),
+                    radius: ShapeTokens.r14,
                     padding: const EdgeInsets.symmetric(
                       vertical: 8,
                       horizontal: 6,
@@ -94,7 +95,7 @@ class RunStatsPanel extends StatelessWidget {
                     value: paceSecPerKm > 0 ? _fmtTime(paceSecPerKm) : '--:--',
                     label: 'Pace /km',
                     icon: Icons.speed_outlined,
-                    radius: BorderRadius.circular(14),
+                    radius: ShapeTokens.r14,
                     padding: const EdgeInsets.symmetric(
                       vertical: 8,
                       horizontal: 6,
@@ -119,7 +120,7 @@ class RunStatsPanel extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: ShapeTokens.r16,
                   border: Border.all(
                     color: loopClosed
                         ? scheme.primary.withValues(alpha: 0.5)
@@ -183,7 +184,7 @@ class RunStatsPanel extends StatelessWidget {
                     LinearProgressIndicator(
                       value: animatedProgress,
                       minHeight: 5,
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: ShapeTokens.pill,
                       backgroundColor: scheme.surfaceContainerHighest,
                       color: loopClosed ? scheme.primary : scheme.tertiary,
                     ),
@@ -227,7 +228,7 @@ class RunStatsPanel extends StatelessWidget {
                         minimumSize: const Size.fromHeight(48),
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
+                          borderRadius: ShapeTokens.pill,
                         ),
                       ),
                       onPressed: (loopClosed && !busy) ? onCapture : null,
@@ -235,9 +236,7 @@ class RunStatsPanel extends StatelessWidget {
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                              ),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : Row(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -272,9 +271,7 @@ class RunStatsPanel extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   foregroundColor: scheme.error,
                   side: BorderSide(color: scheme.error.withValues(alpha: 0.3)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: ShapeTokens.pill),
                 ),
                 onPressed: busy ? null : onAbandon,
                 icon: const Icon(Icons.stop_rounded, size: 18),

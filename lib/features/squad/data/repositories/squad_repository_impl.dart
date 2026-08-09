@@ -30,9 +30,13 @@ class SquadRepositoryImpl implements SquadRepository {
   final SupabaseClient _supabase;
 
   final _mySquadController = StreamController<Squad?>.broadcast();
+  final _refreshFailureController = StreamController<Object>.broadcast();
   Squad? _cachedSquad;
   bool _fetchedOnce = false;
   bool _hasEmittedOnce = false;
+
+  @override
+  Stream<Object> get refreshFailures => _refreshFailureController.stream;
 
   DateTime? _lastBroadcastAt;
 
@@ -114,7 +118,14 @@ class SquadRepositoryImpl implements SquadRepository {
       // silently invisible forever — see doc comment above for why this
       // still fails open only on the very first fetch.
       unawaited(Sentry.captureException(e, stackTrace: st));
-      if (!_hasEmittedOnce) _emitSquad(null);
+      if (!_hasEmittedOnce) {
+        _emitSquad(null);
+      } else {
+        // Not the first fetch — keep serving `_cachedSquad` as-is, but let
+        // the UI know this refresh didn't actually succeed (see
+        // `refreshFailures`'s doc comment) instead of staying silent.
+        _refreshFailureController.add(e);
+      }
     }
   }
 
@@ -355,38 +366,46 @@ class SquadRepositoryImpl implements SquadRepository {
     final squad = _cachedSquad;
     final userId = _currentUserId;
     if (squad == null || userId == null) return;
-    final profile = await _supabase
-        .from('profiles')
-        .select('display_name, avatar_url')
-        .eq('id', userId)
-        .maybeSingle();
-    final displayName = profile?['display_name'] as String? ?? 'You';
-    final avatarUrl = profile?['avatar_url'] as String?;
-    // Best-effort — a location fetch failing/timing out (denied permission,
-    // no fix yet) must never block presence tracking itself; the map
-    // clustering layer that consumes this is purely optional UI.
-    ({double latitude, double longitude})? position;
     try {
-      position = await getIt<GetCurrentPosition>()(const NoParams());
-    } catch (e) {
-      Sentry.addBreadcrumb(
-        Breadcrumb(
-          message: 'Presence location fetch failed, continuing without it',
-          category: 'squad.presence',
-          level: SentryLevel.info,
-          data: {'error': e.toString()},
-        ),
-      );
-      position = null;
+      final profile = await _supabase
+          .from('profiles')
+          .select('display_name, avatar_url')
+          .eq('id', userId)
+          .maybeSingle();
+      final displayName = profile?['display_name'] as String? ?? 'You';
+      final avatarUrl = profile?['avatar_url'] as String?;
+      // Best-effort — a location fetch failing/timing out (denied
+      // permission, no fix yet) must never block presence tracking itself;
+      // the map clustering layer that consumes this is purely optional UI.
+      ({double latitude, double longitude})? position;
+      try {
+        position = await getIt<GetCurrentPosition>()(const NoParams());
+      } catch (e) {
+        Sentry.addBreadcrumb(
+          Breadcrumb(
+            message: 'Presence location fetch failed, continuing without it',
+            category: 'squad.presence',
+            level: SentryLevel.info,
+            data: {'error': e.toString()},
+          ),
+        );
+        position = null;
+      }
+      await _remote.trackPresence(squad.id, {
+        'user_id': userId,
+        'display_name': displayName,
+        'activity': activity,
+        'avatar_url': ?avatarUrl,
+        if (position != null) 'lat': position.latitude,
+        if (position != null) 'lng': position.longitude,
+      });
+    } catch (e, st) {
+      // Callers (`VerificationCubit`/`RunTrackingCubit`) invoke this
+      // `unawaited` — an uncaught network/RLS failure here would otherwise
+      // become a silent, untracked exception in a detached future rather
+      // than just skipping this one presence update.
+      unawaited(Sentry.captureException(e, stackTrace: st));
     }
-    await _remote.trackPresence(squad.id, {
-      'user_id': userId,
-      'display_name': displayName,
-      'activity': activity,
-      'avatar_url': ?avatarUrl,
-      if (position != null) 'lat': position.latitude,
-      if (position != null) 'lng': position.longitude,
-    });
   }
 
   @override
